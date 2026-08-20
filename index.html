@@ -143,9 +143,12 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .route-row{ display:flex; align-items:center; gap:8px; }
   .route-cell{ position:relative; flex:1; min-width:0; }
   .route-cell input{ width:100%; height:48px; border-radius:var(--radius-input); border:1px solid var(--line);
-    background:var(--surface); color:var(--ink); padding:0 14px; font-size:16px; outline:none; }
+    background:var(--surface); color:var(--ink); padding:0 40px 0 14px; font-size:16px; outline:none; }
   .route-cell input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
   .route-arrow{ flex-shrink:0; color:var(--primary); font-weight:800; font-size:17px; }
+  .map-pick-btn{ position:absolute; right:4px; top:4px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;
+    background:transparent; border:none; color:var(--muted); border-radius:var(--radius-input); cursor:pointer; }
+  .map-pick-btn:hover{ background:var(--fill); color:var(--primary); }
 
   /* 출발 시간 휠 피커. 가운데 밴드에 걸린 항목이 선택값이다. */
   .wheel-picker{ position:relative; display:flex; align-items:center; justify-content:center; gap:2px;
@@ -187,6 +190,18 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chip[aria-pressed="true"]{ background:var(--primary); border-color:var(--primary); color:#fff; }
   .autocomplete-list{ position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:20; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-input); box-shadow:var(--shadow-card); max-height:220px; overflow-y:auto; }
   .autocomplete-list[hidden]{ display:none; }
+  .map-picker-search{ position:relative; flex-shrink:0; padding:14px 20px; border-bottom:1px solid var(--line); background:var(--surface); }
+  .map-picker-search input{ width:100%; height:44px; border-radius:var(--radius-input); border:1px solid var(--line);
+    background:var(--fill); color:var(--ink); padding:0 14px; font-size:16px; outline:none; }
+  .map-picker-search input:focus{ border-color:var(--primary); background:var(--surface); box-shadow:0 0 0 3px var(--primary-soft); }
+  .map-picker-search .autocomplete-list{ left:20px; right:20px; top:calc(100% - 2px); }
+  .map-picker-stage{ position:relative; flex:1; min-height:0; }
+  #map-picker-map{ position:absolute; inset:0; }
+  .map-picker-pin{ position:absolute; left:50%; top:50%; transform:translate(-50%, -100%); pointer-events:none; filter:drop-shadow(0 3px 4px rgba(0,0,0,.25)); }
+  .map-picker-gps-btn{ position:absolute; right:16px; bottom:16px; width:44px; height:44px; border-radius:50%; border:none;
+    background:var(--surface); color:var(--ink); box-shadow:var(--shadow-card); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .map-picker-footer{ flex-shrink:0; padding:14px 20px calc(20px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); }
+  .map-picker-footer .fine-note{ margin:0 0 10px; text-align:center; }
   .autocomplete-item{ padding:10px 14px; font-size:13px; color:var(--ink); cursor:pointer; border-top:1px solid var(--line); }
   .autocomplete-item:first-child{ border-top:none; }
   .autocomplete-item:hover, .autocomplete-item:active{ background:var(--primary-soft); }
@@ -377,11 +392,17 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <div class="route-row">
           <div class="route-cell">
             <input type="text" id="ob-origin" placeholder="출발지" autocomplete="off">
+            <button type="button" class="map-pick-btn" id="ob-origin-map-btn" aria-label="지도에서 출발지 선택">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            </button>
             <ul class="autocomplete-list" id="ob-origin-list" hidden></ul>
           </div>
           <span class="route-arrow" aria-hidden="true">→</span>
           <div class="route-cell">
             <input type="text" id="ob-dest" placeholder="목적지" autocomplete="off">
+            <button type="button" class="map-pick-btn" id="ob-dest-map-btn" aria-label="지도에서 목적지 선택">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            </button>
             <ul class="autocomplete-list" id="ob-dest-list" hidden></ul>
           </div>
         </div>
@@ -408,6 +429,33 @@ window.__kakaoReady = new Promise((resolve, reject) => {
       </div>
       <div class="cta-dock">
         <button class="btn btn--primary btn--block" id="btn-find-pod" disabled>등록하기</button>
+      </div>
+    </section>
+
+    <!-- 1-1. 지도에서 위치 선택 -->
+    <section class="screen" id="screen-map-picker" aria-label="지도에서 위치 선택">
+      <header class="topbar">
+        <button class="icon-btn" id="map-picker-back-btn" aria-label="뒤로가기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="topbar-title"><strong id="map-picker-title">지도에서 선택</strong></div>
+      </header>
+      <div class="map-picker-search">
+        <input type="text" id="map-picker-search-input" placeholder="장소 검색" autocomplete="off">
+        <ul class="autocomplete-list" id="map-picker-search-list" hidden></ul>
+      </div>
+      <div class="map-picker-stage">
+        <div id="map-picker-map"></div>
+        <div class="map-picker-pin" aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="var(--primary)" stroke="#fff" stroke-width="1.2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3" fill="#fff"/></svg>
+        </div>
+        <button type="button" class="map-picker-gps-btn" id="map-picker-gps-btn" aria-label="현재 위치로 이동">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        </button>
+      </div>
+      <div class="map-picker-footer">
+        <p class="fine-note" id="map-picker-address">지도를 움직여서 위치를 맞춰보세요</p>
+        <button class="btn btn--primary btn--block" id="map-picker-confirm-btn">이 위치로 설정</button>
       </div>
     </section>
 
@@ -563,7 +611,14 @@ const ORIGIN_NAME = '포항역';
 // 이름 → 좌표 레지스트리. 폴백 테이블로 시작하고, 사용자가 자동완성에서 실검색 결과를 고르면 덮어써 우선한다.
 const PLACE_REGISTRY = Object.assign({}, PLACE_COORDS);
 function placeCoord(name){ return PLACE_REGISTRY[name] || null; }
-function registerPlace(name, lat, lng){ PLACE_REGISTRY[name] = { lat, lng, isStop: false }; }
+// 이름이 같아도 실제로는 다른 곳(동명이인급 장소)일 수 있다. 이미 등록된 좌표와 80m 넘게
+// 떨어진 곳이 같은 이름으로 들어오면 덮어쓰지 않는다 — 나중에 등록된 사람이 앞사람의
+// 이미 쓰이고 있는 좌표를 조용히 망가뜨리는 걸 막는다(사용자마다 목적지가 뒤바뀌어 보이던 원인).
+function registerPlace(name, lat, lng){
+  const existing = PLACE_REGISTRY[name];
+  if (existing && dist(existing, { lat, lng }) > 80) return;
+  PLACE_REGISTRY[name] = { lat, lng, isStop: false };
+}
 
 // STATE: 사용자/팟 전역 상태
 const STATE = {
@@ -592,9 +647,14 @@ function getOrCreateUserId(){
 
 const ONBOARDING_CACHE_KEY = 'tanmankeum_onboarding_v1';
 function saveOnboardingCache(user){
+  // 좌표도 같이 저장해둔다 — 이름만 저장하면 재접속 시 PLACE_REGISTRY에 이 좌표가 없어서
+  // (아직 아무도 이 세션에서 이 이름을 등록한 적이 없으니) 매칭·경로 계산이 조용히 깨진다.
+  const originC = placeCoord(user.origin), destC = placeCoord(user.dest);
   localStorage.setItem(ONBOARDING_CACHE_KEY, JSON.stringify({
     nickname: user.nickname, gender: user.gender,
     origin: user.origin, dest: user.dest, time: user.time, partySize: user.partySize,
+    originLat: originC ? originC.lat : null, originLng: originC ? originC.lng : null,
+    destLat: destC ? destC.lat : null, destLng: destC ? destC.lng : null,
   }));
 }
 function loadOnboardingCache(){
@@ -603,6 +663,11 @@ function loadOnboardingCache(){
     if (!raw) return null;
     const c = JSON.parse(raw);
     if (!c.nickname || !c.origin || !c.dest || !c.time || !c.partySize) return null;
+    // 좌표를 등록해둬야 이후 placeCoord(c.origin)/placeCoord(c.dest) 조회가 성공한다.
+    // 예전 캐시(좌표 없이 저장된)는 등록을 건너뛴다 — 그 이름이 마침 고정 정류장이면 그대로 동작하고,
+    // 아니면 사용자가 입력 화면에서 다시 골라야 한다(제출 버튼이 좌표 없이는 비활성화된다).
+    if (c.originLat != null && c.originLng != null) registerPlace(c.origin, c.originLat, c.originLng);
+    if (c.destLat != null && c.destLng != null) registerPlace(c.dest, c.destLat, c.destLng);
     return c;
   } catch { return null; }
 }
@@ -902,10 +967,13 @@ function calcMatchScore(user, pod){
   const angleDiffDeg = (pOrigin && pDest && uDest) ? angleDiff(bearing(pOrigin, pDest), bearing(pOrigin, uDest)) : 180;
   const fitScore = Math.max(0, 30 - Math.round(angleDiffDeg * (30 / ANGLE_THRESHOLD_DEG)));
 
-  // 출발지가 같아야 한다. 합승은 물리적으로 같은 곳에서 타는 거라, 경로가 아무리 비슷해도
-  // 출발지가 다르면 애초에 같은 택시를 탈 수 없다.
-  const sameOrigin = pod.originName === user.origin;
-  const eligible = sameOrigin && isRouteEligible(user.dest, pod);
+  // 출발지가 도보권(300m)이어야 한다. 이름이 완전히 같을 필요는 없다 — "포항역"과
+  // "포항역 앞"처럼 실제로는 걸어서 만날 수 있는 곳인데 이름이 다르다는 이유로 매칭에서
+  // 통째로 빠지면 안 된다. 물리적으로 같은 택시를 타려면 어차피 한 지점에서 만나야 하니
+  // 정확한 합류 지점은 채팅으로 조율한다.
+  const ORIGIN_WALK_RADIUS_M = 300;
+  const nearOrigin = originDist <= ORIGIN_WALK_RADIUS_M;
+  const eligible = nearOrigin && isRouteEligible(user.dest, pod);
   const routeScore = eligible ? 25 : 0;
 
   const diffMin = Math.abs(timeToMin(user.time) - timeToMin(pod.departTime));
@@ -1490,6 +1558,131 @@ function setupPlaceChips(chipsId, inputId, names){
 }
 setupPlaceChips('ob-origin-chips', 'ob-origin', POPULAR_ORIGINS);
 setupPlaceChips('ob-dest-chips', 'ob-dest', POPULAR_DESTS);
+
+/* ============ 7-1. 지도에서 위치 선택 ============ */
+// 텍스트 자동완성이 기본이고, 이건 검색이 어려운 상황(정확한 이름을 모르는 곳)을 위한 보조 수단이다.
+// 화면 중앙 핀은 고정, 지도만 움직인다(카카오T 방식) — idle 시점 중심좌표를 역지오코딩해서 이름을 잡는다.
+let mapPickerTargetInputId = null;
+let mapPickerMap = null;
+let mapPickerGeocoder = null;
+let mapPickerPicked = null; // idle에서 역지오코딩으로 잡은 { name, lat, lng }
+let mapPickerIdleTimer = null;
+
+function mapPickerOpen(targetInputId){
+  mapPickerTargetInputId = targetInputId;
+  const isOrigin = targetInputId === 'ob-origin';
+  document.getElementById('map-picker-title').textContent = isOrigin ? '출발지를 지도에서 선택' : '목적지를 지도에서 선택';
+  document.getElementById('map-picker-search-input').value = '';
+  document.getElementById('map-picker-search-list').hidden = true;
+  document.getElementById('map-picker-address').textContent = '지도를 움직여서 위치를 맞춰보세요';
+  mapPickerPicked = null;
+  showScreen('screen-map-picker');
+  mapPickerInit().then(() => {
+    const existing = placeCoord(document.getElementById(targetInputId).value.trim());
+    if (existing) {
+      mapPickerMap.setCenter(new kakao.maps.LatLng(existing.lat, existing.lng));
+      mapPickerReverseGeocode(existing.lat, existing.lng);
+    } else {
+      mapPickerUseGPS(true);
+    }
+  });
+}
+
+async function mapPickerInit(){
+  await window.__kakaoReady;
+  if (mapPickerMap) { setTimeout(() => mapPickerMap.relayout(), 0); return; }
+  const el = document.getElementById('map-picker-map');
+  const start = placeCoord(ORIGIN_NAME);
+  mapPickerMap = new kakao.maps.Map(el, { center: new kakao.maps.LatLng(start.lat, start.lng), level: 4 });
+  mapPickerGeocoder = new kakao.maps.services.Geocoder();
+  mapPickerMap.addListener('idle', () => {
+    clearTimeout(mapPickerIdleTimer);
+    mapPickerIdleTimer = setTimeout(() => {
+      const c = mapPickerMap.getCenter();
+      mapPickerReverseGeocode(c.getLat(), c.getLng());
+    }, 200);
+  });
+}
+
+// 좌표 → 주소/장소명 역변환. 건물명이 있으면 건물명, 없으면 지번주소를 쓴다.
+function mapPickerReverseGeocode(lat, lng){
+  document.getElementById('map-picker-address').textContent = '위치 확인 중…';
+  mapPickerGeocoder.coord2Address(lng, lat, (result, status) => {
+    if (status !== kakao.maps.services.Status.OK || !result.length) {
+      document.getElementById('map-picker-address').textContent = '이 위치의 주소를 찾을 수 없어요';
+      mapPickerPicked = null;
+      return;
+    }
+    const r = result[0];
+    const name = (r.road_address && r.road_address.building_name) || r.address.address_name;
+    mapPickerPicked = { name, lat, lng };
+    document.getElementById('map-picker-address').textContent = name;
+  });
+}
+
+function mapPickerUseGPS(silent){
+  if (!navigator.geolocation) { if (!silent) showError('이 브라우저에서는 위치 정보를 쓸 수 없어요.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude } = pos.coords;
+      mapPickerMap.setCenter(new kakao.maps.LatLng(latitude, longitude));
+      mapPickerReverseGeocode(latitude, longitude);
+    },
+    () => { if (!silent) showError('위치 권한을 확인해주세요.'); },
+    { enableHighAccuracy: true, timeout: 5000 }
+  );
+}
+document.getElementById('map-picker-gps-btn').addEventListener('click', () => mapPickerUseGPS(false));
+
+document.getElementById('map-picker-back-btn').addEventListener('click', () => showScreen('screen-ob-route'));
+
+document.getElementById('map-picker-confirm-btn').addEventListener('click', () => {
+  if (!mapPickerPicked) return;
+  registerPlace(mapPickerPicked.name, mapPickerPicked.lat, mapPickerPicked.lng);
+  const input = document.getElementById(mapPickerTargetInputId);
+  input.value = mapPickerPicked.name;
+  input.dispatchEvent(new Event('input')); // syncNextBtn 등 기존 리스너가 활성화 여부를 갱신하게 한다
+  showScreen('screen-ob-route');
+});
+
+document.getElementById('ob-origin-map-btn').addEventListener('click', () => mapPickerOpen('ob-origin'));
+document.getElementById('ob-dest-map-btn').addEventListener('click', () => mapPickerOpen('ob-dest'));
+
+(function setupMapPickerSearch(){
+  const input = document.getElementById('map-picker-search-input');
+  const list = document.getElementById('map-picker-search-list');
+  let debounceTimer = null;
+  let places = null;
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const q = input.value.trim();
+    if (!q) { list.hidden = true; list.innerHTML = ''; return; }
+    debounceTimer = setTimeout(async () => {
+      await window.__kakaoReady;
+      if (!places) places = new kakao.maps.services.Places();
+      places.keywordSearch(q, (data, status) => {
+        list.innerHTML = '';
+        if (status !== kakao.maps.services.Status.OK || !data.length) { list.hidden = true; return; }
+        data.slice(0, 6).forEach(place => {
+          const li = document.createElement('li');
+          li.className = 'autocomplete-item';
+          li.textContent = place.place_name + ' · ' + (place.road_address_name || place.address_name || '');
+          li.addEventListener('click', () => {
+            const lat = Number(place.y), lng = Number(place.x);
+            mapPickerPicked = { name: place.place_name, lat, lng };
+            mapPickerMap.setCenter(new kakao.maps.LatLng(lat, lng));
+            document.getElementById('map-picker-address').textContent = place.place_name;
+            input.value = place.place_name;
+            list.hidden = true;
+          });
+          list.appendChild(li);
+        });
+        list.hidden = false;
+      });
+    }, 250);
+  });
+  document.addEventListener('click', (e) => { if (e.target !== input) list.hidden = true; });
+})();
 
 /* ============ 8-0. 온보딩: 스플래시 → 닉네임/성별 → 경로/시간/인원 ============ */
 
