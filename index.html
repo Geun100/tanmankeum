@@ -88,7 +88,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .field label{ font-size:13px; font-weight:600; color:var(--ink-soft); }
   .field select, .field input{
     height:48px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink);
-    padding:0 14px; font-size:15px; outline:none; width:100%;
+    padding:0 14px; font-size:16px; outline:none; width:100%;
   }
   .field select:focus, .field input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
   .field input::placeholder, .chat-input-row input::placeholder{ color:var(--muted); opacity:1; }
@@ -138,7 +138,9 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   /* 경로: 출발지 → 목적지 나란히 */
   .route-row{ display:flex; align-items:center; gap:8px; }
   .route-cell{ position:relative; flex:1; min-width:0; }
-  .route-cell input{ width:100%; }
+  .route-cell input{ width:100%; height:48px; border-radius:var(--radius-input); border:1px solid var(--line);
+    background:var(--surface); color:var(--ink); padding:0 14px; font-size:16px; outline:none; }
+  .route-cell input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
   .route-arrow{ flex-shrink:0; color:var(--primary); font-weight:800; font-size:17px; }
 
   /* 출발 시간 휠 피커. 가운데 밴드에 걸린 항목이 선택값이다. */
@@ -175,8 +177,8 @@ window.__kakaoReady = new Promise((resolve, reject) => {
      .chip-row 뒤에 와야 그 display:flex를 덮어쓴다(같은 명시도라 선언 순서가 이긴다). */
   .chip-row--collapsible{ display:none; }
   .chip-row--collapsible.is-open{ display:flex; }
-  .chip{ font:inherit; font-size:12px; font-weight:600; color:var(--ink-soft); background:var(--paper);
-         border:1px solid var(--line); border-radius:999px; padding:6px 11px; cursor:pointer; }
+  .chip{ font:inherit; font-size:13px; font-weight:600; color:var(--ink-soft); background:var(--paper);
+         border:1px solid var(--line); border-radius:999px; padding:10px 14px; cursor:pointer; }
   .chip:hover{ border-color:var(--primary); color:var(--primary); }
   .chip[aria-pressed="true"]{ background:var(--primary); border-color:var(--primary); color:#fff; }
   .autocomplete-list{ position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:20; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-input); box-shadow:var(--shadow-card); max-height:220px; overflow-y:auto; }
@@ -259,7 +261,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chat-msg.me{ align-self:flex-end; background:var(--primary); color:var(--on-primary); border-bottom-right-radius:4px; }
   .chat-msg .chat-name{ display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:2px; }
   .chat-input-row{ display:flex; gap:8px; }
-  .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-pill); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:14px; }
+  .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-pill); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:16px; }
   /* 채팅이 아직 없을 때: 가짜 인사말 대신 무슨 말을 하면 좋을지 추천만 해준다. */
   .chat-empty{ text-align:center; padding:22px 12px 6px; color:var(--muted); }
   .chat-empty p{ font-size:13px; margin:0 0 12px; }
@@ -1453,6 +1455,10 @@ if (cachedOnboarding) {
     .then(() => { renderHome(); showScreen('screen-home'); })
     .catch(e => { showError(friendlyDbError(e)); showScreen('screen-ob-profile'); });
 } else {
+  // 크롬이 autocomplete="off"를 무시하고 예전에 이 브라우저에서 입력했던 값을 멋대로
+  // 채워넣는 경우가 있다 — 새 온보딩인데 출발지/목적지가 미리 채워져 보이는 원인.
+  // 스크립트가 명시적으로 비워서 덮어쓴다.
+  ['ob-nickname', 'ob-origin', 'ob-dest'].forEach(id => { document.getElementById(id).value = ''; });
   setTimeout(leaveSplash, SPLASH_MS);
   document.getElementById('screen-splash').addEventListener('click', leaveSplash);
 }
