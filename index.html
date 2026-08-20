@@ -334,7 +334,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <div class="field">
           <span class="field-label">성별</span>
           <div class="choice-row" id="ob-gender-row" role="radiogroup" aria-label="성별">
-            <button type="button" class="choice is-on" data-gender="여성" role="radio" aria-checked="true">여성</button>
+            <button type="button" class="choice" data-gender="여성" role="radio" aria-checked="false">여성</button>
             <button type="button" class="choice" data-gender="남성" role="radio" aria-checked="false">남성</button>
           </div>
         </div>
@@ -1457,7 +1457,7 @@ if (cachedOnboarding) {
 
 // --- 1단계: 닉네임 + 성별 ---
 let obMode = 'onboarding'; // 'onboarding' | 'settings' — screen-ob-route를 두 용도로 재사용
-let obGender = '여성';
+let obGender = null; // 사용자가 명시적으로 고르기 전엔 미선택 — 아무 성별도 임의로 가정하지 않는다
 const genderRow = document.getElementById('ob-gender-row');
 genderRow.addEventListener('click', (e) => {
   const btn = e.target.closest('.choice');
@@ -1468,11 +1468,12 @@ genderRow.addEventListener('click', (e) => {
     c.classList.toggle('is-on', on);
     c.setAttribute('aria-checked', String(on));
   });
+  syncNextBtn();
 });
 
 const nicknameInput = document.getElementById('ob-nickname');
 const nextBtn = document.getElementById('btn-ob-next');
-function syncNextBtn(){ nextBtn.disabled = nicknameInput.value.trim().length === 0; }
+function syncNextBtn(){ nextBtn.disabled = nicknameInput.value.trim().length === 0 || !obGender; }
 nicknameInput.addEventListener('input', syncNextBtn);
 syncNextBtn();
 nextBtn.addEventListener('click', () => {
