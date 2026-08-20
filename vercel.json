@@ -1,0 +1,4 @@
+{
+  "buildCommand": "node scripts/gen-keys.js",
+  "outputDirectory": "."
+}
