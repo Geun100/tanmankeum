@@ -97,6 +97,13 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .field select:focus, .field input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
   .field input::placeholder, .chat-input-row input::placeholder{ color:var(--placeholder); opacity:1; }
   .field-row{ display:flex; gap:10px; }
+  .file-picker{ display:flex; align-items:center; gap:10px; height:48px; border-radius:var(--radius-input); border:1px solid var(--line);
+    background:var(--surface); padding:0 6px 0 6px; cursor:pointer; }
+  .file-picker-btn{ flex-shrink:0; height:36px; display:inline-flex; align-items:center; padding:0 14px; border-radius:calc(var(--radius-input) - 4px);
+    background:var(--fill); color:var(--ink); font-size:13px; font-weight:600; }
+  .file-picker-name{ font-size:14px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .file-picker:has(.file-picker-name.is-set) .file-picker-name{ color:var(--ink); }
+  .file-picker-input{ position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; }
   .field-row .field{ flex:1; min-width:0; }
   .hint-box{ background:var(--primary-soft); color:var(--primary-dark); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
 
@@ -2568,13 +2575,24 @@ function renderSettlement(podId){
     </div>
     <div class="field" id="receipt-field" hidden>
       <label for="receipt-photo">택시 영수증 사진 (선택, 요금 확인용)</label>
-      <input type="file" id="receipt-photo" accept="image/*">
+      <label class="file-picker" for="receipt-photo">
+        <span class="file-picker-btn">사진 선택</span>
+        <span class="file-picker-name" id="receipt-photo-name">선택된 사진 없음</span>
+      </label>
+      <input type="file" id="receipt-photo" accept="image/*" class="file-picker-input">
     </div>
     <button class="btn btn--ghost btn--block" id="btn-share-account" hidden>계좌번호 공유하기</button>
     <p class="fine-note" id="share-confirm-note" style="margin-top:10px;"></p>
   `;
   document.getElementById('settlement-body').innerHTML = html;
   document.getElementById('btn-finish-pod').disabled = true;
+
+  document.getElementById('receipt-photo').addEventListener('change', (e) => {
+    const nameEl = document.getElementById('receipt-photo-name');
+    const f = e.target.files[0];
+    nameEl.textContent = f ? f.name : '선택된 사진 없음';
+    nameEl.classList.toggle('is-set', !!f);
+  });
 
   document.getElementById('btn-calc-settlement').addEventListener('click', () => {
     const input = document.getElementById('actual-fare');
