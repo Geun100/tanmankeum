@@ -1353,6 +1353,22 @@ async function dissolvePod(pod){
   await createOwnPod();
 }
 
+// 남의 팟에 참가한 사람이 확정 전에 빠져나간다 — dissolvePod와 달리 팟 자체는
+// 안 건드리고 내 참여 기록만 지운다. 팟장 취소(dissolvePod)와 결과는 같다:
+// 대기 상태로 돌아가고 내 팟이 새로 생긴다.
+async function leavePod(pod){
+  if (SUPA_ENABLED) {
+    const { error } = await supa.from('pod_participants').delete().eq('pod_id', pod.id).eq('user_id', STATE.user.id);
+    if (error) throw error;
+  } else {
+    pod.participants = pod.participants.filter(p => p.id !== STATE.user.id);
+  }
+  STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
+  STATE.committed = false;
+  STATE.userState = '대기';
+  await createOwnPod();
+}
+
 function findPod(id){ return STATE.pods.find(p => p.id === id); }
 
 // 출발 시각이 지났으면 만료된 팟이다. 팟에 날짜가 따로 없으면 사용자가 고른 날짜를 쓴다.
@@ -2124,6 +2140,7 @@ async function renderPodChat(podId){
     ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-cancel-pod">팟 취소하기</button>`;
   } else if (!isLeader && pod.status === 'recruiting') {
     ctaHtml += `<p class="cta-hint">팟장이 확정하면 최종 경로와 요금을 볼 수 있어요. 그때까지 채팅으로 탑승 장소를 맞춰보세요.</p>`;
+    ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">참가 취소하기</button>`;
   } else if (pod.status !== 'recruiting') {
     ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
@@ -2172,6 +2189,24 @@ async function renderPodChat(podId){
   });
   const viewFinalBtn = document.getElementById('btn-view-final');
   if (viewFinalBtn) viewFinalBtn.addEventListener('click', () => { renderFinal(pod.id); showScreen('screen-final'); });
+  const leaveBtn = document.getElementById('btn-leave-pod');
+  if (leaveBtn) leaveBtn.addEventListener('click', () => {
+    openModal({
+      title: '참가를 취소할까요?',
+      body: '이 팟에서 나가고, 다시 매칭 대기 화면으로 돌아가요.',
+      confirmLabel: '참가 취소하기',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await leavePod(pod);
+          renderHome();
+          showScreen('screen-home');
+        } catch (e) {
+          showError(friendlyDbError(e));
+        }
+      },
+    });
+  });
 }
 
 /* ============ 12. 화면 5: 최종 경로 / 요금 ============ */
