@@ -231,3 +231,21 @@ begin
   alter publication supabase_realtime add table public.pod_messages;
 exception when duplicate_object then null;
 end $$;
+
+-- ============ 8. 정산 인증사진 (마이그레이션, 재실행 안전) ============
+-- 계좌번호 공유 시 영수증 사진을 첨부해 채팅에 같이 올릴 수 있게 한다.
+alter table public.pod_messages add column if not exists image_url text;
+
+insert into storage.buckets (id, name, public)
+values ('settlement-photos', 'settlement-photos', true)
+on conflict (id) do nothing;
+
+-- 로그인이 없어 신원 검증이 안 되는 건 나머지 테이블과 같은 트레이드오프다(1번 주석 참고).
+-- 여기도 "구조적으로 말이 되는지"만 검사한다.
+drop policy if exists settlement_photos_select on storage.objects;
+create policy settlement_photos_select on storage.objects
+  for select to anon using (bucket_id = 'settlement-photos');
+
+drop policy if exists settlement_photos_insert on storage.objects;
+create policy settlement_photos_insert on storage.objects
+  for insert to anon with check (bucket_id = 'settlement-photos');

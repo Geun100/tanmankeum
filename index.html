@@ -705,7 +705,7 @@ async function loadMessages(podId){
   const { data, error } = await supa.from('pod_messages')
     .select('*, profiles(nickname)').eq('pod_id', podId).order('created_at', { ascending: true });
   if (error) throw error;
-  return data.map(m => ({ who: (m.profiles && m.profiles.nickname) || '?', mine: m.user_id === STATE.user.id, text: m.text }));
+  return data.map(m => ({ who: (m.profiles && m.profiles.nickname) || '?', mine: m.user_id === STATE.user.id, text: m.text, imageUrl: m.image_url || null }));
 }
 
 // 팟 상세/채팅 화면에서만 구독한다(목록 화면은 진입 시 재조회로 충분 — 설계 결정).
@@ -2173,7 +2173,23 @@ async function renderPodChat(podId){
     messages.forEach(m => {
       const div = document.createElement('div');
       div.className = 'chat-msg ' + (m.mine ? 'me' : 'other');
-      div.innerHTML = (m.mine ? '' : `<span class="chat-name">${m.who}</span>`) + m.text;
+      if (!m.mine) {
+        const nameEl = document.createElement('span');
+        nameEl.className = 'chat-name';
+        nameEl.textContent = m.who;
+        div.appendChild(nameEl);
+      }
+      const textEl = document.createElement('span');
+      textEl.style.whiteSpace = 'pre-line';
+      textEl.textContent = m.text;
+      div.appendChild(textEl);
+      if (m.imageUrl) {
+        const img = document.createElement('img');
+        img.src = m.imageUrl;
+        img.alt = '영수증 사진';
+        img.style.cssText = 'display:block;max-width:100%;border-radius:12px;margin-top:8px;';
+        div.appendChild(img);
+      }
       msgWrap.appendChild(div);
     });
   }
@@ -2350,6 +2366,10 @@ function renderSettlement(podId){
       <label for="account-number">입금 계좌번호</label>
       <input type="text" id="account-number" placeholder="은행명 계좌번호 (예: 탄만은행 123-4567)">
     </div>
+    <div class="field" id="receipt-field" hidden>
+      <label for="receipt-photo">택시 영수증 사진 (선택, 요금 확인용)</label>
+      <input type="file" id="receipt-photo" accept="image/*">
+    </div>
     <button class="btn btn--ghost btn--block" id="btn-share-account" hidden>계좌번호 공유하기</button>
     <p class="fine-note" id="share-confirm-note" style="margin-top:10px;"></p>
   `;
@@ -2371,19 +2391,46 @@ function renderSettlement(podId){
     });
     document.getElementById('settlement-result').hidden = false;
     document.getElementById('account-field').hidden = false;
+    document.getElementById('receipt-field').hidden = false;
     document.getElementById('btn-share-account').hidden = false;
   });
 
   document.getElementById('btn-share-account').addEventListener('click', () => {
     const acc = document.getElementById('account-number').value.trim();
     if (!acc) { document.getElementById('account-number').focus(); return; }
+    const file = document.getElementById('receipt-photo').files[0] || null;
     openModal({
       title: '계좌번호를 공유할까요?',
-      body: `채팅방에 "${acc}" 계좌로 각자 정산금을 입금해달라고 안내해요.`,
+      body: `채팅방에 "${acc}" 계좌로 각자 정산금을 입금해달라고 안내해요.${file ? ' 영수증 사진도 같이 올라가요.' : ''}`,
       confirmLabel: '공유하기',
-      onConfirm: () => {
-        document.getElementById('share-confirm-note').textContent = `채팅방에 계좌(${acc})와 정산 내역이 공유됐어요. 각자 계좌이체로 정산해주세요.`;
-        document.getElementById('btn-finish-pod').disabled = false;
+      onConfirm: async () => {
+        const btn = document.getElementById('btn-share-account');
+        btn.disabled = true;
+        try {
+          const lines = [`정산 내역이에요.`, `입금 계좌: ${acc}`];
+          (pod.settlement || []).forEach(s => lines.push(`${s.nickname}: ${won(s.amount)}`));
+          const text = lines.join('\n');
+          let imageUrl = null;
+          if (file && SUPA_ENABLED) {
+            const path = `${podId}/${Date.now()}-${file.name}`;
+            const { error: upErr } = await supa.storage.from('settlement-photos').upload(path, file);
+            if (upErr) throw upErr;
+            imageUrl = supa.storage.from('settlement-photos').getPublicUrl(path).data.publicUrl;
+          }
+          if (SUPA_ENABLED) {
+            const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: pod.leaderId, text, image_url: imageUrl });
+            if (error) throw error;
+          } else {
+            if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
+            STATE.chatMessages[podId].push({ who: '나', mine: true, text, imageUrl });
+          }
+          document.getElementById('share-confirm-note').textContent = `채팅방에 계좌(${acc})와 정산 내역이 공유됐어요. 각자 계좌이체로 정산해주세요.`;
+          document.getElementById('btn-finish-pod').disabled = false;
+        } catch (e) {
+          showError(friendlyDbError(e));
+        } finally {
+          btn.disabled = false;
+        }
       },
     });
   });
