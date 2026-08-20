@@ -96,10 +96,85 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .field-row .field{ flex:1; min-width:0; }
   .hint-box{ background:var(--primary-soft); color:var(--primary-dark); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
 
+  /* ===== 스플래시: 선 → 핀 → 글자 순서로 등장 ===== */
+  .splash{ flex:1; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .splash-logo{ display:flex; flex-direction:column; align-items:center; }
+  .splash-route{ width:220px; height:40px; overflow:visible; }
+  .splash-line{ stroke:var(--primary); stroke-width:5; stroke-linecap:round;
+    stroke-dasharray:168; stroke-dashoffset:168; animation:line-draw .55s .1s ease-out forwards; }
+  .splash-dot{ fill:var(--primary); transform-origin:18px 26px; transform:scale(0); animation:pop .3s .05s cubic-bezier(.34,1.56,.64,1) forwards; }
+  .splash-pin{ fill:var(--primary); transform-origin:186px 40px; transform:scale(0); animation:pop .38s .6s cubic-bezier(.34,1.56,.64,1) forwards; }
+  .splash-word{ display:flex; gap:2px; margin:14px 0 0; font-size:64px; line-height:1.1; font-weight:800; letter-spacing:-0.04em; }
+  .splash-ch{ opacity:0; transform:translateY(14px); animation:rise .42s cubic-bezier(.2,.7,.3,1) forwards; }
+  .splash-ch:nth-child(1){ animation-delay:.78s; }
+  .splash-ch:nth-child(2){ animation-delay:.88s; }
+  .splash-ch:nth-child(3){ animation-delay:.98s; }
+  .splash-ch--accent{ color:var(--primary); }
+  .splash-tagline{ margin:12px 0 0; font-size:14px; font-weight:600; color:var(--ink-soft);
+    opacity:0; animation:rise .45s 1.16s cubic-bezier(.2,.7,.3,1) forwards; }
+  @keyframes line-draw{ to{ stroke-dashoffset:0; } }
+  @keyframes pop{ to{ transform:scale(1); } }
+  @keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+  /* 애니메이션을 원치 않는 사용자에게는 즉시 완성된 상태로 보여준다. */
+  @media (prefers-reduced-motion: reduce){
+    .splash-line, .splash-dot, .splash-pin, .splash-ch, .splash-tagline{ animation:none; }
+    .splash-line{ stroke-dashoffset:0; } .splash-dot, .splash-pin{ transform:scale(1); }
+    .splash-ch, .splash-tagline{ opacity:1; transform:none; }
+  }
+
+  /* ===== 온보딩 공용 ===== */
+  .step-dots{ display:flex; gap:6px; margin:2px 0 14px; }
+  .step-dots span{ width:22px; height:4px; border-radius:999px; background:var(--line); }
+  .step-dots span.on{ background:var(--primary); }
+  .field-label{ display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:8px; }
+
+  /* 성별처럼 둘 중 하나를 고르는 버튼 쌍 */
+  .choice-row{ display:flex; gap:10px; }
+  .choice{ flex:1; font:inherit; font-size:15px; font-weight:700; height:52px; cursor:pointer;
+    border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); }
+  .choice:hover{ border-color:var(--primary); }
+  .choice.is-on{ background:var(--primary-soft); border-color:var(--primary); color:var(--primary); }
+
+  /* 경로: 출발지 → 목적지 나란히 */
+  .route-row{ display:flex; align-items:center; gap:8px; }
+  .route-cell{ position:relative; flex:1; min-width:0; }
+  .route-cell input{ width:100%; }
+  .route-arrow{ flex-shrink:0; color:var(--primary); font-weight:800; font-size:17px; }
+
+  /* 출발 시간 휠 피커. 가운데 밴드에 걸린 항목이 선택값이다. */
+  .wheel-picker{ position:relative; display:flex; align-items:center; justify-content:center; gap:2px;
+    height:150px; border:1px solid var(--line); border-radius:var(--radius-input); background:var(--surface); overflow:hidden; }
+  .wheel-band{ position:absolute; left:8px; right:8px; top:50%; height:42px; transform:translateY(-50%);
+    background:var(--primary-soft); border-radius:10px; pointer-events:none; }
+  .wheel{ position:relative; z-index:1; height:100%; overflow-y:scroll; scroll-snap-type:y mandatory;
+    scrollbar-width:none; -ms-overflow-style:none; text-align:center; outline:none; }
+  .wheel::-webkit-scrollbar{ display:none; }
+  /* 위아래 여백(54px = (150-42)/2)이 있어야 첫·마지막 항목도 가운데 밴드에 올 수 있다. */
+  .wheel::before, .wheel::after{ content:''; display:block; height:54px; }
+  .wheel-item{ height:42px; line-height:42px; scroll-snap-align:center; font-size:17px; font-weight:600;
+    color:var(--muted); padding:0 10px; white-space:nowrap; cursor:pointer; }
+  .wheel-item.is-sel{ color:var(--ink); font-weight:800; }
+  .wheel-colon{ position:relative; z-index:1; font-size:17px; font-weight:800; color:var(--ink); }
+
+  /* 최대 탑승자 수 스테퍼 */
+  .stepper-box{ display:flex; align-items:center; justify-content:space-between; margin-top:14px;
+    padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-input); background:var(--surface);
+    font-size:15px; font-weight:600; }
+  .stepper{ display:flex; align-items:center; gap:16px; }
+  .stepper strong{ font-size:17px; font-weight:800; min-width:18px; text-align:center; }
+  .step-btn{ width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:var(--surface);
+    color:var(--primary); font-size:19px; font-weight:700; line-height:1; cursor:pointer; }
+  .step-btn:hover:not(:disabled){ border-color:var(--primary); }
+  .step-btn:disabled{ color:var(--muted); cursor:not-allowed; opacity:.5; }
+
   /* 포항 주요 장소 빠른 선택. 직접 입력이 기본이고 이건 보조 수단이다. */
   .kakao-link-row{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
   .btn--sm{ flex:1 1 auto; min-width:150px; padding:10px 12px; font-size:13px; }
   .chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  /* 온보딩에서는 해당 입력칸을 만질 때만 펼쳐서 화면을 덜 차지하게 한다.
+     .chip-row 뒤에 와야 그 display:flex를 덮어쓴다(같은 명시도라 선언 순서가 이긴다). */
+  .chip-row--collapsible{ display:none; }
+  .chip-row--collapsible.is-open{ display:flex; }
   .chip{ font:inherit; font-size:12px; font-weight:600; color:var(--ink-soft); background:var(--paper);
          border:1px solid var(--line); border-radius:999px; padding:6px 11px; cursor:pointer; }
   .chip:hover{ border-color:var(--primary); color:var(--primary); }
@@ -212,60 +287,98 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   <main class="phone">
 
     <!-- 1. 온보딩 -->
-    <section class="screen active" id="screen-onboarding" aria-label="온보딩">
+    <!-- 0. 스플래시: 로고 등장 애니메이션 -->
+    <section class="screen active" id="screen-splash" aria-label="탄만큼">
+      <div class="splash">
+        <div class="splash-logo">
+          <svg class="splash-route" viewBox="0 0 220 40" aria-hidden="true">
+            <line class="splash-line" x1="18" y1="26" x2="186" y2="26"/>
+            <circle class="splash-dot" cx="18" cy="26" r="9"/>
+            <g class="splash-pin">
+              <path d="M186 6c-7.7 0-14 6.3-14 14 0 9.7 14 20 14 20s14-10.3 14-20c0-7.7-6.3-14-14-14z"/>
+              <circle cx="186" cy="20" r="5.4" fill="var(--surface)"/>
+            </g>
+          </svg>
+          <h1 class="splash-word" aria-label="탄만큼">
+            <span class="splash-ch">탄</span><span class="splash-ch splash-ch--accent">만</span><span class="splash-ch">큼</span>
+          </h1>
+          <p class="splash-tagline">위치기반 팟 매칭 &amp; 거리별 정산</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 1. 온보딩 1/2: 닉네임 + 성별 -->
+    <section class="screen" id="screen-ob-profile" aria-label="닉네임과 성별 입력">
       <header class="topbar topbar--brand"><span class="brand-mark">탄만큼</span></header>
       <div class="screen-body">
-        <p class="page-title">경로가 겹치는 사람과<br>택시를 나눠 타요</p>
-        <p class="page-sub">목적지가 같지 않아도, 내 목적지가 팟장의 이동 경로 안에 있으면 함께 탈 수 있어요.</p>
-        <form class="form" id="onboarding-form" novalidate>
-          <div class="field-row">
-            <div class="field">
-              <label for="ob-nickname">닉네임</label>
-              <input type="text" id="ob-nickname" placeholder="닉네임" required maxlength="12">
-            </div>
-            <div class="field">
-              <label for="ob-gender">성별</label>
-              <select id="ob-gender">
-                <option value="여성">여성</option>
-                <option value="남성">남성</option>
-              </select>
-            </div>
+        <div class="step-dots" aria-hidden="true"><span class="on"></span><span></span></div>
+        <p class="page-title">만나서 반가워요</p>
+        <p class="page-sub">닉네임과 성별을 알려주세요</p>
+        <div class="field">
+          <label for="ob-nickname">닉네임</label>
+          <input type="text" id="ob-nickname" placeholder="닉네임" maxlength="12" autocomplete="off">
+        </div>
+        <div class="field">
+          <span class="field-label">성별</span>
+          <div class="choice-row" id="ob-gender-row" role="radiogroup" aria-label="성별">
+            <button type="button" class="choice is-on" data-gender="여성" role="radio" aria-checked="true">여성</button>
+            <button type="button" class="choice" data-gender="남성" role="radio" aria-checked="false">남성</button>
           </div>
-          <div class="field" style="position:relative;">
-            <label for="ob-origin">출발지</label>
-            <input type="text" id="ob-origin" placeholder="장소를 입력하세요 (예: 포항역)" autocomplete="off">
-            <ul class="autocomplete-list" id="ob-origin-list" hidden></ul>
-            <div class="chip-row" id="ob-origin-chips"></div>
-          </div>
-          <div class="field" style="position:relative;">
-            <label for="ob-dest">목적지</label>
-            <input type="text" id="ob-dest" placeholder="장소를 입력하세요 (예: 영일대해수욕장)" autocomplete="off">
-            <ul class="autocomplete-list" id="ob-dest-list" hidden></ul>
-            <div class="chip-row" id="ob-dest-chips"></div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="ob-date">출발 날짜</label>
-              <input type="date" id="ob-date" required>
-            </div>
-            <div class="field">
-              <label for="ob-time">출발 시간</label>
-              <input type="time" id="ob-time" required>
-            </div>
-          </div>
-          <div class="field">
-            <label for="ob-size">원하는 인원 (나 포함)</label>
-            <select id="ob-size">
-              <option value="2">2명</option>
-              <option value="3" selected>3명</option>
-              <option value="4">4명</option>
-            </select>
-          </div>
-          <p class="hint-box">💡 원하는 인원이 적을수록 매칭될 가능성이 높아요.</p>
-        </form>
+        </div>
       </div>
       <div class="cta-dock">
-        <button class="btn btn--primary btn--block" id="btn-find-pod">택시팟 찾기</button>
+        <button class="btn btn--primary btn--block" id="btn-ob-next" disabled>다음</button>
+      </div>
+    </section>
+
+    <!-- 2. 온보딩 2/2: 경로 + 시간 + 인원 -->
+    <section class="screen" id="screen-ob-route" aria-label="경로와 시간 입력">
+      <header class="topbar">
+        <button class="icon-btn" data-back="screen-ob-profile" aria-label="뒤로가기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="topbar-title"><strong>이동 정보</strong></div>
+      </header>
+      <div class="screen-body">
+        <div class="step-dots" aria-hidden="true"><span></span><span class="on"></span></div>
+        <p class="page-title">어디로 이동하세요?</p>
+        <p class="page-sub">경로와 시간을 알려주면 딱 맞는 동승자를 찾아드려요</p>
+
+        <span class="field-label">경로</span>
+        <div class="route-row">
+          <div class="route-cell">
+            <input type="text" id="ob-origin" placeholder="출발지" autocomplete="off">
+            <ul class="autocomplete-list" id="ob-origin-list" hidden></ul>
+          </div>
+          <span class="route-arrow" aria-hidden="true">→</span>
+          <div class="route-cell">
+            <input type="text" id="ob-dest" placeholder="목적지" autocomplete="off">
+            <ul class="autocomplete-list" id="ob-dest-list" hidden></ul>
+          </div>
+        </div>
+        <div class="chip-row chip-row--collapsible" id="ob-origin-chips" aria-label="출발지 빠른 선택"></div>
+        <div class="chip-row chip-row--collapsible" id="ob-dest-chips" aria-label="목적지 빠른 선택"></div>
+
+        <span class="field-label" style="margin-top:18px;">출발 시간</span>
+        <div class="wheel-picker" id="time-picker">
+          <div class="wheel-band" aria-hidden="true"></div>
+          <div class="wheel" id="wheel-ampm" role="listbox" aria-label="오전 오후" tabindex="0"></div>
+          <div class="wheel" id="wheel-hour" role="listbox" aria-label="시" tabindex="0"></div>
+          <span class="wheel-colon" aria-hidden="true">:</span>
+          <div class="wheel" id="wheel-min" role="listbox" aria-label="분" tabindex="0"></div>
+        </div>
+
+        <div class="stepper-box">
+          <span>최대 탑승자 수</span>
+          <div class="stepper">
+            <button type="button" class="step-btn" id="btn-size-minus" aria-label="인원 줄이기">−</button>
+            <strong id="size-value">2</strong>
+            <button type="button" class="step-btn" id="btn-size-plus" aria-label="인원 늘리기">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="cta-dock">
+        <button class="btn btn--primary btn--block" id="btn-find-pod" disabled>등록하기</button>
       </div>
     </section>
 
@@ -1101,13 +1214,23 @@ async function joinPod(pod){
   if (SUPA_ENABLED) {
     const dropOff = recommendDropOff(u.dest, pod);
     const destC = placeCoord(u.dest);
+
+    // 내 팟을 먼저 해체해야 한다. DB 트리거가 "한 사람은 한 팟에만" 규칙을 강제하므로,
+    // 내가 팟장인 팟이 살아있는 동안에는 남의 팟 참가가 항상 거부된다.
+    if (ownPodId && ownPodId !== pod.id) {
+      await supa.from('pods').update({ status: 'dissolved' }).eq('id', ownPodId);
+    }
+
     const { error } = await supa.from('pod_participants').insert({
       pod_id: pod.id, user_id: u.id, dest_name: u.dest, dest_lat: destC.lat, dest_lng: destC.lng,
       dropoff_point: dropOff.point, walk_dist: dropOff.walkDist, walk_time: dropOff.walkTime,
     });
-    if (error) throw error; // 정원 초과·중복 참가 등은 DB 트리거가 막고 여기로 에러가 온다
-    if (ownPodId && ownPodId !== pod.id) {
-      await supa.from('pods').update({ status: 'dissolved' }).eq('id', ownPodId);
+    if (error) {
+      // 참가가 실패했으면(정원 마감 등) 방금 해체한 내 팟을 되살려 원래 상태로 돌린다.
+      if (ownPodId && ownPodId !== pod.id) {
+        await supa.from('pods').update({ status: 'open' }).eq('id', ownPodId);
+      }
+      throw error;
     }
     const fresh = await loadPod(pod.id);
     STATE.pods = STATE.pods.filter(p => p.id !== ownPodId && p.id !== pod.id);
@@ -1215,9 +1338,147 @@ function setupPlaceChips(chipsId, inputId, names){
 }
 setupPlaceChips('ob-origin-chips', 'ob-origin', POPULAR_ORIGINS);
 setupPlaceChips('ob-dest-chips', 'ob-dest', POPULAR_DESTS);
-// toISOString()은 UTC라 한국 시간 오전 9시 이전엔 어제 날짜가 나온다. 로컬 날짜를 써야 한다.
-document.getElementById('ob-date').value = localDateStr(new Date());
-document.getElementById('ob-time').value = clockFromNow(30).time;
+
+/* ============ 8-0. 온보딩: 스플래시 → 닉네임/성별 → 경로/시간/인원 ============ */
+
+// 스플래시는 로고 애니메이션이 끝나면 자동으로 넘어간다(약 1.6초). 화면을 누르면 바로 건너뛴다.
+const SPLASH_MS = 1750;
+let splashDone = false;
+function leaveSplash(){
+  if (splashDone) return;
+  splashDone = true;
+  showScreen('screen-ob-profile');
+}
+setTimeout(leaveSplash, SPLASH_MS);
+document.getElementById('screen-splash').addEventListener('click', leaveSplash);
+
+// --- 1단계: 닉네임 + 성별 ---
+let obGender = '여성';
+const genderRow = document.getElementById('ob-gender-row');
+genderRow.addEventListener('click', (e) => {
+  const btn = e.target.closest('.choice');
+  if (!btn) return;
+  obGender = btn.dataset.gender;
+  genderRow.querySelectorAll('.choice').forEach(c => {
+    const on = c === btn;
+    c.classList.toggle('is-on', on);
+    c.setAttribute('aria-checked', String(on));
+  });
+});
+
+const nicknameInput = document.getElementById('ob-nickname');
+const nextBtn = document.getElementById('btn-ob-next');
+function syncNextBtn(){ nextBtn.disabled = nicknameInput.value.trim().length === 0; }
+nicknameInput.addEventListener('input', syncNextBtn);
+syncNextBtn();
+nextBtn.addEventListener('click', () => {
+  if (nextBtn.disabled) return;
+  showScreen('screen-ob-route');
+  // 휠은 화면이 보인 뒤에야 scrollTop이 적용된다(숨겨진 요소는 스크롤 높이가 0이다).
+  setWheelTime(clockFromNow(30).time);
+});
+
+// --- 2단계: 출발 시간 휠 피커 ---
+// 분은 5분 단위. 지금부터 30분 뒤를 기본값으로 잡는다(바로 부를 택시라 과거 시각은 의미가 없다).
+const AMPM = ['오전', '오후'];
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);      // 12시간제: 1~12
+const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);    // 0,5,...,55
+
+function buildWheel(el, values, format){
+  el.innerHTML = '';
+  values.forEach((v, i) => {
+    const item = document.createElement('div');
+    item.className = 'wheel-item';
+    item.dataset.index = String(i);
+    item.textContent = format(v);
+    item.addEventListener('click', () => scrollWheelTo(el, i));
+    el.appendChild(item);
+  });
+}
+const ITEM_H = 42;
+function scrollWheelTo(el, index){ el.scrollTo({ top: index * ITEM_H, behavior: 'smooth' }); }
+function wheelIndex(el){ return Math.round(el.scrollTop / ITEM_H); }
+
+const wAmpm = document.getElementById('wheel-ampm');
+const wHour = document.getElementById('wheel-hour');
+const wMin  = document.getElementById('wheel-min');
+buildWheel(wAmpm, AMPM, v => v);
+buildWheel(wHour, HOURS, v => String(v));
+buildWheel(wMin, MINUTES, v => String(v).padStart(2, '0'));
+
+// 가운데 밴드에 걸린 항목을 진하게 표시한다.
+function syncWheelSelection(){
+  [wAmpm, wHour, wMin].forEach(el => {
+    const sel = wheelIndex(el);
+    el.querySelectorAll('.wheel-item').forEach((it, i) => it.classList.toggle('is-sel', i === sel));
+  });
+}
+[wAmpm, wHour, wMin].forEach(el => el.addEventListener('scroll', syncWheelSelection, { passive: true }));
+
+// 휠 3개를 합쳐 'HH:MM'(24시간제)로 만든다.
+function readWheelTime(){
+  const isPm = wheelIndex(wAmpm) === 1;
+  let h = HOURS[Math.min(wheelIndex(wHour), HOURS.length - 1)];
+  const m = MINUTES[Math.min(wheelIndex(wMin), MINUTES.length - 1)];
+  if (h === 12) h = 0;            // 오전 12시 = 0시, 오후 12시 = 12시
+  if (isPm) h += 12;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+function setWheelTime(hhmm){
+  const [h24, m] = hhmm.split(':').map(Number);
+  const isPm = h24 >= 12;
+  const h12 = (h24 % 12) === 0 ? 12 : h24 % 12;
+  wAmpm.scrollTop = (isPm ? 1 : 0) * ITEM_H;
+  wHour.scrollTop = HOURS.indexOf(h12) * ITEM_H;
+  wMin.scrollTop = Math.round(m / 5) % MINUTES.length * ITEM_H;
+  syncWheelSelection();
+}
+
+// --- 2단계: 최대 탑승자 수 (나 포함 2~4명) ---
+const SIZE_MIN = 2, SIZE_MAX = 4;
+let partySize = 2;
+const sizeValueEl = document.getElementById('size-value');
+const minusBtn = document.getElementById('btn-size-minus');
+const plusBtn = document.getElementById('btn-size-plus');
+function syncSize(){
+  sizeValueEl.textContent = String(partySize);
+  minusBtn.disabled = partySize <= SIZE_MIN;
+  plusBtn.disabled = partySize >= SIZE_MAX;
+}
+minusBtn.addEventListener('click', () => { if (partySize > SIZE_MIN) { partySize--; syncSize(); } });
+plusBtn.addEventListener('click', () => { if (partySize < SIZE_MAX) { partySize++; syncSize(); } });
+syncSize();
+
+// --- 2단계: 등록하기는 출발지·목적지 좌표가 모두 확정됐을 때만 활성화 ---
+const originInputEl = document.getElementById('ob-origin');
+const destInputEl = document.getElementById('ob-dest');
+function syncRegisterBtn(){
+  const ok = !!placeCoord(originInputEl.value.trim()) && !!placeCoord(destInputEl.value.trim());
+  document.getElementById('btn-find-pod').disabled = !ok;
+}
+// 타이핑, 자동완성 선택, 칩 클릭 모두 input 이벤트를 거치므로 여기 한 곳에서 잡는다.
+[originInputEl, destInputEl].forEach(el => {
+  el.addEventListener('input', syncRegisterBtn);
+  el.addEventListener('change', syncRegisterBtn);
+});
+document.getElementById('ob-origin-chips').addEventListener('click', syncRegisterBtn);
+document.getElementById('ob-dest-chips').addEventListener('click', syncRegisterBtn);
+document.getElementById('ob-origin-list').addEventListener('click', () => setTimeout(syncRegisterBtn, 0));
+document.getElementById('ob-dest-list').addEventListener('click', () => setTimeout(syncRegisterBtn, 0));
+syncRegisterBtn();
+
+// 빠른 선택 칩은 그 입력칸을 만질 때만 펼친다.
+function bindChipReveal(inputId, chipsId){
+  const input = document.getElementById(inputId);
+  const chips = document.getElementById(chipsId);
+  input.addEventListener('focus', () => chips.classList.add('is-open'));
+  chips.addEventListener('click', () => chips.classList.remove('is-open'));
+  document.addEventListener('click', (e) => {
+    if (e.target !== input && !chips.contains(e.target)) chips.classList.remove('is-open');
+  });
+}
+bindChipReveal('ob-origin', 'ob-origin-chips');
+bindChipReveal('ob-dest', 'ob-dest-chips');
 
 // 팟을 만들기 전에 각 팟장 경로의 실제 도로 경로를 받아둔다.
 // 경로적합성/하차지점이 makePod 시점에 확정되므로, 이걸 먼저 받아야 직선 근사가 아닌 실제 경로로 계산된다.
@@ -1261,15 +1522,24 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   // 자동완성으로 실좌표를 등록한 장소만 허용 (임의 텍스트로 좌표 없이 진행하면 이후 계산이 전부 죽는다)
   if (!placeCoord(originName)) { originInput.focus(); return; }
   if (!placeCoord(destName)) { destInput.focus(); return; }
+  // 날짜 입력란을 없앴다(온보딩을 단순하게 유지). 고른 시각이 이미 지났으면 내일로 본다 —
+  // 오후 11시에 "오전 1시 출발"을 고르는 건 내일 새벽을 뜻하기 때문이다.
+  const time = readWheelTime();
+  const now = new Date();
+  const todayStr = localDateStr(now);
+  const date = new Date(`${todayStr}T${time}`) < now
+    ? localDateStr(new Date(now.getTime() + 86400000))
+    : todayStr;
+
   STATE.user = {
     id: getOrCreateUserId(),
     nickname,
-    gender: document.getElementById('ob-gender').value,
+    gender: obGender,
     origin: originName,
     dest: destName,
-    date: document.getElementById('ob-date').value,
-    time: document.getElementById('ob-time').value,
-    partySize: Number(document.getElementById('ob-size').value),
+    date,
+    time,
+    partySize,
   };
   const btn = document.getElementById('btn-find-pod');
   btn.disabled = true;
@@ -1292,7 +1562,7 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
     await Promise.all(STATE.pods.map(warmPodRoutes));
   } finally {
     btn.disabled = false;
-    btn.textContent = '택시팟 찾기';
+    btn.textContent = '등록하기';
   }
   renderHome();
   showScreen('screen-home');
@@ -1340,6 +1610,8 @@ function renderPodList(){
   // 출발 시각이 지난 팟은 목록에서 뺀다. 사용자마다 자기 팟이 항상 하나씩 생기는 구조라
   // 이걸 안 걸러내면 지난 팟이 계속 쌓인다.
   list = list.filter(p => !isPodExpired(p));
+  // 정원이 찬 팟과 이미 확정/진행/완료된 팟은 참가할 수 없으니 목록에서 뺀다.
+  list = list.filter(p => p.participants.length < p.desiredSize && p.status === 'recruiting');
   if (sameDestFilter) list = list.filter(p => p.leaderDest === u.dest);
 
   // 내 목적지가 경로 밖인 팟은 아예 안 보여준다. 참가할 수 없는 팟을 목록에 남기면
@@ -1511,6 +1783,9 @@ async function renderPodDetail(podId){
     document.getElementById('btn-goto-chat').addEventListener('click', () => { renderPodChat(pod.id); showScreen('screen-pod-chat'); });
   } else if (STATE.committed && pod.id !== STATE.myPodId) {
     cta.innerHTML = `<button class="btn btn--primary btn--block" disabled>이미 참여 중인 팟이 있어요</button>`;
+  } else if (pod.participants.length >= pod.desiredSize) {
+    // 정원이 찬 팟. DB 트리거도 막지만, 누를 수 있는 버튼을 보여주고 실패시키는 건 잘못된 UI다.
+    cta.innerHTML = `<button class="btn btn--primary btn--block" disabled>정원이 마감된 팟이에요</button>`;
   } else {
     cta.innerHTML = `<button class="btn btn--primary btn--block" id="btn-join-pod">참가하기</button>`;
     document.getElementById('btn-join-pod').addEventListener('click', () => {

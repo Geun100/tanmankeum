@@ -158,7 +158,12 @@ drop policy if exists profiles_update on public.profiles;
 create policy profiles_update on public.profiles
   for update to anon using (true) with check (true);
 
--- 팟: 해체된 팟은 안 보인다.
+-- 테스트 데이터 정리용. 프로필을 지우면 그 사람의 팟·참여기록·메시지가 cascade로 함께 지워진다.
+drop policy if exists profiles_delete on public.profiles;
+create policy profiles_delete on public.profiles
+  for delete to anon using (true);
+
+-- 팟: 해체된 팟은 목록 조회에서 빠진다.
 drop policy if exists pods_select on public.pods;
 create policy pods_select on public.pods
   for select to anon using (status <> 'dissolved');
@@ -167,6 +172,9 @@ drop policy if exists pods_insert on public.pods;
 create policy pods_insert on public.pods
   for insert to anon with check (true);
 
+-- UPDATE의 with check는 "변경된 뒤"의 행을 검사한다. 여기에 status <> 'dissolved' 같은 조건을 걸면
+-- 팟을 해체하는 UPDATE가 스스로 막혀버린다(남의 팟에 참가하려면 내 팟을 먼저 해체해야 하는데 그게 불가능해진다).
+-- 그래서 두 절 모두 true로 둔다.
 drop policy if exists pods_update on public.pods;
 create policy pods_update on public.pods
   for update to anon using (true) with check (true);
