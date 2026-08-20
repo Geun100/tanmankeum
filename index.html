@@ -977,7 +977,12 @@ function previewJoin(pod, user){
   const mine = result.perPerson.find(p => p.id === '__me__');
   const myDropSegIdx = result.stops.indexOf(mine.dropPoint) - 1;
   const myTaxiMins = result.segments.slice(0, myDropSegIdx + 1).reduce((s, x) => s + x.mins, 0);
-  return { eligible: true, matchScore, dropOff, result, mine, myTaxiMins };
+  // 혼자 탔으면 얼마였을지 — 내 출발지→내 목적지 직행 요금(prefetchBaseRoutes가 이미 캐싱해둠).
+  // 아직 인원이 안 찼을 수 있어 "지금 기준" 절감액이지 확정값이 아니다.
+  const soloRoute = cachedRoute([pod.originName, user.dest]);
+  const soloFare = soloRoute ? soloRoute.fare : null;
+  const savings = soloFare != null ? Math.max(0, soloFare - mine.fare) : null;
+  return { eligible: true, matchScore, dropOff, result, mine, myTaxiMins, soloFare, savings };
 }
 
 /* ============ 4. 시드 팟 데이터 ============ */
@@ -1842,7 +1847,7 @@ function renderPodList(){
       </div>
       <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}</p>
       <div class="pod-stats">
-        <div><strong>${won(prev.mine.fare)}</strong><span>예상 1인 요금</span></div>
+        <div><strong>${won(prev.mine.fare)}</strong><span>예상 1인 요금${prev.savings ? ` <b style="color:var(--primary-dark);">· ${won(prev.savings)} 절약</b>` : ''}</span></div>
         <div><strong>${pod.participants.length}/${pod.desiredSize}</strong><span>현재 인원</span></div>
         <div><strong>약 ${prev.myTaxiMins}분</strong><span>예상 소요</span></div>
       </div>
@@ -1940,11 +1945,16 @@ async function renderPodDetail(podId){
   `;
 
   // 4) 1인 예상 요금 (핵심 수치라 카드 유지, 여백을 더 줘 강조)
+  const savingsRow = prev.savings != null
+    ? `<p class="info-row"><span>혼자 탔다면</span><strong>${won(prev.soloFare)}</strong></p>
+       <p class="info-row info-row--highlight" style="color:var(--primary-dark);"><span>지금 같이 타면 이만큼 절약</span><strong>${won(prev.savings)}</strong></p>`
+    : '';
   html += `
     <div class="info-box" style="margin-top:20px;">
       <h3>1인 예상 요금</h3>
       <p class="info-row info-row--highlight"><span>나의 예상 부담금</span><strong>${won(prev.mine.fare)}</strong></p>
-      <p class="fine-note">참여자와 최종 경로에 따라 달라질 수 있어요.</p>
+      ${savingsRow}
+      <p class="fine-note">아직 인원이 다 안 찼어요 — 참여자와 최종 경로에 따라 달라질 수 있어요.</p>
     </div>
   `;
 
