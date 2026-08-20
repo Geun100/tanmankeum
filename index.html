@@ -1532,6 +1532,8 @@ document.getElementById('ob-dest').value = '영일대해수욕장';
 // 포항에서 자주 오가는 곳 빠른 선택. 좌표를 이미 아는 장소라 고르면 바로 계산에 쓸 수 있다.
 // 직접 입력(자동완성)이 기본이고, 이건 타이핑을 줄여주는 보조 수단이다.
 const SAVE_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+const ICON_PIN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
+const ICON_WALK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.6" fill="currentColor" stroke="none"/><path d="M14 8 10 9l-1 5 2 6M10 9l3 3-1 5M6 22l3-4 2-2"/></svg>';
 const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교'];
 const POPULAR_DESTS = ['영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널'];
 
@@ -2077,7 +2079,7 @@ function renderPodList(){
     const msg = blockedCount
       ? `내 목적지(${u.dest})가 지금 모집 중인 팟 ${blockedCount}개의 경로 안에 없어요. 내 팟에 다른 사람이 들어올 때까지 기다려 보세요.`
       : '아직 추천 팟이 없어요. 다른 사람이 팟을 만들면 여기에 보여요.';
-    ul.innerHTML = `<li class="empty-hero"><span class="emoji">🚕</span><p class="page-sub">${msg}</p></li>`;
+    ul.innerHTML = `<li class="empty-hero"><p class="page-sub">${msg}</p></li>`;
     return;
   }
   withPreview.forEach(({ pod, prev }, idx) => {
@@ -2192,9 +2194,9 @@ async function renderPodDetail(podId){
       <p class="info-row" style="border-top:1px solid var(--line); margin-top:12px; padding-top:12px;"><span>예상 택시 시간</span><strong>약 ${prev.myTaxiMins}분</strong></p>
       <div class="kakao-link-row">
         <a class="btn btn--ghost btn--sm" target="_blank" rel="noopener"
-           href="${kakaoMapPlaceUrl(prev.dropOff.point)}">🗺️ 하차지점 위치 보기</a>
+           href="${kakaoMapPlaceUrl(prev.dropOff.point)}">${ICON_PIN} 하차지점 위치 보기</a>
         ${prev.dropOff.walkTime > 0 ? `<a class="btn btn--ghost btn--sm" target="_blank" rel="noopener"
-           href="${kakaoMapRouteUrl(u.dest)}">🚶 목적지까지 길찾기</a>` : ''}
+           href="${kakaoMapRouteUrl(u.dest)}">${ICON_WALK} 목적지까지 길찾기</a>` : ''}
       </div>
     </div>
   `;
