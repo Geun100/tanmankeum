@@ -163,10 +163,14 @@ drop policy if exists profiles_delete on public.profiles;
 create policy profiles_delete on public.profiles
   for delete to anon using (true);
 
--- 팟: 해체된 팟은 목록 조회에서 빠진다.
+-- 팟: 해체된 팟도 SELECT 자체는 막지 않는다(목록에서 빼는 건 클라이언트가
+-- loadOpenPods()/loadPod()에서 직접 status<>'dissolved'로 거른다).
+-- 예전엔 여기서 dissolved 행을 숨겼는데, 그러면 dissolve UPDATE 자체가 내부 RETURNING에서
+-- "방금 바뀐 행이 SELECT 정책을 통과 못 함"으로 막혀버리는 부작용이 있었다
+-- (팟장이 자기 팟을 취소/해체하는 UPDATE가 이 정책 때문에 항상 42501로 실패했다).
 drop policy if exists pods_select on public.pods;
 create policy pods_select on public.pods
-  for select to anon using (status <> 'dissolved');
+  for select to anon using (true);
 
 drop policy if exists pods_insert on public.pods;
 create policy pods_insert on public.pods

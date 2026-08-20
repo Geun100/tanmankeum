@@ -663,11 +663,13 @@ async function loadOpenPods(){
   return data.map(podFromRow);
 }
 
-// 팟이 해체되면 RLS가 그 행 자체를 안 보여준다. 그 상태에서 채팅방에 남아있던
-// 다른 참여자가 새로고침/실시간 갱신으로 이 팟을 다시 불러오면 결과가 0행이 된다 —
+// 팟이 해체되면 여기서 명시적으로 숨긴다(RLS에는 더 이상 안 맡긴다 — pods_select가
+// status<>'dissolved'로 행을 숨기면, dissolve UPDATE 자체가 내부 RETURNING에서
+// "방금 바뀐 행이 SELECT 정책을 통과 못 함"으로 막혀버리는 부작용이 있었다). 그 상태에서
+// 채팅방에 남아있던 다른 참여자가 새로고침/실시간 갱신으로 이 팟을 다시 불러오면
 // 이건 에러가 아니라 "팟장이 취소했다"는 뜻이라 null을 돌려주고 호출부가 안내하게 한다.
 async function loadPod(podId){
-  const { data, error } = await supa.from('pods').select(POD_SELECT).eq('id', podId).maybeSingle();
+  const { data, error } = await supa.from('pods').select(POD_SELECT).eq('id', podId).neq('status', 'dissolved').maybeSingle();
   if (error) throw error;
   return data ? podFromRow(data) : null;
 }
