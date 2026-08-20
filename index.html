@@ -260,6 +260,19 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chat-msg .chat-name{ display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:2px; }
   .chat-input-row{ display:flex; gap:8px; }
   .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-pill); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:14px; }
+  /* 채팅이 아직 없을 때: 가짜 인사말 대신 무슨 말을 하면 좋을지 추천만 해준다. */
+  .chat-empty{ text-align:center; padding:22px 12px 6px; color:var(--muted); }
+  .chat-empty p{ font-size:13px; margin:0 0 12px; }
+  .chat-suggest-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+  .chat-suggest{ font:inherit; font-size:12.5px; font-weight:600; color:var(--primary-dark); background:var(--primary-soft);
+    border:none; border-radius:999px; padding:8px 13px; cursor:pointer; }
+  .chat-suggest:hover{ background:var(--primary); color:#fff; }
+  /* 남은 자리: 실제 사람이 없는 빈 좌석을 점선 카드로 보여준다 */
+  .participant-row--empty{ color:var(--muted); font-size:13px; align-items:center; }
+  .avatar--empty{ background:transparent; border:1.5px dashed var(--line); color:var(--muted); font-weight:600; }
+  /* 팟 취소는 파괴적 동작이라 확정하기보다 눈에 덜 띄게 텍스트 링크로 둔다 */
+  .btn--text-danger{ background:none; color:var(--danger); height:auto; padding:10px; font-size:13px; font-weight:600; text-decoration:underline; text-underline-offset:3px; }
+  .cta-hint{ text-align:center; font-size:12.5px; color:var(--ink-soft); margin:0 0 10px; }
 
   .stop-row{ display:flex; gap:12px; padding:12px 0; }
   .stop-row + .stop-row{ border-top:1px dashed var(--line); }
@@ -591,10 +604,13 @@ async function loadOpenPods(){
   return data.map(podFromRow);
 }
 
+// 팟이 해체되면 RLS가 그 행 자체를 안 보여준다. 그 상태에서 채팅방에 남아있던
+// 다른 참여자가 새로고침/실시간 갱신으로 이 팟을 다시 불러오면 결과가 0행이 된다 —
+// 이건 에러가 아니라 "팟장이 취소했다"는 뜻이라 null을 돌려주고 호출부가 안내하게 한다.
 async function loadPod(podId){
-  const { data, error } = await supa.from('pods').select(POD_SELECT).eq('id', podId).single();
+  const { data, error } = await supa.from('pods').select(POD_SELECT).eq('id', podId).maybeSingle();
   if (error) throw error;
-  return podFromRow(data);
+  return data ? podFromRow(data) : null;
 }
 
 async function loadMessages(podId){
@@ -1221,7 +1237,8 @@ async function joinPod(pod){
     // 내 팟을 먼저 해체해야 한다. DB 트리거가 "한 사람은 한 팟에만" 규칙을 강제하므로,
     // 내가 팟장인 팟이 살아있는 동안에는 남의 팟 참가가 항상 거부된다.
     if (ownPodId && ownPodId !== pod.id) {
-      await supa.from('pods').update({ status: 'dissolved' }).eq('id', ownPodId);
+      const { error: dissolveErr } = await supa.from('pods').update({ status: 'dissolved' }).eq('id', ownPodId);
+      if (dissolveErr) throw dissolveErr; // 해체가 실패했으면 여기서 멈춘다 — 밑의 참가 시도는 트리거에 막혀 헷갈리는 에러만 낸다
     }
 
     const { error } = await supa.from('pod_participants').insert({
@@ -1237,7 +1254,7 @@ async function joinPod(pod){
     }
     const fresh = await loadPod(pod.id);
     STATE.pods = STATE.pods.filter(p => p.id !== ownPodId && p.id !== pod.id);
-    STATE.pods.push(fresh);
+    if (fresh) STATE.pods.push(fresh); // null이면 방금 참가한 그 순간 팟이 사라진 극단적 경쟁 상황 — 다음 화면 재조회 때 자연히 빠진다
   } else {
     const dropOff = recommendDropOff(u.dest, pod);
     pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false, dropOff });
@@ -1255,7 +1272,11 @@ async function joinPod(pod){
 
 async function dissolvePod(pod){
   if (SUPA_ENABLED) {
-    await supa.from('pods').update({ status: 'dissolved' }).eq('id', pod.id);
+    // update()는 RLS가 막아도 던지지 않고 error만 채워서 돌려준다 — 확인 안 하면 실패를 성공으로
+    // 착각한 채 아래 createOwnPod()까지 진행해서, "이미 참여 중인 팟이 있습니다"라는
+    // 엉뚱한 2차 에러로 이어진다(옛 팟이 여전히 open 상태로 살아있어서).
+    const { error } = await supa.from('pods').update({ status: 'dissolved' }).eq('id', pod.id);
+    if (error) throw error;
     STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
   } else {
     STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
@@ -1557,12 +1578,36 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
       STATE.myPodId = mine ? mine.id : null;
       STATE.committed = !!(mine && mine.leaderId !== STATE.user.id);
       STATE.userState = STATE.committed ? '채팅방' : '대기';
+
+      // 예전에 만든 내 팟이 아직 나 혼자뿐이면, 방금 입력한 새 값으로 갱신한다.
+      // 그냥 예전 값을 조용히 쓰면 온보딩에서 고른 목적지/시간/인원이 화면에 반영 안 된 것처럼 보인다.
+      // 이미 다른 사람이 참가했으면 그 사람의 경로 적합성·요금이 걸려있어 조용히 바꾸면 안 되므로 건너뛴다.
+      if (mine && mine.leaderId === STATE.user.id && mine.participants.length === 1) {
+        const originC = placeCoord(originName), destC = placeCoord(destName);
+        const { error: podErr } = await supa.from('pods').update({
+          origin_name: originName, origin_lat: originC.lat, origin_lng: originC.lng,
+          leader_dest: destName, leader_dest_lat: destC.lat, leader_dest_lng: destC.lng,
+          depart_date: STATE.user.date, depart_time: STATE.user.time, desired_size: STATE.user.partySize,
+        }).eq('id', mine.id);
+        if (podErr) throw podErr;
+        const { error: partErr } = await supa.from('pod_participants').update({
+          dest_name: destName, dest_lat: destC.lat, dest_lng: destC.lng, dropoff_point: destName,
+        }).eq('pod_id', mine.id).eq('user_id', STATE.user.id);
+        if (partErr) throw partErr;
+        const updated = await loadPod(mine.id);
+        if (updated) STATE.pods = STATE.pods.map(p => p.id === mine.id ? updated : p);
+      } else if (mine && mine.leaderId === STATE.user.id && mine.participants.length > 1) {
+        showError('이미 다른 사람이 참가한 팟이라 경로를 바꿀 수 없어요. 바꾸려면 채팅방에서 팟을 취소한 뒤 다시 등록해주세요.');
+      }
     } else {
       STATE.pods = seedPods();
       STATE.userState = '대기';
     }
     if (!STATE.myPodId) await createOwnPod();
     await Promise.all(STATE.pods.map(warmPodRoutes));
+  } catch (e) {
+    showError(friendlyDbError(e));
+    return;
   } finally {
     btn.disabled = false;
     btn.textContent = '등록하기';
@@ -1679,6 +1724,14 @@ async function renderPodDetail(podId){
   const u = STATE.user;
   if (SUPA_ENABLED) {
     const fresh = await loadPod(podId);
+    if (!fresh) {
+      // 보는 중에 팟장이 취소했다. 나는 참가한 게 아니었으니 그냥 목록으로 돌려보낸다.
+      unsubscribePod();
+      showError('이 팟은 팟장이 취소했어요.');
+      await renderHome();
+      showScreen('screen-home');
+      return;
+    }
     const idx = STATE.pods.findIndex(p => p.id === podId);
     if (idx >= 0) STATE.pods[idx] = fresh; else STATE.pods.push(fresh);
     // 보는 중에 다른 사람이 참가/탈퇴하면 정원·요금이 실시간으로 바뀐다.
@@ -1816,19 +1869,34 @@ async function renderPodChat(podId){
   const u = STATE.user;
   if (SUPA_ENABLED) {
     const fresh = await loadPod(podId);
+    if (!fresh) {
+      // 채팅방을 보고 있는 도중에 팟장이 취소했다. 나는 이 팟에 진짜 속해 있었으니
+      // 새 팟을 만들어 매칭 대기 상태로 되돌린다(dissolvePod의 리더 쪽 처리와 동일한 결과).
+      unsubscribePod();
+      STATE.myPodId = null;
+      STATE.committed = false;
+      await createOwnPod();
+      STATE.userState = '대기';
+      showError('팟장이 팟을 취소했어요. 다시 매칭을 시작할게요.');
+      await renderHome();
+      showScreen('screen-home');
+      return;
+    }
     const idx = STATE.pods.findIndex(p => p.id === podId);
     if (idx >= 0) STATE.pods[idx] = fresh; else STATE.pods.push(fresh);
     // 다른 참여자의 입장/퇴장/메시지가 오면 이 화면을 다시 그린다. 화면을 나가면 showScreen()이 구독을 끊는다.
     subscribePod(podId, () => { if (document.getElementById('screen-pod-chat').classList.contains('active')) renderPodChat(podId); });
   }
   const pod = findPod(podId);
+  const isLeader = pod.leaderId === u.id;
+  const seatsLeft = pod.desiredSize - pod.participants.length;
   document.getElementById('chat-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
   document.getElementById('chat-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
 
   const result = calcFinalRouteAndFare(pod);
   const fareMap = {}; result.perPerson.forEach(p => fareMap[p.id] = p);
 
-  let html = `<div class="info-box"><h3>참여자</h3><div id="chat-participants"></div></div>`;
+  let html = `<div class="info-box"><h3>참여자 ${pod.participants.length}/${pod.desiredSize}</h3><div id="chat-participants"></div></div>`;
   html += `
     <div class="info-box">
       <h3>경로 요약</h3>
@@ -1846,6 +1914,8 @@ async function renderPodChat(podId){
 
   document.getElementById('chat-body').innerHTML = html;
 
+  // 참여자 카드: 실제 인원 다음에 남은 자리를 점선 슬롯으로 보여준다.
+  // "3/4명"이라는 숫자보다, 빈 좌석이 눈에 보이는 편이 몇 명 더 필요한지 직관적으로 와닿는다.
   const pWrap = document.getElementById('chat-participants');
   pWrap.innerHTML = '';
   pod.participants.forEach(p => {
@@ -1864,6 +1934,12 @@ async function renderPodChat(podId){
     `;
     pWrap.appendChild(row);
   });
+  for (let i = 0; i < seatsLeft; i++){
+    const row = document.createElement('div');
+    row.className = 'participant-row participant-row--empty';
+    row.innerHTML = `<span class="avatar avatar--empty">?</span><span>아직 빈자리예요</span>`;
+    pWrap.appendChild(row);
+  }
 
   // 채팅 메시지 렌더. Supabase 연결 시 DB에서 읽고, 아니면 인메모리 폴백을 쓴다.
   let messages;
@@ -1873,18 +1949,34 @@ async function renderPodChat(podId){
     if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
     messages = STATE.chatMessages[podId];
   }
-  if (messages.length === 0) {
-    // 첫 안내 문구는 화면에만 보여주는 것이라 DB/폴백 어느 쪽에도 저장하지 않는다.
-    messages = [{ who: pod.participants[0].nickname, mine: false, text: '안녕하세요! 탑승 장소는 정문 앞에서 만나요 :)' }];
-  }
   const msgWrap = document.getElementById('chat-messages');
   msgWrap.innerHTML = '';
-  messages.forEach(m => {
-    const div = document.createElement('div');
-    div.className = 'chat-msg ' + (m.mine ? 'me' : 'other');
-    div.innerHTML = (m.mine ? '' : `<span class="chat-name">${m.who}</span>`) + m.text;
-    msgWrap.appendChild(div);
-  });
+  if (messages.length === 0) {
+    // 아무도 말을 안 걸었는데 누가 인사한 것처럼 꾸미지 않는다. 대신 무슨 말을 하면 좋을지만 추천한다 —
+    // 칩을 누르면 입력창에 채워지기만 하고, 보낼지는 사용자가 정한다.
+    const suggestions = isLeader
+      ? ['안녕하세요! 잘 부탁드려요 :)', '탑승 장소는 정문 앞에서 만나요', '출발 5분 전에 알려드릴게요']
+      : ['안녕하세요! 잘 부탁드려요 :)', '몇 번째 자리에서 타면 될까요?', '조금 늦을 수도 있어요, 미리 말씀드려요'];
+    const empty = document.createElement('div');
+    empty.className = 'chat-empty';
+    empty.innerHTML = `<p>아직 대화가 없어요. 먼저 인사해보세요</p>
+      <div class="chat-suggest-row">${suggestions.map(s => `<button type="button" class="chat-suggest">${s}</button>`).join('')}</div>`;
+    msgWrap.appendChild(empty);
+    empty.querySelectorAll('.chat-suggest').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById('chat-input');
+        input.value = btn.textContent;
+        input.focus();
+      });
+    });
+  } else {
+    messages.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'chat-msg ' + (m.mine ? 'me' : 'other');
+      div.innerHTML = (m.mine ? '' : `<span class="chat-name">${m.who}</span>`) + m.text;
+      msgWrap.appendChild(div);
+    });
+  }
   msgWrap.scrollTop = msgWrap.scrollHeight;
 
   document.getElementById('btn-chat-send').addEventListener('click', sendChat);
@@ -1903,13 +1995,18 @@ async function renderPodChat(podId){
     renderPodChat(podId);
   }
 
-  // CTA: 팟장에게만 확정하기, 확정 전에만 팟 취소
-  const isLeader = pod.leaderId === u.id;
+  // CTA: 팟장에게만 확정하기/취소, 참여자에게는 안내 문구만
   const ctaEl = document.getElementById('chat-cta');
   let ctaHtml = '';
   if (isLeader && pod.status === 'recruiting') {
+    const hint = seatsLeft > 0
+      ? `아직 ${seatsLeft}자리 남았어요. 인원이 덜 차도 지금 확정할 수 있어요.`
+      : '정원이 다 찼어요! 지금 확정해서 최종 요금을 확인해보세요.';
+    ctaHtml += `<p class="cta-hint">${hint}</p>`;
     ctaHtml += `<button class="btn btn--primary btn--block" id="btn-confirm-pod">팟 확정하기</button>`;
-    ctaHtml += `<button class="btn btn--danger btn--block" id="btn-cancel-pod">팟 취소</button>`;
+    ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-cancel-pod">팟 취소하기</button>`;
+  } else if (!isLeader && pod.status === 'recruiting') {
+    ctaHtml += `<p class="cta-hint">팟장이 확정하면 최종 경로와 요금을 볼 수 있어요. 그때까지 채팅으로 탑승 장소를 맞춰보세요.</p>`;
   } else if (pod.status !== 'recruiting') {
     ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
@@ -1923,7 +2020,10 @@ async function renderPodChat(podId){
       confirmLabel: '확정하기',
       onConfirm: async () => {
         try {
-          if (SUPA_ENABLED) await supa.from('pods').update({ status: 'confirmed' }).eq('id', pod.id);
+          if (SUPA_ENABLED) {
+            const { error } = await supa.from('pods').update({ status: 'confirmed' }).eq('id', pod.id);
+            if (error) throw error; // 확인 안 하면 DB는 recruiting인데 화면만 확정된 것처럼 보이는 상태로 어긋난다
+          }
           pod.status = 'confirmed';
           pod.finalResult = calcFinalRouteAndFare(pod);
           STATE.userState = '팟확정';
@@ -2078,7 +2178,10 @@ document.getElementById('btn-finish-pod').addEventListener('click', () => {
     confirmLabel: '팟 종료하기',
     onConfirm: async () => {
       try {
-        if (SUPA_ENABLED) await supa.from('pods').update({ status: 'done' }).eq('id', pod.id);
+        if (SUPA_ENABLED) {
+          const { error } = await supa.from('pods').update({ status: 'done' }).eq('id', pod.id);
+          if (error) throw error;
+        }
         pod.status = 'done';
         STATE.userState = '완료';
         showScreen('screen-done');
