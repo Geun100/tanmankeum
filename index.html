@@ -798,7 +798,10 @@ function calcMatchScore(user, pod){
   const angleDiffDeg = (pOrigin && pDest && uDest) ? angleDiff(bearing(pOrigin, pDest), bearing(pOrigin, uDest)) : 180;
   const fitScore = Math.max(0, 30 - Math.round(angleDiffDeg * (30 / ANGLE_THRESHOLD_DEG)));
 
-  const eligible = isRouteEligible(user.dest, pod);
+  // 출발지가 같아야 한다. 합승은 물리적으로 같은 곳에서 타는 거라, 경로가 아무리 비슷해도
+  // 출발지가 다르면 애초에 같은 택시를 탈 수 없다.
+  const sameOrigin = pod.originName === user.origin;
+  const eligible = sameOrigin && isRouteEligible(user.dest, pod);
   const routeScore = eligible ? 25 : 0;
 
   const diffMin = Math.abs(timeToMin(user.time) - timeToMin(pod.departTime));
