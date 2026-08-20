@@ -210,6 +210,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
   .status-card strong{ display:block; font-size:19px; font-weight:800; margin-bottom:5px; }
   .status-card p{ font-size:12.5px; color:var(--ink-soft); margin:0 0 14px; line-height:1.5; }
+  .status-leader-note{ color:var(--orange); font-weight:700; }
 
   .select-row{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
   .select-row select{ flex:1; min-width:120px; height:40px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:12.5px; padding:0 8px; }
@@ -1815,7 +1816,7 @@ async function renderHome(){
   card.innerHTML = `
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${u.origin} → ${u.dest}</strong>
-    <p>${u.date} ${u.time} 출발 · 원하는 인원 ${u.partySize}명${isLeaderOfOwn ? ' · 팟원이 모일 때까지는 내가 팟장이에요' : ''}</p>
+    <p>${u.time} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명${isLeaderOfOwn ? ' · <span class="status-leader-note">팟원이 모일 때까지는 내가 팟장이에요</span>' : ''}</p>
     <button class="btn btn--ghost btn--block" id="btn-my-pod-chat">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}</button>
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
