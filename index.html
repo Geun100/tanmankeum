@@ -1,0 +1,1624 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>탄만큼 - 경로 기반 택시 합승 매칭</title>
+<script src="kakao-keys.local.js"></script>
+<script>
+// 카카오맵 JS SDK를 동적으로 삽입해 appkey를 kakao-keys.local.js 값으로 주입한다.
+// (script 태그 src는 정적이라 로드 시점에 만들어야 로컬 키를 반영할 수 있음)
+window.__kakaoReady = new Promise((resolve, reject) => {
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!window.KAKAO_KEYS || !window.KAKAO_KEYS.jsKey) { reject(new Error('KAKAO_KEYS 없음: kakao-keys.local.js 확인')); return; }
+    const s = document.createElement('script');
+    s.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${window.KAKAO_KEYS.jsKey}&libraries=services&autoload=false`;
+    s.onload = () => kakao.maps.load(resolve);
+    s.onerror = () => reject(new Error('카카오맵 SDK 로드 실패'));
+    document.head.appendChild(s);
+  });
+});
+</script>
+<style>
+  :root{
+    --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif;
+    --ink:#15172b; --ink-soft:#5b5f7a; --muted:#686c86;
+    --paper:#f3f3fa; --surface:#ffffff; --line:#e6e6f0;
+    --primary:#4d3df0; --primary-dark:#3a2cc9; --primary-soft:#ecebfe; --on-primary:#ffffff;
+    --green:#137a52; --green-soft:#e1f5ec;
+    --blue:#1c64d1; --blue-soft:#e3edfd;
+    --orange:#9c5008; --orange-soft:#fdecd8;
+    --danger:#c23b3b; --danger-soft:#fbe9e9;
+    --pending:#7a6100; --pending-soft:#fbf1cf;
+    --radius-card:20px; --radius-input:14px; --radius-pill:999px;
+    --shadow-card: 0 1px 2px rgba(21,23,43,.05), 0 8px 24px -12px rgba(21,23,43,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ink:#eef0fb; --ink-soft:#b7bad2; --muted:#7d80a0;
+      --paper:#0f1020; --surface:#181a2e; --line:#2a2c46;
+      --primary:#8478ff; --primary-dark:#9992ff; --primary-soft:#232253; --on-primary:#0f1020;
+      --green:#4fd6a0; --green-soft:#123328;
+      --blue:#6ea3ff; --blue-soft:#122a4d;
+      --orange:#ffb15c; --orange-soft:#3a2a11;
+      --danger-soft:#3a1414;
+      --pending:#e6c260; --pending-soft:#332a0c;
+      --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{ font-family:var(--font-sans); background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  button, input, select, textarea{ font-family:inherit; }
+  ul{ list-style:none; margin:0; padding:0; }
+  h1,h2,h3,p{ margin:0; }
+
+  .stage{ min-height:100dvh; display:flex; justify-content:center; align-items:stretch; }
+  .phone{ position:relative; width:100%; max-width:430px; min-height:100dvh; background:var(--paper); display:flex; flex-direction:column; }
+  @media (min-width:560px){
+    .stage{ align-items:center; padding:32px 16px; }
+    .phone{ min-height:min(844px,92dvh); max-height:900px; border-radius:36px; box-shadow:var(--shadow-card), 0 0 0 1px var(--line); overflow:hidden; }
+  }
+
+  .screen{ display:none; flex-direction:column; flex:1; min-height:0; }
+  .screen.active{ display:flex; animation:screen-in 220ms cubic-bezier(0.23,1,0.32,1); }
+  @keyframes screen-in{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:translateY(0); } }
+  @media (prefers-reduced-motion:reduce){ .screen.active{ animation:none; } }
+
+  .topbar{ display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line); flex-shrink:0; background:var(--surface); }
+  .topbar--brand{ border-bottom:none; background:transparent; padding-bottom:4px; }
+  .brand-mark{ font-size:20px; font-weight:800; letter-spacing:-0.02em; }
+  .topbar-title{ display:flex; flex-direction:column; line-height:1.25; min-width:0; }
+  .topbar-title strong{ font-size:15px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .topbar-title span{ font-size:12px; color:var(--muted); }
+
+  .icon-btn{ width:36px; height:36px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-pill); border:1px solid var(--line); background:var(--surface); color:var(--ink); cursor:pointer; }
+  .icon-btn:active{ transform:scale(.96); }
+
+  .screen-body{ flex:1; overflow-y:auto; padding:20px 20px 28px; -webkit-overflow-scrolling:touch; }
+
+  .page-title{ font-size:27px; line-height:1.24; font-weight:800; letter-spacing:-0.03em; margin:4px 0 10px; }
+  .page-sub{ font-size:14.5px; line-height:1.65; font-weight:400; color:var(--ink-soft); margin:0 0 20px; }
+  .section-label{ font-size:12.5px; font-weight:700; letter-spacing:-0.01em; color:var(--ink-soft); margin:0 0 8px; display:block; }
+
+  .form{ display:flex; flex-direction:column; gap:16px; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-size:13px; font-weight:600; color:var(--ink-soft); }
+  .field select, .field input{
+    height:48px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink);
+    padding:0 14px; font-size:15px; outline:none; width:100%;
+  }
+  .field select:focus, .field input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+  .field input::placeholder, .chat-input-row input::placeholder{ color:var(--muted); opacity:1; }
+  .field-row{ display:flex; gap:10px; }
+  .field-row .field{ flex:1; min-width:0; }
+  .hint-box{ background:var(--primary-soft); color:var(--primary-dark); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
+
+  /* 포항 주요 장소 빠른 선택. 직접 입력이 기본이고 이건 보조 수단이다. */
+  .kakao-link-row{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .btn--sm{ flex:1 1 auto; min-width:150px; padding:10px 12px; font-size:13px; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip{ font:inherit; font-size:12px; font-weight:600; color:var(--ink-soft); background:var(--paper);
+         border:1px solid var(--line); border-radius:999px; padding:6px 11px; cursor:pointer; }
+  .chip:hover{ border-color:var(--primary); color:var(--primary); }
+  .chip[aria-pressed="true"]{ background:var(--primary); border-color:var(--primary); color:#fff; }
+  .autocomplete-list{ position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:20; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-input); box-shadow:var(--shadow-card); max-height:220px; overflow-y:auto; }
+  .autocomplete-list[hidden]{ display:none; }
+  .autocomplete-item{ padding:10px 14px; font-size:13px; color:var(--ink); cursor:pointer; border-top:1px solid var(--line); }
+  .autocomplete-item:first-child{ border-top:none; }
+  .autocomplete-item:hover, .autocomplete-item:active{ background:var(--primary-soft); }
+
+  .btn{ appearance:none; border:none; cursor:pointer; font-weight:700; font-size:15px; border-radius:var(--radius-pill); padding:0 20px; height:48px; display:inline-flex; align-items:center; justify-content:center; gap:6px; transition:transform 160ms cubic-bezier(0.23,1,0.32,1), opacity 160ms ease; }
+  .btn:active{ transform:scale(.98); }
+  .btn--primary{ background:var(--primary); color:var(--on-primary); }
+  .btn--primary:disabled{ opacity:.4; cursor:not-allowed; transform:none; }
+  .btn--ghost{ background:var(--surface); color:var(--ink); border:1px solid var(--line); }
+  .btn--danger{ background:var(--danger); color:#fff; }
+  .btn--sm{ padding:0 16px; font-size:13px; white-space:nowrap; height:38px; }
+  .btn--block{ width:100%; }
+  .link-btn{ appearance:none; border:none; background:none; cursor:pointer; color:var(--primary); font-weight:700; font-size:13.5px; padding:0; }
+
+  .cta-dock{ flex-shrink:0; padding:14px 20px calc(20px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); display:flex; flex-direction:column; gap:10px; }
+
+  .status-card{ background:var(--primary-soft); border-radius:var(--radius-card); padding:16px 18px; margin-bottom:22px; }
+  .status-card .status-tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:8px; }
+  .status-dot{ width:7px; height:7px; border-radius:50%; background:var(--primary); animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+  .status-card strong{ display:block; font-size:16px; margin-bottom:4px; }
+  .status-card p{ font-size:12.5px; color:var(--ink-soft); margin:0 0 12px; }
+
+  .select-row{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .select-row select{ flex:1; min-width:120px; height:40px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:12.5px; padding:0 8px; }
+  .filter-chip{ appearance:none; cursor:pointer; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:12.5px; font-weight:700; padding:0 14px; height:36px; border-radius:var(--radius-pill); transition:transform 160ms cubic-bezier(0.23,1,0.32,1); }
+  .filter-chip:active{ transform:scale(.96); }
+  .filter-chip.active{ background:var(--primary); border-color:var(--primary); color:var(--on-primary); }
+
+  .pod-list{ display:flex; flex-direction:column; gap:12px; }
+  .pod-card{ border:1px solid var(--line); background:var(--surface); border-radius:var(--radius-card); padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:var(--shadow-card); cursor:pointer; }
+  .pod-card:active{ transform:scale(.99); }
+  .pod-card.is-blocked{ opacity:.55; }
+  .pod-card-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .pod-card-top strong{ font-size:15px; }
+  .pod-meta{ font-size:12.5px; color:var(--muted); }
+  .pod-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:10px; border-top:1px solid var(--line); }
+  .pod-stats div{ display:flex; flex-direction:column; gap:2px; }
+  .pod-stats strong{ font-size:15px; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
+  .pod-stats span{ font-size:11px; color:var(--muted); }
+
+  .badge{ display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--radius-pill); white-space:nowrap; }
+  .badge--leader{ background:var(--orange-soft); color:var(--orange); }
+  .badge--me{ background:var(--primary-soft); color:var(--primary-dark); }
+  .badge--recruit{ background:var(--pending-soft); color:var(--pending); }
+  .badge--confirmed{ background:var(--green-soft); color:var(--green); }
+  .badge--done{ background:var(--line); color:var(--ink-soft); }
+
+  .map-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); padding:12px; margin-bottom:16px; }
+  .kakao-map-box{ width:100%; height:220px; border-radius:var(--radius-input); overflow:hidden; background:var(--paper); }
+  /* 팟 상세는 경로를 눈으로 따라가는 화면이라 지도를 크게 잡는다. */
+  .kakao-map-box--lg{ height:380px; }
+  .map-legend{ display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--muted); margin-top:10px; }
+  .map-legend span{ display:inline-flex; align-items:center; gap:4px; }
+  .legend-dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
+
+  .info-box{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); padding:16px; margin-bottom:16px; }
+  .info-box.is-danger{ background:var(--danger-soft); border-color:var(--danger); }
+  .info-box h3{ font-size:13px; font-weight:700; color:var(--ink-soft); margin:0 0 10px; }
+  .info-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:13.5px; color:var(--ink-soft); padding:6px 0; }
+  .info-row strong{ color:var(--ink); font-size:14.5px; text-align:right; }
+  .info-row--highlight strong{ color:var(--primary); font-size:20px; }
+  .callout{ font-size:15px; font-weight:700; line-height:1.5; margin:0 0 8px; }
+  .fine-note{ font-size:12px; color:var(--muted); line-height:1.5; margin:0; }
+
+  .avatar{ width:34px; height:34px; border-radius:50%; background:var(--primary-soft); color:var(--primary-dark); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+  .participant-row{ display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-top:1px dashed var(--line); }
+  .participant-row:first-child{ border-top:none; }
+  .participant-info{ flex:1; min-width:0; }
+  .participant-info .p-name{ display:flex; align-items:center; gap:6px; font-size:14px; font-weight:700; }
+  .participant-info p{ margin:3px 0 0; font-size:12px; color:var(--muted); line-height:1.5; }
+
+  .chat-box{ display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+  .chat-msg{ max-width:80%; padding:10px 14px; border-radius:16px; font-size:13.5px; line-height:1.5; }
+  .chat-msg.other{ align-self:flex-start; background:var(--surface); border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .chat-msg.me{ align-self:flex-end; background:var(--primary); color:var(--on-primary); border-bottom-right-radius:4px; }
+  .chat-msg .chat-name{ display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:2px; }
+  .chat-input-row{ display:flex; gap:8px; }
+  .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-pill); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:14px; }
+
+  .stop-row{ display:flex; gap:12px; padding:12px 0; }
+  .stop-row + .stop-row{ border-top:1px dashed var(--line); }
+  .stop-num{ flex-shrink:0; width:26px; height:26px; border-radius:50%; background:var(--primary-soft); color:var(--primary-dark); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .stop-row strong{ display:block; font-size:14px; }
+  .stop-row p{ margin:2px 0 0; font-size:12px; color:var(--muted); line-height:1.5; }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(15,16,32,.5); display:flex; align-items:center; justify-content:center; padding:24px; z-index:100; }
+  .modal-overlay[hidden]{ display:none; }
+  .modal-card{ width:100%; max-width:340px; background:var(--surface); border-radius:var(--radius-card); padding:22px; box-shadow:var(--shadow-card); }
+  .modal-card h2{ font-size:17px; font-weight:800; margin:0 0 8px; }
+  .modal-card p{ font-size:13.5px; color:var(--ink-soft); line-height:1.6; margin:0; }
+  .modal-actions{ display:flex; gap:10px; margin-top:20px; }
+  .modal-actions .btn{ flex:1; height:44px; font-size:14px; }
+
+  .empty-hero{ text-align:center; padding:24px 8px; }
+  .empty-hero .emoji{ font-size:40px; display:block; margin-bottom:14px; }
+
+  @media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important; } }
+  :focus-visible{ outline:2px solid var(--primary); outline-offset:2px; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <main class="phone">
+
+    <!-- 1. 온보딩 -->
+    <section class="screen active" id="screen-onboarding" aria-label="온보딩">
+      <header class="topbar topbar--brand"><span class="brand-mark">탄만큼</span></header>
+      <div class="screen-body">
+        <p class="page-title">경로가 겹치는 사람과<br>택시를 나눠 타요</p>
+        <p class="page-sub">목적지가 같지 않아도, 내 목적지가 팟장의 이동 경로 안에 있으면 함께 탈 수 있어요.</p>
+        <form class="form" id="onboarding-form" novalidate>
+          <div class="field-row">
+            <div class="field">
+              <label for="ob-nickname">닉네임</label>
+              <input type="text" id="ob-nickname" placeholder="닉네임" required maxlength="12">
+            </div>
+            <div class="field">
+              <label for="ob-gender">성별</label>
+              <select id="ob-gender">
+                <option value="여성">여성</option>
+                <option value="남성">남성</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="position:relative;">
+            <label for="ob-origin">출발지</label>
+            <input type="text" id="ob-origin" placeholder="장소를 입력하세요 (예: 포항역)" autocomplete="off">
+            <ul class="autocomplete-list" id="ob-origin-list" hidden></ul>
+            <div class="chip-row" id="ob-origin-chips"></div>
+          </div>
+          <div class="field" style="position:relative;">
+            <label for="ob-dest">목적지</label>
+            <input type="text" id="ob-dest" placeholder="장소를 입력하세요 (예: 영일대해수욕장)" autocomplete="off">
+            <ul class="autocomplete-list" id="ob-dest-list" hidden></ul>
+            <div class="chip-row" id="ob-dest-chips"></div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="ob-date">출발 날짜</label>
+              <input type="date" id="ob-date" required>
+            </div>
+            <div class="field">
+              <label for="ob-time">출발 시간</label>
+              <input type="time" id="ob-time" required>
+            </div>
+          </div>
+          <div class="field">
+            <label for="ob-size">원하는 인원 (나 포함)</label>
+            <select id="ob-size">
+              <option value="2">2명</option>
+              <option value="3" selected>3명</option>
+              <option value="4">4명</option>
+            </select>
+          </div>
+          <p class="hint-box">💡 원하는 인원이 적을수록 매칭될 가능성이 높아요.</p>
+        </form>
+      </div>
+      <div class="cta-dock">
+        <button class="btn btn--primary btn--block" id="btn-find-pod">택시팟 찾기</button>
+      </div>
+    </section>
+
+    <!-- 2. 홈 (매칭 대기 + 추천 팟) -->
+    <section class="screen" id="screen-home" aria-label="홈">
+      <header class="topbar topbar--brand"><span class="brand-mark">탄만큼</span></header>
+      <div class="screen-body">
+        <div class="status-card" id="my-status-card"></div>
+
+        <span class="section-label">추천 팟</span>
+        <div class="select-row">
+          <select id="sort-select" aria-label="정렬">
+            <option value="match">추천순</option>
+            <option value="fare">요금 낮은순</option>
+            <option value="time">출발시간 빠른순</option>
+            <option value="origin">출발지 가까운순</option>
+          </select>
+          <button type="button" class="filter-chip" id="filter-same-dest">목적지 같은 팟</button>
+        </div>
+        <ul class="pod-list" id="pod-list"></ul>
+      </div>
+    </section>
+
+    <!-- 3. 팟 상세 (MVP 핵심 화면) -->
+    <section class="screen" id="screen-pod-detail" aria-label="팟 상세">
+      <header class="topbar">
+        <button class="icon-btn" data-back="screen-home" aria-label="뒤로가기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="topbar-title"><strong id="detail-route-label"></strong><span id="detail-meta-label"></span></div>
+      </header>
+      <div class="screen-body" id="detail-body"></div>
+      <div class="cta-dock" id="detail-cta"></div>
+    </section>
+
+    <!-- 4. 팟 채팅방 -->
+    <section class="screen" id="screen-pod-chat" aria-label="팟 채팅방">
+      <header class="topbar">
+        <button class="icon-btn" data-back="screen-home" aria-label="뒤로가기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="topbar-title"><strong id="chat-route-label"></strong><span id="chat-meta-label"></span></div>
+      </header>
+      <div class="screen-body" id="chat-body"></div>
+      <div class="cta-dock" id="chat-cta"></div>
+    </section>
+
+    <!-- 5. 최종 경로/요금 -->
+    <section class="screen" id="screen-final" aria-label="최종 경로 및 요금">
+      <header class="topbar">
+        <button class="icon-btn" data-back="screen-pod-chat" aria-label="뒤로가기">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="topbar-title"><strong>팟 확정 · 최종 경로</strong></div>
+      </header>
+      <div class="screen-body" id="final-body"></div>
+      <div class="cta-dock">
+        <button class="btn btn--primary btn--block" id="btn-start-ride">택시 이용 후 정산하기</button>
+      </div>
+    </section>
+
+    <!-- 6. 정산 -->
+    <section class="screen" id="screen-settlement" aria-label="정산">
+      <header class="topbar">
+        <div class="topbar-title"><strong>정산하기</strong><span>실제 택시비를 입력해주세요</span></div>
+      </header>
+      <div class="screen-body" id="settlement-body"></div>
+      <div class="cta-dock">
+        <button class="btn btn--primary btn--block" id="btn-finish-pod" disabled>정산 완료하고 팟 종료</button>
+      </div>
+    </section>
+
+    <!-- 7. 완료 -->
+    <section class="screen" id="screen-done" aria-label="팟 완료">
+      <div class="screen-body">
+        <div class="empty-hero">
+          <span class="emoji">🎉</span>
+          <p class="page-title" style="font-size:22px;">팟이 완료됐어요</p>
+          <p class="page-sub">정산까지 마쳤어요. 수고하셨어요!</p>
+        </div>
+      </div>
+      <div class="cta-dock">
+        <button class="btn btn--primary btn--block" id="btn-rematch">새 팟 찾으러 가기</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- 공용 확인 모달 -->
+<div class="modal-overlay" id="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h2 id="modal-title"></h2>
+    <p id="modal-body"></p>
+    <div class="modal-actions">
+      <button class="btn btn--ghost" id="modal-cancel">돌아가기</button>
+      <button class="btn btn--primary" id="modal-confirm">확인</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ============ 1. 데이터 모델 ============ */
+
+// 포항 실제 장소 좌표. 전부 카카오 로컬 키워드검색 결과를 그대로 옮긴 값이다(가상 지명 없음).
+// 카카오 검색 결과가 없을 때만 쓰는 폴백 테이블이다(기본은 사용자가 자동완성으로 고른 실검색 결과 우선).
+// isStop:true는 합승 하차 후보로 쓰는 주요 거점, false는 목적지로만 쓰이는 장소다.
+const PLACE_COORDS = {
+  '포항역':            { lat: 36.07160517955013,  lng: 129.34192815800867, isStop: true },
+  '영일대해수욕장':      { lat: 36.05506856439884,  lng: 129.37819251803654, isStop: true },
+  '영일대 전망대':       { lat: 36.0615645090088,   lng: 129.383051999155,   isStop: true },
+  '포항여객선터미널':     { lat: 36.05153297999881,  lng: 129.37883391322416, isStop: true },
+  '두호동행정복지센터':    { lat: 36.0609207138005,   lng: 129.380085340895,   isStop: true },
+  '중앙종합상가':        { lat: 36.0625480568563,   lng: 129.36743524435533, isStop: true },
+  '환호공원':           { lat: 36.066006868098675, lng: 129.39333111942932, isStop: true },
+  '포항북부경찰서':       { lat: 36.094026784098496, lng: 129.37811529376106, isStop: true },
+  '한동대학교':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
+  '육거리':             { lat: 36.0406908061984,   lng: 129.366669497903,   isStop: true },
+  '북포항우체국':        { lat: 36.03876536335639,  lng: 129.3643887261654,  isStop: true },
+  '환호아주종합시장':     { lat: 36.0702569588253,   lng: 129.398953346644,   isStop: true },
+  '포항문화재단':        { lat: 36.04374001764378,  lng: 129.3685713632009,  isStop: true },
+  '죽도시장':           { lat: 36.036346509935434, lng: 129.36838865861796, isStop: true },
+  '포항고속버스터미널':    { lat: 36.028054962554,    lng: 129.367600135846,   isStop: true },
+  '이마트 포항이동점':     { lat: 36.031778197827215, lng: 129.3390419746736,  isStop: true },
+  '포항시청':            { lat: 36.0189954295148,   lng: 129.343164578839,   isStop: true },
+  '대잠사거리':          { lat: 36.0120292126335,   lng: 129.342780842714,   isStop: true },
+  '포항성모병원':         { lat: 36.01582822326205,  lng: 129.339900065387,   isStop: true },
+  '포항터미널':          { lat: 36.0134727818623,   lng: 129.349677162622,   isStop: true },
+  '포항종합운동장':       { lat: 36.0085958893205,   lng: 129.363828582237,   isStop: true },
+  '포항공과대학교':       { lat: 36.012436470681074, lng: 129.32180208599536, isStop: true },
+};
+const STOP_NAMES = Object.keys(PLACE_COORDS).filter(n => PLACE_COORDS[n].isStop);
+const ORIGIN_NAME = '포항역';
+
+// 이름 → 좌표 레지스트리. 폴백 테이블로 시작하고, 사용자가 자동완성에서 실검색 결과를 고르면 덮어써 우선한다.
+const PLACE_REGISTRY = Object.assign({}, PLACE_COORDS);
+function placeCoord(name){ return PLACE_REGISTRY[name] || null; }
+function registerPlace(name, lat, lng){ PLACE_REGISTRY[name] = { lat, lng, isStop: false }; }
+
+// STATE: 사용자/팟 전역 상태
+const STATE = {
+  user: null,        // {id, nickname, gender, origin, dest, date, time, partySize}
+  userState: '대기',  // 대기→팟참가→채팅방→팟확정→탑승→하차→완료
+  pods: [],           // 팟 배열 (내 자동생성 팟 포함)
+  myPodId: null,       // 내가 속한 팟 id (항상 존재: 처음엔 나만 있는 자동 팟의 팟장)
+  committed: false,    // true면 실제로 남의 팟에 참가한 상태 → 다른 팟 참가 막힘
+  chatMessages: {},    // podId -> [{who, text}]
+};
+
+/* ============ 2. 유틸 ============ */
+function toRad(d){ return d * Math.PI / 180; }
+function toDeg(r){ return r * 180 / Math.PI; }
+// 두 좌표({lat,lng}) 사이 실거리(미터). 표준 haversine 공식.
+function dist(a, b){
+  const R = 6371000;
+  const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+// a→b 방위각(0~360도). 표준 atan2 기반 공식.
+function bearing(a, b){
+  const y = Math.sin(toRad(b.lng - a.lng)) * Math.cos(toRad(b.lat));
+  const x = Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - a.lng));
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+function angleDiff(b1, b2){ const d = Math.abs(b1 - b2) % 360; return d > 180 ? 360 - d : d; }
+function won(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
+// 로컬 기준 'YYYY-MM-DD'. toISOString()은 UTC라 한국에선 날짜가 하루 밀릴 수 있다.
+function localDateStr(d){
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// 지금부터 n분 뒤의 날짜/시각. 시드 팟이 늘 "곧 출발"이도록 만드는 데 쓴다(자정을 넘겨도 날짜가 같이 넘어간다).
+function clockFromNow(minutes){
+  const d = new Date(Date.now() + minutes * 60000);
+  return { date: localDateStr(d), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` };
+}
+function timeToMin(t){ const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+// 원점(originName)→목표(destName) 경로에 실좌표 기준으로 놓인 고정 정류장 후보만 골라낸다.
+function buildRouteStops(originName, destName){
+  return STOP_NAMES.filter(n => isRouteEligible(n, { originName, leaderDest: destName }));
+}
+// 총액을 가중치 비율대로 정수 분배하되, 합계가 정확히 총액과 같도록 나머지를 최대 소수부부터 배분한다.
+function splitProportional(total, weights){
+  const sumW = weights.reduce((a, b) => a + b, 0) || 1;
+  const raw = weights.map(w => total * w / sumW);
+  const floors = raw.map(Math.floor);
+  let remainder = total - floors.reduce((a, b) => a + b, 0);
+  const order = raw.map((r, i) => ({ i, frac: r - floors[i] })).sort((a, b) => b.frac - a.frac);
+  const result = floors.slice();
+  for (let k = 0; k < remainder && order.length; k++) result[order[k % order.length].i] += 1;
+  return result;
+}
+
+/* ============ 3. 계산 함수 4종 ============ */
+
+const ANGLE_THRESHOLD_DEG = 25; // 팟장 경로 벡터 vs 후보 목적지 벡터 허용 각도차 (실제 경로를 아직 못 받았을 때만 사용)
+const DIST_BUFFER = 1.15;       // "거리가 비슷하면"의 허용 오차(15%)
+const ROUTE_CORRIDOR_M = 500;   // 실제 도로 경로에서 이만큼 안쪽이면 "경로 위"로 본다(도보 약 7분)
+
+// 점 p와 선분 ab 사이 최단거리(미터). 위경도를 등거리 평면으로 근사한다 —
+// 수 km 범위에서 오차가 무시할 수준이라 경로선 판정에는 충분하다.
+function distToSegment(p, a, b){
+  const mPerDegLat = 111320, mPerDegLng = 111320 * Math.cos(toRad(p.lat));
+  const px = p.lng * mPerDegLng, py = p.lat * mPerDegLat;
+  const ax = a.lng * mPerDegLng, ay = a.lat * mPerDegLat;
+  const bx = b.lng * mPerDegLng, by = b.lat * mPerDegLat;
+  const dx = bx - ax, dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  const cx = ax + t * dx, cy = ay + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
+// 좌표를 경로선에 투영했을 때, 경로 시작점에서 그 지점까지 달린 거리(미터).
+// 하차지점은 모두 경로에서 500m 안쪽이라 이 값이 곧 주행 순서이자 구간 거리가 된다.
+function progressAlongPath(coord, path){
+  const mPerDegLat = 111320, mPerDegLng = 111320 * Math.cos(toRad(coord.lat));
+  let best = Infinity, bestProgress = 0, travelled = 0;
+  for (let i = 0; i + 1 < path.length; i++){
+    const a = path[i], b = path[i + 1];
+    const segLen = dist(a, b);
+    const ax = a.lng * mPerDegLng, ay = a.lat * mPerDegLat;
+    const bx = b.lng * mPerDegLng, by = b.lat * mPerDegLat;
+    const px = coord.lng * mPerDegLng, py = coord.lat * mPerDegLat;
+    const dx = bx - ax, dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    if (d < best) { best = d; bestProgress = travelled + segLen * t; }
+    travelled += segLen;
+  }
+  return bestProgress;
+}
+
+// 좌표에서 경로선(폴리라인)까지의 최단거리(미터).
+function distToPath(coord, path){
+  let best = Infinity;
+  for (let i = 0; i + 1 < path.length; i++){
+    const d = distToSegment(coord, path[i], path[i + 1]);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// 팟장 출발지→목적지 벡터와 각도가 크게 벌어지거나, 팟장 목적지보다 훨씬 먼 곳은 참가 불가 (PRD 6번)
+function isRouteEligible(userDest, pod){
+  const o = placeCoord(pod.originName), l = placeCoord(pod.leaderDest), u = placeCoord(userDest);
+  if (!o || !l || !u) return false;
+  const leaderDist = dist(o, l), userDist = dist(o, u);
+  if (userDist < 1) return true; // 출발지 자신은 항상 경로에 포함
+
+  // 실제 도로 경로를 받아뒀으면 그 경로선과의 거리로 판정한다(정확). 아직 없으면 직선 각도로 근사한다.
+  const route = cachedRoute([pod.originName, pod.leaderDest]);
+  if (route && route.path.length > 1) {
+    return distToPath(u, route.path) <= ROUTE_CORRIDOR_M && userDist <= leaderDist * DIST_BUFFER;
+  }
+  const diff = angleDiff(bearing(o, l), bearing(o, u));
+  return diff <= ANGLE_THRESHOLD_DEG && userDist <= leaderDist * DIST_BUFFER;
+}
+
+// 팟 경로상의 정류장 후보(원점→내 목적지 방향에 놓인 것) 중 내 목적지까지 도보가 가장 짧은 지점을 추천
+// 하차지점은 "경로 위에서 내 목적지와 가장 가까운 지점"이다. 고정 정류장 목록에서 고르지 않기 때문에
+// 출발지·목적지가 무엇이든 경로만 있으면 하차지점이 나온다.
+// 이름은 그 사람 목적지 기준으로 짓는다(dropNameFor).
+function recommendDropOff(userDest, pod){
+  const uCoord = placeCoord(userDest);
+  const baseRoute = cachedRoute([pod.originName, pod.leaderDest]);
+
+  if (baseRoute && baseRoute.path.length > 1 && uCoord) {
+    const spot = nearestPointOnPath(uCoord, baseRoute.path);
+    const walkDist = Math.round(spot.distance);
+    // 목적지가 사실상 경로 끝이면 팟장 목적지 이름을 그대로 쓴다(이름이 있는 편이 알아보기 쉽다).
+    const destCoord = placeCoord(pod.leaderDest);
+    if (destCoord && dist(spot.coord, destCoord) < 120) {
+      return { point: pod.leaderDest, coord: destCoord, walkDist: Math.round(dist(destCoord, uCoord)),
+               walkTime: walkTimeOf(dist(destCoord, uCoord)), resolved: true };
+    }
+    const name = dropNameFor(userDest, walkDist);
+    registerPlace(name, spot.coord.lat, spot.coord.lng);
+    return { point: name, coord: spot.coord, walkDist, walkTime: walkTimeOf(walkDist), resolved: true };
+  }
+
+  // 경로를 아직 못 받았을 때만 쓰는 폴백: 알려진 정류장 중 목적지에서 가장 가까운 곳.
+  let best = null, bestDist = Infinity;
+  pod.routeStops.forEach(name => {
+    if (name === pod.originName) return; // 출발지 하차는 "타지 않는다"는 뜻이라 후보에서 뺀다
+    const c = placeCoord(name);
+    if (!c) return;
+    const d = dist(c, uCoord);
+    if (d < bestDist) { bestDist = d; best = name; }
+  });
+  if (!best) best = pod.leaderDest;
+  const walkDist = Math.round(dist(placeCoord(best), uCoord));
+  return { point: best, coord: placeCoord(best), walkDist, walkTime: walkTimeOf(walkDist), resolved: true };
+}
+
+function walkTimeOf(meters){ return meters < 1 ? 0 : Math.max(1, Math.round(meters / 70)); } // 도보 약 70m/분
+
+// 경로선 위에서 좌표와 가장 가까운 지점과 그 거리.
+function nearestPointOnPath(coord, path){
+  const mPerDegLat = 111320, mPerDegLng = 111320 * Math.cos(toRad(coord.lat));
+  let best = Infinity, bestCoord = path[0];
+  for (let i = 0; i + 1 < path.length; i++){
+    const a = path[i], b = path[i + 1];
+    const ax = a.lng * mPerDegLng, ay = a.lat * mPerDegLat;
+    const bx = b.lng * mPerDegLng, by = b.lat * mPerDegLat;
+    const px = coord.lng * mPerDegLng, py = coord.lat * mPerDegLat;
+    const dx = bx - ax, dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    const cx = ax + t * dx, cy = ay + t * dy;
+    const d = Math.hypot(px - cx, py - cy);
+    if (d < best) { best = d; bestCoord = { lat: cy / mPerDegLat, lng: cx / mPerDegLng }; }
+  }
+  return { coord: bestCoord, distance: best };
+}
+
+
+// 매칭 점수 100점 만점: 출발지근접30 + 목적지경로적합30 + 실경로포함25 + 출발시간차10 + 인원조건5
+function calcMatchScore(user, pod){
+  const uOrigin = placeCoord(user.origin), pOrigin = placeCoord(pod.originName);
+  const originDist = (uOrigin && pOrigin) ? dist(uOrigin, pOrigin) : Infinity;
+  const originScore = Math.max(0, 30 - Math.round(originDist / 200)); // 200m당 1점 감점
+
+  const pDest = placeCoord(pod.leaderDest), uDest = placeCoord(user.dest);
+  const angleDiffDeg = (pOrigin && pDest && uDest) ? angleDiff(bearing(pOrigin, pDest), bearing(pOrigin, uDest)) : 180;
+  const fitScore = Math.max(0, 30 - Math.round(angleDiffDeg * (30 / ANGLE_THRESHOLD_DEG)));
+
+  const eligible = isRouteEligible(user.dest, pod);
+  const routeScore = eligible ? 25 : 0;
+
+  const diffMin = Math.abs(timeToMin(user.time) - timeToMin(pod.departTime));
+  const timeScore = Math.max(0, 10 - Math.round(diffMin / 6));
+
+  const sizeDiff = Math.abs(user.partySize - pod.desiredSize);
+  const sizeScore = sizeDiff === 0 ? 5 : sizeDiff === 1 ? 3 : sizeDiff === 2 ? 1 : 0;
+
+  const total = Math.min(100, originScore + fitScore + routeScore + timeScore + sizeScore);
+  return { total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible };
+}
+
+// 확정 시점 참여자 기준 최종 경로 재계산 + 구간별 인원수 비례 요금 배분
+function calcFinalRouteAndFare(pod){
+  const participants = pod.participants;
+  const originCoord = placeCoord(pod.originName);
+
+  // 경로는 하나다: 출발지 → 팟장 목적지. 택시는 이 경로를 벗어나지 않는다.
+  // 참여자는 이 경로 위 자기 하차지점에서 내리고, 거기서 목적지까지 걸어간다.
+  const baseRoute = cachedRoute([pod.originName, pod.leaderDest]);
+  const hasPath = !!(baseRoute && baseRoute.path.length > 1);
+
+  // 하차 순서 = 그 지점이 경로의 몇 미터 지점인가. 하차지점은 모두 경로에서 500m 안쪽이라
+  // 경로선에 투영해 재는 값이 곧 주행 순서가 된다.
+  const progressOf = n => hasPath
+    ? progressAlongPath(placeCoord(n), baseRoute.path)
+    : dist(originCoord, placeCoord(n));
+
+  const dropPoints = participants.map(p => p.dropOff.point);
+  const stops = [pod.originName, ...new Set(dropPoints.filter(p => p !== pod.originName))]
+    .sort((a, b) => progressOf(a) - progressOf(b));
+
+  // 구간 길이도 경로 위 진행거리 차이로 잰다(직선거리가 아니라 실제 주행거리).
+  const segments = [];
+  for (let i = 0; i < stops.length - 1; i++){
+    const a = stops[i], b = stops[i + 1];
+    const meters = hasPath
+      ? Math.max(1, progressOf(b) - progressOf(a))
+      : Math.max(1, dist(placeCoord(a), placeCoord(b)));
+    segments.push({ from: a, to: b, meters, fare: 0, mins: 0 });
+  }
+
+  const isRealFare = !!(baseRoute && baseRoute.fare > 0 && segments.length);
+  if (isRealFare) {
+    // 총액은 경로 하나의 실제 택시요금이다. 구간별로 나눌 때는 주행거리 비율을 쓴다
+    // (구간마다 기본요금을 따로 매기면 택시 요금 체계와 어긋난다).
+    const weights = segments.map(s => s.meters);
+    const fareShares = splitProportional(baseRoute.fare, weights);
+    const minShares = splitProportional(Math.max(1, Math.round(baseRoute.duration / 60)), weights);
+    segments.forEach((s, i) => { s.fare = fareShares[i]; s.mins = minShares[i]; });
+  } else {
+    // 경로를 아직 못 받았을 때만 쓰는 근사치: 기본 4,800원/1.6km + 이후 131m당 100원.
+    // 기본요금은 전체 운행에 한 번만 붙이고, 나머지를 구간 거리 비율로 나눈다.
+    const totalM = segments.reduce((a, x) => a + x.meters, 0);
+    const estimate = Math.round((4800 + Math.ceil(Math.max(0, totalM - 1600) / 131) * 100) / 100) * 100;
+    const estMins = Math.max(3, Math.round(totalM / 1000 * 2.2 + 3));
+    const fareShares = splitProportional(estimate, segments.map(s => s.meters));
+    const minShares = splitProportional(estMins, segments.map(s => s.meters));
+    segments.forEach((s, i) => { s.fare = fareShares[i]; s.mins = minShares[i]; });
+  }
+
+  const totalFare = segments.reduce((s, x) => s + x.fare, 0);
+  const totalMins = segments.reduce((s, x) => s + x.mins, 0);
+
+  // 각 구간 요금은 그 구간에 아직 타고 있는 사람들이 나눠 낸다.
+  const dropIdxOf = p => stops.indexOf(p.dropOff.point);
+  const rawShare = participants.map(() => 0);
+  participants.forEach((p, pi) => {
+    const dropIdx = dropIdxOf(p);
+    for (let i = 0; i < dropIdx; i++){
+      const ridersOnSeg = participants.filter(q => dropIdxOf(q) > i).length || 1;
+      rawShare[pi] += segments[i].fare / ridersOnSeg;
+    }
+  });
+  const fares = splitProportional(totalFare, rawShare);
+
+  const perPerson = participants.map((p, pi) => ({
+    id: p.id, nickname: p.nickname, dest: p.dest,
+    dropPoint: p.dropOff.point, walkDist: p.dropOff.walkDist, walkTime: p.dropOff.walkTime,
+    fare: fares[pi],
+  }));
+  return { stops, segments, totalFare, totalMins, perPerson, isRealFare };
+}
+
+// 홈 목록/팟 상세 화면에서 "내가 참가했다면"을 미리 계산 (참가 전 미리보기, 참가 로직과 동일 계산 재사용)
+function previewJoin(pod, user){
+  const matchScore = calcMatchScore(user, pod);
+  if (!matchScore.eligible) return { eligible: false, matchScore };
+  const dropOff = recommendDropOff(user.dest, pod);
+  const hypoPod = Object.assign({}, pod, {
+    participants: pod.participants.concat([{ id: '__me__', nickname: user.nickname, dest: user.dest, dropOff }]),
+  });
+  const result = calcFinalRouteAndFare(hypoPod);
+  const mine = result.perPerson.find(p => p.id === '__me__');
+  const myDropSegIdx = result.stops.indexOf(mine.dropPoint) - 1;
+  const myTaxiMins = result.segments.slice(0, myDropSegIdx + 1).reduce((s, x) => s + x.mins, 0);
+  return { eligible: true, matchScore, dropOff, result, mine, myTaxiMins };
+}
+
+/* ============ 4. 시드 팟 데이터 ============ */
+function makePod({ id, originName, leaderNickname, leaderGender, leaderDest, departTime, departDate, desiredSize, extras }){
+  const routeStops = buildRouteStops(originName, leaderDest);
+  const leader = { id: id + '_leader', nickname: leaderNickname, gender: leaderGender, dest: leaderDest, isLeader: true };
+  // 팟장은 경로의 종점에서 내린다. 목적지가 정류장 테이블에 없는 곳이어도 마찬가지다.
+  leader.dropOff = { point: leaderDest, walkDist: 0, walkTime: 0 };
+  const participants = [leader];
+  (extras || []).forEach((ep, i) => {
+    const p = { id: id + '_p' + i, nickname: ep.nickname, gender: ep.gender, dest: ep.dest, isLeader: false };
+    p.dropOff = recommendDropOff(ep.dest, { routeStops, originName });
+    participants.push(p);
+  });
+  return {
+    id, leaderId: leader.id, leaderDest, originName, routeStops,
+    departTime, departDate, desiredSize, participants, status: 'recruiting',
+  };
+}
+
+// 시드 팟의 출발 시각은 "지금부터 n분 뒤"로 잡는다. 고정 시각으로 두면 그 시각이 지난 뒤에
+// 접속했을 때 만료 필터에 전부 걸려 목록이 빈다.
+function seedPods(){
+  const t1 = clockFromNow(20), t2 = clockFromNow(35), t3 = clockFromNow(50),
+        t4 = clockFromNow(25), t5 = clockFromNow(40);
+  return [
+    makePod({ id: 'pod_seed1', originName: ORIGIN_NAME, leaderNickname: '밤바다산책', leaderGender: '남성', leaderDest: '영일대해수욕장',
+      departTime: t1.time, departDate: t1.date, desiredSize: 4, extras: [
+        { nickname: '막차놓친사람', gender: '여성', dest: '포항여객선터미널' },
+      ] }),
+    makePod({ id: 'pod_seed2', originName: ORIGIN_NAME, leaderNickname: '집가고싶다', leaderGender: '여성', leaderDest: '죽도시장',
+      departTime: t2.time, departDate: t2.date, desiredSize: 3, extras: [
+        { nickname: '커피부터', gender: '여성', dest: '포항문화재단' },
+        { nickname: '육거리주민', gender: '남성', dest: '육거리' },
+      ] }),
+    // 시드 목적지는 전부 최단거리 경로에서 500m 안쪽으로 실측 확인한 곳이다
+    // (영일대 전망대 184m, 포항여객선터미널 309m, 포항문화재단 271m, 육거리 1m).
+    makePod({ id: 'pod_seed3', originName: ORIGIN_NAME, leaderNickname: '야근끝판왕', leaderGender: '남성', leaderDest: '환호공원',
+      departTime: t3.time, departDate: t3.date, desiredSize: 4, extras: [
+        { nickname: '바다보러감', gender: '남성', dest: '영일대 전망대' },
+      ] }),
+    // 남서쪽(시청·대잠·포스텍) 방향. 이 방향 팟이 없으면 남쪽 목적지 사용자에게 매칭이 하나도 안 뜬다.
+    makePod({ id: 'pod_seed4', originName: ORIGIN_NAME, leaderNickname: '실험실탈출', leaderGender: '여성', leaderDest: '포항공과대학교',
+      departTime: t4.time, departDate: t4.date, desiredSize: 4, extras: [
+        { nickname: '야식배달중', gender: '남성', dest: '포항시청' },
+        { nickname: '대잠동주민', gender: '여성', dest: '대잠사거리' },
+      ] }),
+    // 북쪽 방향. 이 경로는 500m 안에 걸리는 다른 거점이 없어 팟장 혼자 모집 중인 상태다.
+    makePod({ id: 'pod_seed5', originName: ORIGIN_NAME, leaderNickname: '기숙사복귀', leaderGender: '남성', leaderDest: '한동대학교',
+      departTime: t5.time, departDate: t5.date, desiredSize: 3, extras: [] }),
+  ];
+}
+
+/* ============ 5. 화면 전환 + 공용 모달 ============ */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+document.querySelectorAll('[data-back]').forEach(btn => {
+  btn.addEventListener('click', () => showScreen(btn.dataset.back));
+});
+
+let modalConfirmHandler = null;
+function openModal({ title, body, confirmLabel = '확인', onConfirm, danger = false }){
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').textContent = body;
+  const confirmBtn = document.getElementById('modal-confirm');
+  confirmBtn.textContent = confirmLabel;
+  confirmBtn.className = 'btn ' + (danger ? 'btn--danger' : 'btn--primary');
+  modalConfirmHandler = onConfirm || null;
+  document.getElementById('modal-overlay').hidden = false;
+}
+function closeModal(){ document.getElementById('modal-overlay').hidden = true; modalConfirmHandler = null; }
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+document.getElementById('modal-confirm').addEventListener('click', () => {
+  const fn = modalConfirmHandler; closeModal(); if (fn) fn();
+});
+
+/* ============ 6-0. 카카오모빌리티 길찾기 API (실제 도로 경로 + 실제 택시요금) ============ */
+// 정류장 목록 → 실제 도로 경로/요금/소요시간. 실패하면 null을 캐시해 같은 경로를 반복 호출하지 않는다.
+// 응답을 캐시해두면 calcFinalRouteAndFare()가 동기 함수인 채로 실제 요금을 쓸 수 있다.
+const ROUTE_CACHE = new Map();
+const MAX_WAYPOINTS = 5; // 카카오모빌리티 길찾기 API 제한
+
+function routeKey(stops){ return stops.join('>'); }
+function cachedRoute(stops){ return ROUTE_CACHE.get(routeKey(stops)) || null; }
+
+async function fetchRoute(stops){
+  const key = routeKey(stops);
+  if (ROUTE_CACHE.has(key)) return ROUTE_CACHE.get(key);
+
+  const coords = stops.map(placeCoord);
+  const restKey = window.KAKAO_KEYS && window.KAKAO_KEYS.restApiKey;
+  if (coords.some(c => !c) || coords.length < 2 || !restKey) { ROUTE_CACHE.set(key, null); return null; }
+
+  const asParam = (name, i) => `${coords[i].lng},${coords[i].lat},name=${encodeURIComponent(name)}`;
+  const mid = stops.slice(1, -1);
+  // ponytail: 경유지가 5개를 넘으면 앞에서부터 5개만 보낸다. 지금 정류장 데이터로는 최대 3개라 실제로는 걸리지 않음.
+  const waypoints = mid.slice(0, MAX_WAYPOINTS).map((n, i) => asParam(n, i + 1)).join('|');
+
+  const url = 'https://apis-navi.kakaomobility.com/v1/directions'
+    + `?origin=${asParam(stops[0], 0)}`
+    + `&destination=${asParam(stops[stops.length - 1], stops.length - 1)}`
+    + (waypoints ? `&waypoints=${waypoints}` : '')
+    // RECOMMEND는 실시간 교통을 반영해 호출할 때마다 다른 경로를 준다. 그러면 같은 팟이 접속 시점에 따라
+    // 참가 가능/불가로 뒤집히므로, 판정이 흔들리지 않도록 최단거리 경로로 고정한다.
+    + '&priority=DISTANCE';
+
+  let route = null;
+  try {
+    const res = await fetch(url, { headers: { Authorization: 'KakaoAK ' + restKey } });
+    if (res.ok) {
+      const data = await res.json();
+      const r = data.routes && data.routes[0];
+      if (r && r.result_code === 0) {
+        const path = [];
+        (r.sections || []).forEach(sec => (sec.roads || []).forEach(road => {
+          for (let i = 0; i + 1 < road.vertexes.length; i += 2) path.push({ lng: road.vertexes[i], lat: road.vertexes[i + 1] });
+        }));
+        route = {
+          path,
+          fare: (r.summary.fare && r.summary.fare.taxi) || 0,
+          distance: r.summary.distance,
+          duration: r.summary.duration,
+        };
+      }
+    }
+  } catch (e) {
+    route = null; // 네트워크 실패 → 폴백(직선 + 추정요금)
+  }
+  ROUTE_CACHE.set(key, route);
+  return route;
+}
+
+// 자체 점검: 콘솔에서 runSelfCheck()로 실행. 실제 요금 반영 후에도 분배 합계가 총액과 일치하는지 확인한다.
+async function runSelfCheck(){
+  const fails = [];
+  const check = (name, cond) => { if (!cond) fails.push(name); };
+
+  const pod = makePod({ id: '__check', originName: '포항역', leaderNickname: 'L', leaderGender: '여성',
+    leaderDest: '환호공원', departTime: '19:00', desiredSize: 3,
+    extras: [{ nickname: 'A', gender: '여성', dest: '영일대해수욕장' }] });
+
+  const estimate = calcFinalRouteAndFare(pod);
+  check('요금 출처 표시가 캐시 상태와 일치', estimate.isRealFare === !!cachedRoute([pod.originName, pod.leaderDest]));
+
+  const route = await fetchRoute([pod.originName, pod.leaderDest]);
+  check('길찾기 API 응답 있음', !!route && route.fare > 0);
+  if (route) {
+    const real = calcFinalRouteAndFare(pod);
+    check('실제 요금 반영됨', real.isRealFare === true);
+    // 핵심 불변식: 택시는 경로를 벗어나지 않으므로 팟 총액은 직행 요금과 같아야 한다.
+    check('총액 = 직행 요금(우회 없음)', real.totalFare === route.fare);
+    check('구간 합 = 총액', real.segments.reduce((s, x) => s + x.fare, 0) === real.totalFare);
+    check('인당 합 = 총액', real.perPerson.reduce((s, x) => s + x.fare, 0) === real.totalFare);
+    check('인당 요금 음수 없음', real.perPerson.every(p => p.fare >= 0));
+    check('하차 순서가 경로 진행 순', real.stops.every((n, i, arr) =>
+      i === 0 || progressAlongPath(placeCoord(arr[i - 1]), route.path) <= progressAlongPath(placeCoord(n), route.path)));
+    check('팟장은 종점에서 하차', real.perPerson.find(p => p.nickname === 'L').dropPoint === pod.leaderDest);
+  }
+
+  // 출발지 하차 회귀 검사: 경로를 벗어난 목적지라도 출발지에서 내리라고 하면 안 된다.
+  const off = recommendDropOff('포항공과대학교', pod); // 환호공원 경로와 정반대 방향(서쪽)
+  check('출발지 하차 아님', off.point !== pod.originName);
+
+  console[fails.length ? 'error' : 'log'](fails.length ? '자체점검 실패: ' + fails.join(', ') : '자체점검 통과');
+  return { passed: fails.length === 0, fails };
+}
+
+/* ============ 6. 카카오맵 경로 지도 (팟 상세 화면 핵심) ============ */
+let mapSeq = 0;
+// 지도가 들어갈 placeholder div의 HTML + id를 만든다. 실제 지도 인스턴스는 SDK 로딩 후 paintRouteMap()이 채운다.
+function mapContainerHTML({ large = false } = {}){
+  const id = 'kmap_' + (++mapSeq);
+  const cls = 'kakao-map-box' + (large ? ' kakao-map-box--lg' : '');
+  return { id, html: `<div class="${cls}" id="${id}" role="img" aria-label="팟 이동 경로 지도"></div>` };
+}
+
+// 카카오맵 링크. 두 형식 모두 웹에서 동작을 확인했다.
+//  - link/map : 그 좌표에 마커를 찍은 지도를 연다
+//  - link/to  : 길찾기 화면을 열고 도착지를 채운다(출발지는 사용자가 현위치 등으로 지정)
+// 모바일에서 카카오맵 앱이 깔려 있으면 앱으로 넘어간다.
+function kakaoMapPlaceUrl(name){
+  const c = placeCoord(name);
+  if (!c) return 'https://map.kakao.com/?q=' + encodeURIComponent(name);
+  return `https://map.kakao.com/link/map/${encodeURIComponent(name)},${c.lat},${c.lng}`;
+}
+function kakaoMapRouteUrl(name){
+  const c = placeCoord(name);
+  if (!c) return 'https://map.kakao.com/?q=' + encodeURIComponent(name);
+  return `https://map.kakao.com/link/to/${encodeURIComponent(name)},${c.lat},${c.lng}`;
+}
+
+// 범례 문구를 실제 경로 여부에 맞게 바꾼다. 범례가 없는 화면이면 아무것도 하지 않는다.
+function setMapLegend(containerId, isRealRoute){
+  const el = document.getElementById(containerId + '_legend');
+  if (!el) return;
+  el.textContent = isRealRoute
+    ? '실선: 실제 도로 경로 / 점선: 도보 경로'
+    : '실선: 좌표 순서(실제 경로 조회 실패) / 점선: 도보 경로';
+}
+
+// stops 경로 폴리라인 + 마커 4종(팟출발지/팟장목적지/내추천하차지점/내목적지) 렌더.
+// 먼저 좌표를 이은 직선을 즉시 그리고, 길찾기 API 응답이 오면 실제 도로 경로로 교체한다.
+// API가 실패하면 직선이 그대로 남는다(폴백). 경로를 받으면 onRoute(route)를 호출한다.
+// stops는 "실제로 사람이 내리는 지점"만 출발지 순으로 담는다(후보 정류장 목록이 아니다).
+// riders는 지점 이름 → 그곳에서 내리는 사람 닉네임 배열.
+async function paintRouteMap(containerId, { stops, originName, leaderDest, dropPoint, myDest, riders = {}, onRoute }){
+  await window.__kakaoReady;
+  const el = document.getElementById(containerId);
+  if (!el) return; // 화면 전환으로 이미 사라졌으면 중단
+  el.innerHTML = ''; // 다시 그릴 때 이전 마커·오버레이가 남지 않게 비운다
+
+  const center = placeCoord(originName) || placeCoord(stops[0]);
+  const map = new kakao.maps.Map(el, { center: new kakao.maps.LatLng(center.lat, center.lng), level: 7 });
+  const bounds = new kakao.maps.LatLngBounds();
+
+  const path = stops.map(n => placeCoord(n)).filter(Boolean).map(c => new kakao.maps.LatLng(c.lat, c.lng));
+  const straightLine = new kakao.maps.Polyline({ map, path, strokeWeight: 4, strokeColor: '#4d3df0', strokeOpacity: 0.9, strokeStyle: 'solid' });
+
+  // 실제 도로 경로로 교체 (응답 도착 시).
+  // 그리는 건 언제나 출발지→팟장 목적지 경로 하나다. 하차지점은 이 경로 위 마커로만 표시한다.
+  fetchRoute([originName, leaderDest]).then(route => {
+    if (!document.getElementById(containerId)) return; // 화면이 이미 바뀌었으면 중단
+    if (route && route.path.length) {
+      straightLine.setMap(null);
+      const roadPath = route.path.map(p => new kakao.maps.LatLng(p.lat, p.lng));
+      new kakao.maps.Polyline({ map, path: roadPath, strokeWeight: 5, strokeColor: '#4d3df0', strokeOpacity: 0.9, strokeStyle: 'solid' });
+      roadPath.forEach(p => bounds.extend(p));
+      if (!bounds.isEmpty()) map.setBounds(bounds, 40);
+    }
+    setMapLegend(containerId, !!route);
+    if (onRoute) onRoute(route);
+  });
+
+  function addMarker(name, color, label){
+    const c = placeCoord(name);
+    if (!c) return;
+    const pos = new kakao.maps.LatLng(c.lat, c.lng);
+    bounds.extend(pos);
+    new kakao.maps.Marker({ map, position: pos });
+    new kakao.maps.CustomOverlay({
+      map, position: pos, yAnchor: 2.4,
+      content: `<div style="background:${color};color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);">${label}</div>`,
+    });
+  }
+  stops.forEach(n => {
+    const who = riders[n] && riders[n].length ? ` (${riders[n].join(', ')})` : '';
+    let color = '#5b6478', label = n + ' 하차' + who;
+    if (n === leaderDest) { color = 'var(--blue)'; label = `${n} 하차 · 종점${who}`; }
+    if (n === dropPoint) { color = 'var(--orange)'; label = `내 하차 · ${n}`; }
+    if (n === originName) { color = 'var(--green)'; label = '출발 · ' + n; }
+    addMarker(n, color, label);
+  });
+
+  if (dropPoint !== myDest) {
+    const dCoord = placeCoord(dropPoint), mCoord = placeCoord(myDest);
+    if (dCoord && mCoord) {
+      new kakao.maps.Polyline({
+        map, path: [new kakao.maps.LatLng(dCoord.lat, dCoord.lng), new kakao.maps.LatLng(mCoord.lat, mCoord.lng)],
+        strokeWeight: 3, strokeColor: '#9c5008', strokeOpacity: 0.9, strokeStyle: 'shortdash',
+      });
+      const pos = new kakao.maps.LatLng(mCoord.lat, mCoord.lng);
+      bounds.extend(pos);
+      new kakao.maps.CustomOverlay({
+        map, position: pos, yAnchor: 2.4,
+        content: `<div style="background:var(--danger);color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);">내 목적지 · ${myDest}</div>`,
+      });
+    }
+  }
+  if (!bounds.isEmpty()) map.setBounds(bounds, 40);
+}
+
+/* ============ 7. 팟 생성 / 참가 / 취소 로직 ============ */
+function createOwnPod(){
+  const u = STATE.user;
+  const pod = makePod({ id: 'pod_' + Date.now(), originName: u.origin, leaderNickname: u.nickname, leaderGender: u.gender,
+    leaderDest: u.dest, departTime: u.time, departDate: u.date, desiredSize: u.partySize, extras: [] });
+  pod.leaderId = u.id;
+  pod.participants[0].id = u.id;
+  STATE.pods.push(pod);
+  STATE.myPodId = pod.id;
+  STATE.committed = false;
+  STATE.chatMessages[pod.id] = [];
+}
+
+function joinPod(pod){
+  const u = STATE.user;
+  const dropOff = recommendDropOff(u.dest, pod);
+  pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false, dropOff });
+  const ownPodId = STATE.myPodId;
+  if (ownPodId && ownPodId !== pod.id) {
+    STATE.pods = STATE.pods.filter(p => p.id !== ownPodId);
+    delete STATE.chatMessages[ownPodId];
+  }
+  STATE.myPodId = pod.id;
+  STATE.committed = true;
+  STATE.userState = '채팅방';
+  if (!STATE.chatMessages[pod.id]) STATE.chatMessages[pod.id] = [];
+}
+
+function dissolvePod(pod){
+  STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
+  delete STATE.chatMessages[pod.id];
+  STATE.committed = false;
+  STATE.userState = '대기';
+  createOwnPod();
+}
+
+function findPod(id){ return STATE.pods.find(p => p.id === id); }
+
+// 출발 시각이 지났으면 만료된 팟이다. 팟에 날짜가 따로 없으면 사용자가 고른 날짜를 쓴다.
+function isPodExpired(pod){
+  const date = pod.departDate || (STATE.user && STATE.user.date);
+  if (!date || !pod.departTime) return false;
+  return new Date(`${date}T${pod.departTime}`) < new Date();
+}
+
+/* ============ 8. 화면 1: 온보딩 ============ */
+// 카카오 Places 키워드검색으로 자동완성 목록을 띄우고, 고르면 실좌표를 PLACE_REGISTRY에 등록한다.
+async function setupPlaceAutocomplete(inputId, listId){
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+  await window.__kakaoReady;
+  const places = new kakao.maps.services.Places();
+  let debounceTimer = null;
+  input.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const q = input.value.trim();
+    if (!q) { list.hidden = true; list.innerHTML = ''; return; }
+    debounceTimer = setTimeout(() => {
+      places.keywordSearch(q, (data, status) => {
+        list.innerHTML = '';
+        if (status !== kakao.maps.services.Status.OK || !data.length) { list.hidden = true; return; }
+        data.slice(0, 6).forEach(place => {
+          const li = document.createElement('li');
+          li.className = 'autocomplete-item';
+          li.textContent = place.place_name + ' · ' + (place.road_address_name || place.address_name || '');
+          li.addEventListener('click', () => {
+            registerPlace(place.place_name, Number(place.y), Number(place.x));
+            input.value = place.place_name;
+            list.hidden = true;
+          });
+          list.appendChild(li);
+        });
+        list.hidden = false;
+      });
+    }, 250);
+  });
+  document.addEventListener('click', (e) => { if (e.target !== input) list.hidden = true; });
+}
+setupPlaceAutocomplete('ob-origin', 'ob-origin-list');
+setupPlaceAutocomplete('ob-dest', 'ob-dest-list');
+document.getElementById('ob-origin').value = ORIGIN_NAME;
+document.getElementById('ob-dest').value = '영일대해수욕장';
+
+// 포항에서 자주 오가는 곳 빠른 선택. 좌표를 이미 아는 장소라 고르면 바로 계산에 쓸 수 있다.
+// 직접 입력(자동완성)이 기본이고, 이건 타이핑을 줄여주는 보조 수단이다.
+const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교'];
+const POPULAR_DESTS = ['영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널'];
+
+function setupPlaceChips(chipsId, inputId, names){
+  const wrap = document.getElementById(chipsId);
+  const input = document.getElementById(inputId);
+  const sync = () => wrap.querySelectorAll('.chip').forEach(c => {
+    c.setAttribute('aria-pressed', String(c.textContent === input.value));
+  });
+  names.forEach(name => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.textContent = name;
+    chip.addEventListener('click', () => {
+      input.value = name;
+      document.getElementById(inputId + '-list').hidden = true; // 자동완성 목록이 떠 있으면 닫는다
+      sync();
+    });
+    wrap.appendChild(chip);
+  });
+  input.addEventListener('input', sync);
+  sync();
+}
+setupPlaceChips('ob-origin-chips', 'ob-origin', POPULAR_ORIGINS);
+setupPlaceChips('ob-dest-chips', 'ob-dest', POPULAR_DESTS);
+// toISOString()은 UTC라 한국 시간 오전 9시 이전엔 어제 날짜가 나온다. 로컬 날짜를 써야 한다.
+document.getElementById('ob-date').value = localDateStr(new Date());
+document.getElementById('ob-time').value = clockFromNow(30).time;
+
+// 팟을 만들기 전에 각 팟장 경로의 실제 도로 경로를 받아둔다.
+// 경로적합성/하차지점이 makePod 시점에 확정되므로, 이걸 먼저 받아야 직선 근사가 아닌 실제 경로로 계산된다.
+const SEED_ROUTES = [
+  ['포항역', '영일대해수욕장'],
+  ['포항역', '죽도시장'],
+  ['포항역', '환호공원'],
+  ['포항역', '포항공과대학교'],
+  ['포항역', '한동대학교'],
+];
+async function prefetchBaseRoutes(userOrigin, userDest){
+  const routes = SEED_ROUTES.concat(userOrigin && userDest ? [[userOrigin, userDest]] : []);
+  await Promise.all(routes.map(r => fetchRoute(r)));
+}
+
+// 팟 계산에 필요한 경로는 출발지→팟장 목적지 하나뿐이다.
+// 하차 순서·구간 거리·총요금이 전부 이 경로 하나에서 나온다.
+async function warmPodRoutes(pod){
+  await fetchRoute([pod.originName, pod.leaderDest]);
+  // 경로를 받고 나면 하차지점을 다시 잡는다(경로가 없을 때 잡힌 폴백 값을 덮어쓴다).
+  pod.participants.forEach(p => {
+    if (p.isLeader) return; // 팟장은 항상 종점에서 내린다
+    p.dropOff = recommendDropOff(p.dest, pod);
+  });
+}
+
+// 하차지점 이름은 "그 사람 목적지" 기준으로 짓는다.
+// 근처 랜드마크를 검색해 붙여봤더니 여객선터미널 앞인데 "영일대해수욕장 앞", 대잠사거리인데 "○○치과의원 앞"처럼
+// 가장 가깝지만 엉뚱한 이름이 나왔다. 목적지 기준이면 항상 맞고 사용자도 바로 알아본다.
+function dropNameFor(userDest, walkDist){
+  return walkDist < 50 ? userDest : `${userDest} 인근`;
+}
+
+document.getElementById('btn-find-pod').addEventListener('click', async () => {
+  const nickname = document.getElementById('ob-nickname').value.trim();
+  if (!nickname) { document.getElementById('ob-nickname').focus(); return; }
+  const originInput = document.getElementById('ob-origin');
+  const destInput = document.getElementById('ob-dest');
+  const originName = originInput.value.trim();
+  const destName = destInput.value.trim();
+  // 자동완성으로 실좌표를 등록한 장소만 허용 (임의 텍스트로 좌표 없이 진행하면 이후 계산이 전부 죽는다)
+  if (!placeCoord(originName)) { originInput.focus(); return; }
+  if (!placeCoord(destName)) { destInput.focus(); return; }
+  STATE.user = {
+    id: 'u_' + Date.now(),
+    nickname,
+    gender: document.getElementById('ob-gender').value,
+    origin: originName,
+    dest: destName,
+    date: document.getElementById('ob-date').value,
+    time: document.getElementById('ob-time').value,
+    partySize: Number(document.getElementById('ob-size').value),
+  };
+  const btn = document.getElementById('btn-find-pod');
+  btn.disabled = true;
+  btn.textContent = '경로 확인 중…';
+  try {
+    await prefetchBaseRoutes(originName, destName);
+    STATE.pods = seedPods();
+    STATE.userState = '대기';
+    createOwnPod();
+    await Promise.all(STATE.pods.map(warmPodRoutes));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '택시팟 찾기';
+  }
+  renderHome();
+  showScreen('screen-home');
+});
+
+/* ============ 9. 화면 2: 홈 ============ */
+let sameDestFilter = false;
+document.getElementById('sort-select').addEventListener('change', renderPodList);
+document.getElementById('filter-same-dest').addEventListener('click', (e) => {
+  sameDestFilter = !sameDestFilter;
+  e.currentTarget.classList.toggle('active', sameDestFilter);
+  renderPodList();
+});
+
+function renderHome(){
+  const u = STATE.user, myPod = findPod(STATE.myPodId);
+  const isLeaderOfOwn = myPod && myPod.leaderId === u.id;
+  const card = document.getElementById('my-status-card');
+  card.innerHTML = `
+    <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
+    <strong>${u.origin} → ${u.dest}</strong>
+    <p>${u.date} ${u.time} 출발 · 원하는 인원 ${u.partySize}명${isLeaderOfOwn ? ' · 팟원이 모일 때까지는 내가 팟장이에요' : ''}</p>
+    <button class="btn btn--ghost btn--block" id="btn-my-pod-chat">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}</button>
+  `;
+  document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
+    renderPodChat(STATE.myPodId);
+    showScreen('screen-pod-chat');
+  });
+  renderPodList();
+}
+
+function statusLabel(){
+  const map = { '대기': '매칭 대기 중', '채팅방': '팟 채팅방', '팟확정': '팟 확정됨', '탑승': '이동 중', '완료': '완료' };
+  return map[STATE.userState] || STATE.userState;
+}
+
+function renderPodList(){
+  const u = STATE.user;
+  let list = STATE.pods.filter(p => p.id !== STATE.myPodId);
+  // 출발 시각이 지난 팟은 목록에서 뺀다. 사용자마다 자기 팟이 항상 하나씩 생기는 구조라
+  // 이걸 안 걸러내면 지난 팟이 계속 쌓인다.
+  list = list.filter(p => !isPodExpired(p));
+  if (sameDestFilter) list = list.filter(p => p.leaderDest === u.dest);
+
+  // 내 목적지가 경로 밖인 팟은 아예 안 보여준다. 참가할 수 없는 팟을 목록에 남기면
+  // "참가 불가" 카드만 늘어나서 고를 게 없어 보인다.
+  const allPreview = list.map(p => ({ pod: p, prev: previewJoin(p, u) }));
+  const blockedCount = allPreview.filter(x => !x.prev.eligible).length;
+  const withPreview = allPreview.filter(x => x.prev.eligible);
+
+  // 아직 경로를 못 받은 팟이 있으면 받아온 뒤 한 번 다시 그린다(그래야 목록 요금이 실제 값이 된다).
+  const pending = allPreview.filter(x => !cachedRoute([x.pod.originName, x.pod.leaderDest]));
+  if (pending.length) {
+    Promise.all(pending.map(x => warmPodRoutes(x.pod))).then(() => renderPodList());
+  }
+  const sortMode = document.getElementById('sort-select').value;
+  withPreview.sort((a, b) => {
+    if (sortMode === 'fare') {
+      const fa = a.prev.eligible ? a.prev.mine.fare : Infinity, fb = b.prev.eligible ? b.prev.mine.fare : Infinity;
+      return fa - fb;
+    }
+    if (sortMode === 'time') return timeToMin(a.pod.departTime) - timeToMin(b.pod.departTime);
+    if (sortMode === 'origin') return dist(placeCoord(u.origin), placeCoord(a.pod.originName)) - dist(placeCoord(u.origin), placeCoord(b.pod.originName));
+    return b.prev.matchScore.total - a.prev.matchScore.total; // match(기본)
+  });
+
+  const ul = document.getElementById('pod-list');
+  ul.innerHTML = '';
+  if (!withPreview.length) {
+    // 팟이 아예 없는 것과, 팟은 있는데 내 경로와 안 맞는 것은 사용자가 할 수 있는 행동이 다르다.
+    const msg = blockedCount
+      ? `내 목적지(${u.dest})가 지금 모집 중인 팟 ${blockedCount}개의 경로 안에 없어요. 내 팟에 다른 사람이 들어올 때까지 기다려 보세요.`
+      : '아직 추천 팟이 없어요. 다른 사람이 팟을 만들면 여기에 보여요.';
+    ul.innerHTML = `<li class="empty-hero"><span class="emoji">🚕</span><p class="page-sub">${msg}</p></li>`;
+    return;
+  }
+  withPreview.forEach(({ pod, prev }) => {
+    const li = document.createElement('li');
+    li.className = 'pod-card';
+    const blocked = STATE.committed && pod.id !== STATE.myPodId;
+    if (blocked) li.classList.add('is-blocked');
+    // 목록에는 참가 가능한 팟만 올라온다(위에서 걸러냈다).
+    const walkNote = prev.dropOff.walkTime > 0
+      ? ` · ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분`
+      : ` · ${prev.dropOff.point}에서 바로 하차`;
+    li.innerHTML = `
+      <div class="pod-card-top">
+        <strong>${pod.originName} → ${pod.leaderDest}</strong>
+      </div>
+      <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}</p>
+      <div class="pod-stats">
+        <div><strong>${won(prev.mine.fare)}</strong><span>예상 1인 요금</span></div>
+        <div><strong>${pod.participants.length}/${pod.desiredSize}</strong><span>현재 인원</span></div>
+        <div><strong>약 ${prev.myTaxiMins}분</strong><span>예상 소요</span></div>
+      </div>
+    `;
+    li.addEventListener('click', () => { renderPodDetail(pod.id); showScreen('screen-pod-detail'); });
+    ul.appendChild(li);
+  });
+}
+
+/* ============ 10. 화면 3: 팟 상세 (PRD 8번 레이아웃 순서) ============ */
+function renderPodDetail(podId){
+  const u = STATE.user, pod = findPod(podId);
+  document.getElementById('detail-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
+  document.getElementById('detail-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
+
+  const body = document.getElementById('detail-body');
+  const cta = document.getElementById('detail-cta');
+  const isOwnPod = pod.leaderId === u.id;
+  const prev = previewJoin(pod, u);
+
+  // 1) 경로+시각+인원
+  let html = `
+    <div class="info-box">
+      <div class="callout">${pod.originName} → ${pod.leaderDest}</div>
+      <p class="fine-note">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명 모집</p>
+    </div>
+  `;
+
+  if (!prev.eligible) {
+    // 경로 이탈: 지도까지만 보여주고 이후는 참가 불가 안내로 대체
+    const fallbackStop = pod.routeStops[pod.routeStops.length - 1];
+    const map1 = mapContainerHTML();
+    html += `<div class="map-card">${map1.html}</div>`;
+    html += `
+      <div class="info-box is-danger">
+        <h3 style="color:var(--danger);">참가할 수 없어요</h3>
+        <p class="fine-note" style="color:var(--danger);">내 목적지(${u.dest})가 팟장의 경로 안에 없어요. 팟장의 최종 목적지(${pod.leaderDest})를 지나쳐야 갈 수 있는 곳이라 이 팟에는 참가할 수 없어요.</p>
+      </div>
+    `;
+    body.innerHTML = html;
+    paintRouteMap(map1.id, { stops: pod.routeStops, originName: pod.originName, leaderDest: pod.leaderDest, dropPoint: fallbackStop, myDest: fallbackStop });
+    cta.innerHTML = `<button class="btn btn--ghost btn--block" id="btn-back-home">다른 팟 보기</button>`;
+    document.getElementById('btn-back-home').addEventListener('click', () => showScreen('screen-home'));
+    return;
+  }
+
+  // 2) 지도: 팟출발지(초록) / 팟장목적지(파랑) / 내 추천 하차지점(주황) / 내 목적지(핀) / 택시경로(실선) / 도보경로(별도)
+  const map2 = mapContainerHTML({ large: true });
+  html += `
+    <div class="map-card">
+      ${map2.html}
+      <div class="map-legend">
+        <span><span class="legend-dot" style="background:var(--green);"></span>출발지</span>
+        <span><span class="legend-dot" style="background:var(--orange);"></span>내 하차지점</span>
+        <span><span class="legend-dot" style="background:#5b6478;"></span>다른 사람 하차</span>
+        <span><span class="legend-dot" style="background:var(--blue);"></span>종점(팟장 목적지)</span>
+        <span id="${map2.id}_legend">실선: 경로 조회 중… / 점선: 도보 경로</span>
+      </div>
+    </div>
+  `;
+
+  // 3) 내 이동 정보 (택시구간+도보구간+예상 소요시간, 구분선으로 그룹핑)
+  html += `
+    <div class="info-box">
+      <h3>내 이동</h3>
+      <p class="callout">택시: ${pod.originName} → ${prev.dropOff.point} 하차 / 도보 ${prev.dropOff.walkTime}분 · ${prev.dropOff.walkDist}m</p>
+      <p class="fine-note">내 목적지: ${u.dest}</p>
+      <p class="fine-note" style="margin-top:8px; color:var(--primary-dark); font-weight:700;">${prev.dropOff.walkTime > 0
+        ? `여기서 내리면 목적지까지 도보 ${prev.dropOff.walkTime}분이에요.`
+        : '하차지점이 곧 내 목적지예요. 더 걷지 않아도 돼요.'}</p>
+      <p class="info-row" style="border-top:1px solid var(--line); margin-top:12px; padding-top:12px;"><span>예상 택시 시간</span><strong>약 ${prev.myTaxiMins}분</strong></p>
+      <div class="kakao-link-row">
+        <a class="btn btn--ghost btn--sm" target="_blank" rel="noopener"
+           href="${kakaoMapPlaceUrl(prev.dropOff.point)}">🗺️ 하차지점 위치 보기</a>
+        ${prev.dropOff.walkTime > 0 ? `<a class="btn btn--ghost btn--sm" target="_blank" rel="noopener"
+           href="${kakaoMapRouteUrl(u.dest)}">🚶 목적지까지 길찾기</a>` : ''}
+      </div>
+    </div>
+  `;
+
+  // 4) 1인 예상 요금 (핵심 수치라 카드 유지, 여백을 더 줘 강조)
+  html += `
+    <div class="info-box" style="margin-top:20px;">
+      <h3>1인 예상 요금</h3>
+      <p class="info-row info-row--highlight"><span>나의 예상 부담금</span><strong>${won(prev.mine.fare)}</strong></p>
+      <p class="fine-note">참여자와 최종 경로에 따라 달라질 수 있어요.</p>
+    </div>
+  `;
+
+  body.innerHTML = html;
+  // 실제 경로가 아직 없으면, 응답이 온 뒤 실제 요금으로 한 번 다시 그린다.
+  // (그때는 캐시에 값이 있어 onRoute를 넘기지 않으므로 재귀하지 않는다)
+  const needsRefresh = !cachedRoute([pod.originName, pod.leaderDest]);
+  // 지도에는 실제로 사람이 내리는 지점만 찍는다(내가 참가했을 때 기준).
+  const ridersAt = {};
+  prev.result.perPerson.forEach(p => {
+    (ridersAt[p.dropPoint] = ridersAt[p.dropPoint] || []).push(p.id === '__me__' ? '나' : p.nickname);
+  });
+  paintRouteMap(map2.id, {
+    stops: prev.result.stops, originName: pod.originName, leaderDest: pod.leaderDest,
+    dropPoint: prev.dropOff.point, myDest: u.dest, riders: ridersAt,
+    onRoute: needsRefresh ? (route => { if (route) renderPodDetail(podId); }) : null,
+  });
+
+  // 6) 참가하기 버튼 (상태별 분기)
+  if (isOwnPod) {
+    cta.innerHTML = `<button class="btn btn--ghost btn--block" id="btn-goto-chat">내 팟이에요 · 채팅방 보기</button>`;
+    document.getElementById('btn-goto-chat').addEventListener('click', () => { renderPodChat(pod.id); showScreen('screen-pod-chat'); });
+  } else if (STATE.committed && pod.id === STATE.myPodId) {
+    cta.innerHTML = `<button class="btn btn--ghost btn--block" id="btn-goto-chat">이미 참가 중인 팟이에요 · 채팅방 보기</button>`;
+    document.getElementById('btn-goto-chat').addEventListener('click', () => { renderPodChat(pod.id); showScreen('screen-pod-chat'); });
+  } else if (STATE.committed && pod.id !== STATE.myPodId) {
+    cta.innerHTML = `<button class="btn btn--primary btn--block" disabled>이미 참여 중인 팟이 있어요</button>`;
+  } else {
+    cta.innerHTML = `<button class="btn btn--primary btn--block" id="btn-join-pod">참가하기</button>`;
+    document.getElementById('btn-join-pod').addEventListener('click', () => {
+      openModal({
+        title: '이 팟에 참가할까요?',
+        body: `${pod.originName} → ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분, 예상 부담금 ${won(prev.mine.fare)}. 참가하면 바로 채팅방으로 이동해요.`,
+        confirmLabel: '참가하기',
+        onConfirm: () => {
+          joinPod(pod);
+          renderPodChat(pod.id);
+          showScreen('screen-pod-chat');
+        },
+      });
+    });
+  }
+}
+
+/* ============ 11. 화면 4: 팟 채팅방 ============ */
+function renderPodChat(podId){
+  const u = STATE.user, pod = findPod(podId);
+  document.getElementById('chat-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
+  document.getElementById('chat-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
+
+  const result = calcFinalRouteAndFare(pod);
+  const fareMap = {}; result.perPerson.forEach(p => fareMap[p.id] = p);
+
+  let html = `<div class="info-box"><h3>참여자</h3><div id="chat-participants"></div></div>`;
+  html += `
+    <div class="info-box">
+      <h3>경로 요약</h3>
+      <p class="info-row"><span>출발</span><strong>${pod.originName}</strong></p>
+      <p class="info-row"><span>팟장 목적지</span><strong>${pod.leaderDest}</strong></p>
+      <p class="info-row"><span>출발 시간</span><strong>${pod.departTime}</strong></p>
+      <p class="info-row"><span>예상 택시 시간</span><strong>약 ${result.totalMins}분</strong></p>
+    </div>
+  `;
+  html += `<span class="section-label">채팅</span><div class="chat-box" id="chat-messages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="chat-input" placeholder="탑승 장소 등을 조율해보세요" maxlength="200">
+      <button class="btn btn--primary btn--sm" id="btn-chat-send">전송</button>
+    </div>`;
+
+  document.getElementById('chat-body').innerHTML = html;
+
+  const pWrap = document.getElementById('chat-participants');
+  pWrap.innerHTML = '';
+  pod.participants.forEach(p => {
+    const f = fareMap[p.id];
+    const row = document.createElement('div');
+    row.className = 'participant-row';
+    row.innerHTML = `
+      <span class="avatar">${p.nickname.slice(0, 1)}</span>
+      <div class="participant-info">
+        <span class="p-name">${p.nickname}
+          ${p.id === pod.leaderId ? '<span class="badge badge--leader">팟장</span>' : ''}
+          ${p.id === u.id ? '<span class="badge badge--me">나</span>' : ''}
+        </span>
+        <p>${p.gender} · 목적지 ${p.dest} · 하차 ${f.dropPoint}(도보 ${f.walkTime}분) · 예상 ${won(f.fare)}</p>
+      </div>
+    `;
+    pWrap.appendChild(row);
+  });
+
+  // 채팅 메시지 렌더
+  if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
+  if (STATE.chatMessages[podId].length === 0) {
+    STATE.chatMessages[podId].push({ who: pod.participants[0].nickname, mine: false, text: '안녕하세요! 탑승 장소는 정문 앞에서 만나요 :)' });
+  }
+  const msgWrap = document.getElementById('chat-messages');
+  msgWrap.innerHTML = '';
+  STATE.chatMessages[podId].forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + (m.mine ? 'me' : 'other');
+    div.innerHTML = (m.mine ? '' : `<span class="chat-name">${m.who}</span>`) + m.text;
+    msgWrap.appendChild(div);
+  });
+  msgWrap.scrollTop = msgWrap.scrollHeight;
+
+  document.getElementById('btn-chat-send').addEventListener('click', sendChat);
+  document.getElementById('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+  function sendChat(){
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text });
+    input.value = '';
+    renderPodChat(podId);
+  }
+
+  // CTA: 팟장에게만 확정하기, 확정 전에만 팟 취소
+  const isLeader = pod.leaderId === u.id;
+  const ctaEl = document.getElementById('chat-cta');
+  let ctaHtml = '';
+  if (isLeader && pod.status === 'recruiting') {
+    ctaHtml += `<button class="btn btn--primary btn--block" id="btn-confirm-pod">팟 확정하기</button>`;
+    ctaHtml += `<button class="btn btn--danger btn--block" id="btn-cancel-pod">팟 취소</button>`;
+  } else if (pod.status !== 'recruiting') {
+    ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
+  }
+  ctaEl.innerHTML = ctaHtml;
+
+  const confirmBtn = document.getElementById('btn-confirm-pod');
+  if (confirmBtn) confirmBtn.addEventListener('click', () => {
+    openModal({
+      title: '팟을 확정할까요?',
+      body: `현재 ${pod.participants.length}명으로 팟을 확정해요. 확정 후에는 최종 경로와 요금이 계산되고, 팟을 취소할 수 없어요.`,
+      confirmLabel: '확정하기',
+      onConfirm: () => {
+        pod.status = 'confirmed';
+        pod.finalResult = calcFinalRouteAndFare(pod);
+        STATE.userState = '팟확정';
+        renderFinal(pod.id);
+        showScreen('screen-final');
+      },
+    });
+  });
+  const cancelBtn = document.getElementById('btn-cancel-pod');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => {
+    openModal({
+      title: '팟을 취소할까요?',
+      body: '팟이 해체되고, 참여자 전원은 다시 매칭 대기 화면으로 돌아가요. 되돌릴 수 없어요.',
+      confirmLabel: '팟 취소하기',
+      danger: true,
+      onConfirm: () => {
+        dissolvePod(pod);
+        renderHome();
+        showScreen('screen-home');
+      },
+    });
+  });
+  const viewFinalBtn = document.getElementById('btn-view-final');
+  if (viewFinalBtn) viewFinalBtn.addEventListener('click', () => { renderFinal(pod.id); showScreen('screen-final'); });
+}
+
+/* ============ 12. 화면 5: 최종 경로 / 요금 ============ */
+function renderFinal(podId){
+  const pod = findPod(podId);
+  let result = pod.finalResult || calcFinalRouteAndFare(pod);
+  // 확정 시점엔 추정요금이었더라도, 그 사이 실제 경로가 도착했으면 실제 요금으로 다시 계산한다.
+  if (!result.isRealFare && cachedRoute([pod.originName, pod.leaderDest])) result = calcFinalRouteAndFare(pod);
+  pod.finalResult = result;
+
+  const finalStop = result.stops[result.stops.length - 1];
+  // 최종 화면에서도 "내 하차"는 나를 기준으로 표시한다(경로 종점이 아니라).
+  const mine = result.perPerson.find(p => p.id === STATE.user.id);
+  const myFinalDrop = mine ? mine.dropPoint : finalStop;
+  const map3 = mapContainerHTML({ large: true });
+  let html = `<div class="map-card">${map3.html}</div>`;
+
+  html += `<div class="info-box"><h3>최종 경로</h3>`;
+  result.stops.forEach((s, i) => {
+    if (i === 0) {
+      html += `<div class="stop-row"><span class="stop-num">${i + 1}</span><div><strong>${s}</strong><p>출발</p></div></div>`;
+      return;
+    }
+    const riders = result.perPerson.filter(p => p.dropPoint === s).map(p => p.nickname).join(', ');
+    const walk = result.perPerson.find(p => p.dropPoint === s);
+    html += `<div class="stop-row"><span class="stop-num">${i + 1}</span><div><strong>${s} 하차</strong><p>${riders} · 도보 ${walk ? walk.walkTime : 0}분</p></div></div>`;
+  });
+  html += `</div>`;
+
+  html += `<div class="info-box"><h3>예상 요금</h3>
+    <p class="info-row info-row--highlight"><span>총 예상 요금</span><strong>${won(result.totalFare)}</strong></p>`;
+  result.perPerson.forEach(p => {
+    html += `<p class="info-row"><span>${p.nickname}</span><strong>${won(p.fare)}</strong></p>`;
+  });
+  html += `<p class="fine-note" style="margin-top:8px;">${result.isRealFare
+    ? '카카오내비 경로 기준 예상 요금이에요. 실제 요금은 교통상황에 따라 달라질 수 있어요.'
+    : '경로 조회에 실패해 추정 요금으로 계산했어요. 실제 요금과 차이가 클 수 있어요.'}</p></div>`;
+
+  document.getElementById('final-body').innerHTML = html;
+  const needsRefresh = !cachedRoute([pod.originName, pod.leaderDest]);
+  const ridersAt3 = {};
+  result.perPerson.forEach(p => { (ridersAt3[p.dropPoint] = ridersAt3[p.dropPoint] || []).push(p.nickname); });
+  paintRouteMap(map3.id, {
+    stops: result.stops, originName: pod.originName, leaderDest: pod.leaderDest,
+    dropPoint: myFinalDrop, myDest: STATE.user.dest, riders: ridersAt3,
+    onRoute: needsRefresh ? (route => { if (route) { pod.finalResult = null; renderFinal(podId); } }) : null,
+  });
+}
+
+document.getElementById('btn-start-ride').addEventListener('click', () => {
+  const pod = findPod(STATE.myPodId);
+  pod.status = 'in_progress';
+  STATE.userState = '탑승';
+  renderSettlement(pod.id);
+  showScreen('screen-settlement');
+});
+
+/* ============ 13. 화면 6: 정산 ============ */
+function renderSettlement(podId){
+  const pod = findPod(podId);
+  const result = pod.finalResult;
+  let html = `
+    <p class="info-row" style="border-top:none; padding:0 0 20px;"><span>예상 총액 (참고)</span><strong>${won(result.totalFare)}</strong></p>
+    <div class="field">
+      <label for="actual-fare">실제 택시비 (원)</label>
+      <input type="number" id="actual-fare" min="0" step="100" placeholder="예: ${result.totalFare}">
+    </div>
+    <button class="btn btn--ghost btn--block" id="btn-calc-settlement" style="margin:12px 0 18px;">정산금액 계산하기</button>
+    <div class="info-box" id="settlement-result" hidden>
+      <h3>인당 정산금</h3>
+      <div id="settlement-list"></div>
+    </div>
+    <div class="field" id="account-field" hidden>
+      <label for="account-number">입금 계좌번호</label>
+      <input type="text" id="account-number" placeholder="은행명 계좌번호 (예: 탄만은행 123-4567)">
+    </div>
+    <button class="btn btn--ghost btn--block" id="btn-share-account" hidden>계좌번호 공유하기</button>
+    <p class="fine-note" id="share-confirm-note" style="margin-top:10px;"></p>
+  `;
+  document.getElementById('settlement-body').innerHTML = html;
+  document.getElementById('btn-finish-pod').disabled = true;
+
+  document.getElementById('btn-calc-settlement').addEventListener('click', () => {
+    const input = document.getElementById('actual-fare');
+    const actual = Number(input.value) || 0;
+    if (actual <= 0) { input.focus(); return; }
+    const weights = result.perPerson.map(p => p.fare);
+    const shares = splitProportional(actual, weights);
+    pod.settlement = result.perPerson.map((p, i) => ({ nickname: p.nickname, amount: shares[i] }));
+
+    const listEl = document.getElementById('settlement-list');
+    listEl.innerHTML = `<p class="callout">총 ${won(actual)}</p>`;
+    pod.settlement.forEach(s => {
+      listEl.innerHTML += `<p class="info-row"><span>${s.nickname}</span><strong>${won(s.amount)}</strong></p>`;
+    });
+    document.getElementById('settlement-result').hidden = false;
+    document.getElementById('account-field').hidden = false;
+    document.getElementById('btn-share-account').hidden = false;
+  });
+
+  document.getElementById('btn-share-account').addEventListener('click', () => {
+    const acc = document.getElementById('account-number').value.trim();
+    if (!acc) { document.getElementById('account-number').focus(); return; }
+    openModal({
+      title: '계좌번호를 공유할까요?',
+      body: `채팅방에 "${acc}" 계좌로 각자 정산금을 입금해달라고 안내해요.`,
+      confirmLabel: '공유하기',
+      onConfirm: () => {
+        document.getElementById('share-confirm-note').textContent = `채팅방에 계좌(${acc})와 정산 내역이 공유됐어요. 각자 계좌이체로 정산해주세요.`;
+        document.getElementById('btn-finish-pod').disabled = false;
+      },
+    });
+  });
+}
+
+document.getElementById('btn-finish-pod').addEventListener('click', () => {
+  const pod = findPod(STATE.myPodId);
+  openModal({
+    title: '정산을 완료하고 팟을 종료할까요?',
+    body: '팟이 완료 상태로 바뀌고, 다시 참가할 수 없어요.',
+    confirmLabel: '팟 종료하기',
+    onConfirm: () => {
+      pod.status = 'done';
+      STATE.userState = '완료';
+      showScreen('screen-done');
+    },
+  });
+});
+
+/* ============ 14. 화면 7: 완료 → 재매칭 ============ */
+document.getElementById('btn-rematch').addEventListener('click', () => {
+  STATE.myPodId = null;
+  STATE.committed = false;
+  createOwnPod();
+  STATE.userState = '대기';
+  renderHome();
+  showScreen('screen-home');
+});
+
+</script>
+</body>
+</html>
