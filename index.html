@@ -24,16 +24,17 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 <style>
   :root{
     --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif;
-    --ink:#15172b; --ink-soft:#5b5f7a; --muted:#686c86;
-    --paper:#f3f3fa; --surface:#ffffff; --line:#e6e6f0;
-    --primary:#4d3df0; --primary-dark:#3a2cc9; --primary-soft:#ecebfe; --on-primary:#ffffff;
+    --ink:#354153; --ink-soft:#697383; --muted:#697383;
+    --paper:#ffffff; --surface:#ffffff; --line:#e5e8ef;
+    --fill:#f2f3f8; --placeholder:#b4bbcb;
+    --primary:#0078ff; --primary-dark:#0060cc; --primary-soft:#e6f2ff; --on-primary:#ffffff;
     --green:#137a52; --green-soft:#e1f5ec;
     --blue:#1c64d1; --blue-soft:#e3edfd;
     --orange:#9c5008; --orange-soft:#fdecd8;
     --danger:#c23b3b; --danger-soft:#fbe9e9;
     --pending:#7a6100; --pending-soft:#fbf1cf;
-    --radius-card:20px; --radius-input:14px; --radius-pill:999px;
-    --shadow-card: 0 1px 2px rgba(21,23,43,.05), 0 8px 24px -12px rgba(21,23,43,.18);
+    --radius-card:16px; --radius-input:12px; --radius-chip:14px; --radius-pill:999px;
+    --shadow-card: 0px 4px 8px 0px rgba(0,0,0,0.1);
   }
   @media (prefers-color-scheme: dark){
     :root{
@@ -69,7 +70,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   .topbar{ display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line); flex-shrink:0; background:var(--surface); }
   .topbar--brand{ border-bottom:none; background:transparent; padding-bottom:4px; }
-  .brand-mark{ font-size:20px; font-weight:800; letter-spacing:-0.02em; cursor:pointer; }
+  .brand-mark{ font-size:20px; font-weight:800; cursor:pointer; }
   .brand-mark--icon{ display:inline-flex; align-items:center; gap:8px; }
   .brand-mark-icon{ width:46px; height:16px; flex-shrink:0; }
   .brand-word b{ color:var(--primary); font-weight:inherit; }
@@ -82,9 +83,9 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   .screen-body{ flex:1; overflow-y:auto; padding:20px 20px 28px; -webkit-overflow-scrolling:touch; }
 
-  .page-title{ font-size:27px; line-height:1.24; font-weight:800; letter-spacing:-0.03em; margin:4px 0 10px; }
+  .page-title{ font-size:26px; line-height:1.38; font-weight:700; margin:4px 0 10px; }
   .page-sub{ font-size:14.5px; line-height:1.65; font-weight:400; color:var(--ink-soft); margin:0 0 20px; }
-  .section-label{ font-size:12.5px; font-weight:700; letter-spacing:-0.01em; color:var(--ink-soft); margin:0 0 8px; display:block; }
+  .section-label{ font-size:12.5px; font-weight:700; color:var(--ink-soft); margin:0 0 8px; display:block; }
 
   .form{ display:flex; flex-direction:column; gap:16px; }
   .field{ display:flex; flex-direction:column; gap:6px; }
@@ -94,7 +95,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     padding:0 14px; font-size:16px; outline:none; width:100%;
   }
   .field select:focus, .field input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
-  .field input::placeholder, .chat-input-row input::placeholder{ color:var(--muted); opacity:1; }
+  .field input::placeholder, .chat-input-row input::placeholder{ color:var(--placeholder); opacity:1; }
   .field-row{ display:flex; gap:10px; }
   .field-row .field{ flex:1; min-width:0; }
   .hint-box{ background:var(--primary-soft); color:var(--primary-dark); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
@@ -107,7 +108,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     stroke-dasharray:168; stroke-dashoffset:168; animation:line-draw .55s .1s ease-out forwards; }
   .splash-dot{ fill:var(--primary); transform-origin:18px 26px; transform:scale(0); animation:pop .3s .05s cubic-bezier(.16,1,.3,1) forwards; }
   .splash-pin{ fill:var(--primary); transform-origin:186px 40px; transform:scale(0); animation:pop .38s .6s cubic-bezier(.16,1,.3,1) forwards; }
-  .splash-word{ display:flex; gap:2px; margin:14px 0 0; font-size:64px; line-height:1.1; font-weight:800; letter-spacing:-0.04em; }
+  .splash-word{ display:flex; gap:2px; margin:14px 0 0; font-size:64px; line-height:1.1; font-weight:800; }
   .splash-ch{ opacity:0; transform:translateY(14px); animation:rise .42s cubic-bezier(.2,.7,.3,1) forwards; }
   .splash-ch:nth-child(1){ animation-delay:.78s; }
   .splash-ch:nth-child(2){ animation-delay:.88s; }
@@ -181,7 +182,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chip-row--collapsible{ display:none; }
   .chip-row--collapsible.is-open{ display:flex; }
   .chip{ font:inherit; font-size:13px; font-weight:600; color:var(--ink-soft); background:var(--paper);
-         border:1px solid var(--line); border-radius:999px; padding:10px 14px; cursor:pointer; }
+         border:1px solid var(--line); border-radius:var(--radius-chip); padding:10px 14px; cursor:pointer; }
   .chip:hover{ border-color:var(--primary); color:var(--primary); }
   .chip[aria-pressed="true"]{ background:var(--primary); border-color:var(--primary); color:#fff; }
   .autocomplete-list{ position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:20; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-input); box-shadow:var(--shadow-card); max-height:220px; overflow-y:auto; }
@@ -190,10 +191,10 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .autocomplete-item:first-child{ border-top:none; }
   .autocomplete-item:hover, .autocomplete-item:active{ background:var(--primary-soft); }
 
-  .btn{ appearance:none; border:none; cursor:pointer; font-weight:700; font-size:15px; border-radius:var(--radius-pill); padding:0 20px; height:48px; display:inline-flex; align-items:center; justify-content:center; gap:6px; transition:transform 160ms cubic-bezier(0.23,1,0.32,1), opacity 160ms ease; }
+  .btn{ appearance:none; border:none; cursor:pointer; font-weight:600; font-size:15px; border-radius:var(--radius-input); padding:0 18px; height:48px; display:inline-flex; align-items:center; justify-content:center; gap:6px; transition:transform 160ms cubic-bezier(0.23,1,0.32,1), opacity 160ms ease; }
   .btn:active{ transform:scale(.98); }
   .btn--primary{ background:var(--primary); color:var(--on-primary); }
-  .btn--primary:disabled{ opacity:.4; cursor:not-allowed; transform:none; }
+  .btn--primary:disabled{ background:var(--fill); color:var(--placeholder); cursor:not-allowed; transform:none; }
   .btn--ghost{ background:var(--surface); color:var(--ink); border:1px solid var(--line); }
   .btn--danger{ background:var(--danger); color:#fff; }
   .btn--sm{ padding:0 16px; font-size:13px; white-space:nowrap; height:38px; }
@@ -203,28 +204,28 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .cta-dock{ flex-shrink:0; padding:14px 20px calc(20px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); display:flex; flex-direction:column; gap:10px; }
 
   .status-card{ background:var(--primary-soft); border-radius:var(--radius-card); padding:18px 20px; margin-bottom:24px;
-    box-shadow:0 1px 2px rgba(21,23,43,.04), 0 12px 28px -14px var(--primary); }
+    box-shadow:var(--shadow-card); }
   .status-card .status-tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:9px; }
   .status-dot{ width:7px; height:7px; border-radius:50%; background:var(--primary); animation:pulse 1.4s ease-in-out infinite; }
   @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
-  .status-card strong{ display:block; font-size:19px; font-weight:800; letter-spacing:-0.01em; margin-bottom:5px; }
+  .status-card strong{ display:block; font-size:19px; font-weight:800; margin-bottom:5px; }
   .status-card p{ font-size:12.5px; color:var(--ink-soft); margin:0 0 14px; line-height:1.5; }
 
   .select-row{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
   .select-row select{ flex:1; min-width:120px; height:40px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:12.5px; padding:0 8px; }
-  .filter-chip{ appearance:none; cursor:pointer; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:12.5px; font-weight:700; padding:0 14px; height:36px; border-radius:var(--radius-pill); transition:transform 160ms cubic-bezier(0.23,1,0.32,1); }
+  .filter-chip{ appearance:none; cursor:pointer; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:12.5px; font-weight:700; padding:0 14px; height:36px; border-radius:var(--radius-chip); transition:transform 160ms cubic-bezier(0.23,1,0.32,1); }
   .filter-chip:active{ transform:scale(.96); }
   .filter-chip.active{ background:var(--primary); border-color:var(--primary); color:var(--on-primary); }
 
   .pod-list{ display:flex; flex-direction:column; gap:12px; }
-  .pod-card{ border:1px solid var(--line); background:var(--surface); border-radius:var(--radius-card); padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:var(--shadow-card); cursor:pointer;
+  .pod-card{ background:var(--surface); border-radius:var(--radius-card); padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:var(--shadow-card); cursor:pointer;
     animation:pod-card-in 360ms cubic-bezier(0.23,1,0.32,1) backwards; animation-delay:calc(var(--i, 0) * 45ms); }
   @keyframes pod-card-in{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
   @media (prefers-reduced-motion:reduce){ .pod-card{ animation:none; } }
   .pod-card:active{ transform:scale(.99); }
   .pod-card.is-blocked{ opacity:.55; }
   .pod-card-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .pod-card-top strong{ font-size:16px; font-weight:800; letter-spacing:-0.01em; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pod-card-top strong{ font-size:16px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pod-card-leader{ flex-shrink:0; display:inline-flex; align-items:center; font-size:11px; font-weight:700;
     padding:4px 10px; border-radius:var(--radius-pill); background:var(--orange-soft); color:var(--orange); white-space:nowrap; }
   .pod-meta{ font-size:12.5px; color:var(--muted); }
@@ -243,7 +244,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .badge--confirmed{ background:var(--green-soft); color:var(--green); }
   .badge--done{ background:var(--line); color:var(--ink-soft); }
 
-  .map-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); padding:12px; margin-bottom:16px; }
+  .map-card{ background:var(--surface); border-radius:var(--radius-card); padding:12px; margin-bottom:16px; box-shadow:var(--shadow-card); }
   .kakao-map-box{ width:100%; height:220px; border-radius:var(--radius-input); overflow:hidden; background:var(--paper); }
   /* 팟 상세는 경로를 눈으로 따라가는 화면이라 지도를 크게 잡는다. */
   .kakao-map-box--lg{ height:380px; }
@@ -251,8 +252,8 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .map-legend span{ display:inline-flex; align-items:center; gap:4px; }
   .legend-dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
 
-  .info-box{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); padding:16px; margin-bottom:16px; }
-  .info-box.is-danger{ background:var(--danger-soft); border-color:var(--danger); }
+  .info-box{ background:var(--surface); border-radius:var(--radius-card); padding:16px; margin-bottom:16px; box-shadow:var(--shadow-card); }
+  .info-box.is-danger{ background:var(--danger-soft); box-shadow:none; border:1px solid var(--danger); }
   .info-box h3{ font-size:13px; font-weight:700; color:var(--ink-soft); margin:0 0 10px; }
   .info-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:13.5px; color:var(--ink-soft); padding:6px 0; }
   .info-row strong{ color:var(--ink); font-size:14.5px; text-align:right; }
@@ -273,13 +274,13 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chat-msg.me{ align-self:flex-end; background:var(--primary); color:var(--on-primary); border-bottom-right-radius:4px; }
   .chat-msg .chat-name{ display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:2px; }
   .chat-input-row{ display:flex; gap:8px; }
-  .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-pill); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:16px; }
+  .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:16px; }
   /* 채팅이 아직 없을 때: 가짜 인사말 대신 무슨 말을 하면 좋을지 추천만 해준다. */
   .chat-empty{ text-align:center; padding:22px 12px 6px; color:var(--muted); }
   .chat-empty p{ font-size:13px; margin:0 0 12px; }
   .chat-suggest-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
   .chat-suggest{ font:inherit; font-size:12.5px; font-weight:600; color:var(--primary-dark); background:var(--primary-soft);
-    border:none; border-radius:999px; padding:8px 13px; cursor:pointer; }
+    border:none; border-radius:var(--radius-chip); padding:8px 13px; cursor:pointer; }
   .chat-suggest:hover{ background:var(--primary); color:#fff; }
   /* 남은 자리: 실제 사람이 없는 빈 좌석을 점선 카드로 보여준다 */
   .participant-row--empty{ color:var(--muted); font-size:13px; align-items:center; }
@@ -297,7 +298,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .modal-overlay{ position:fixed; inset:0; background:rgba(15,16,32,.5); display:flex; align-items:center; justify-content:center; padding:24px; z-index:100; }
   .modal-overlay[hidden]{ display:none; }
   .modal-card{ width:100%; max-width:340px; background:var(--surface); border-radius:var(--radius-card); padding:22px; box-shadow:var(--shadow-card); }
-  .modal-card h2{ font-size:17px; font-weight:800; margin:0 0 8px; }
+  .modal-card h2{ font-size:16px; font-weight:600; margin:0 0 8px; }
   .modal-card p{ font-size:13.5px; color:var(--ink-soft); line-height:1.6; margin:0; }
   .modal-actions{ display:flex; gap:10px; margin-top:20px; }
   .modal-actions .btn{ flex:1; height:44px; font-size:14px; }
