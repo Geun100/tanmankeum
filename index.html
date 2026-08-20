@@ -24,28 +24,28 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 <style>
   :root{
     --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif;
-    --ink:#15172b; --ink-soft:#5b5f7a; --muted:#686c86;
-    --paper:#f3f3fa; --surface:#ffffff; --line:#e6e6f0;
-    --primary:#4d3df0; --primary-dark:#3a2cc9; --primary-soft:#ecebfe; --on-primary:#ffffff;
+    --ink:#354153; --ink-soft:#697383; --muted:#697383; --placeholder:#b4bbcb;
+    --paper:#ffffff; --surface:#ffffff; --surface-alt:#f9f9fb; --line:#e5e8ef; --input-fill:#f2f3f8;
+    --primary:#0078ff; --primary-dark:#0062d1; --primary-soft:#e6f2ff; --on-primary:#ffffff;
     --green:#137a52; --green-soft:#e1f5ec;
     --blue:#1c64d1; --blue-soft:#e3edfd;
     --orange:#9c5008; --orange-soft:#fdecd8;
     --danger:#c23b3b; --danger-soft:#fbe9e9;
     --pending:#7a6100; --pending-soft:#fbf1cf;
-    --radius-card:20px; --radius-input:14px; --radius-pill:999px;
-    --shadow-card: 0 1px 2px rgba(21,23,43,.05), 0 8px 24px -12px rgba(21,23,43,.18);
+    --radius-card:16px; --radius-input:12px; --radius-chip:14px;
+    --shadow-card: 0 4px 8px rgba(0,0,0,.1);
   }
   @media (prefers-color-scheme: dark){
     :root{
-      --ink:#eef0fb; --ink-soft:#b7bad2; --muted:#7d80a0;
-      --paper:#0f1020; --surface:#181a2e; --line:#2a2c46;
-      --primary:#8478ff; --primary-dark:#9992ff; --primary-soft:#232253; --on-primary:#0f1020;
+      --ink:#eef0fb; --ink-soft:#b7bad2; --muted:#7d80a0; --placeholder:#7d80a0;
+      --paper:#0f1020; --surface:#181a2e; --surface-alt:#181a2e; --line:#2a2c46; --input-fill:#20223a;
+      --primary:#5aa9ff; --primary-dark:#7ec2ff; --primary-soft:#132840; --on-primary:#0f1020;
       --green:#4fd6a0; --green-soft:#123328;
       --blue:#6ea3ff; --blue-soft:#122a4d;
       --orange:#ffb15c; --orange-soft:#3a2a11;
       --danger-soft:#3a1414;
       --pending:#e6c260; --pending-soft:#332a0c;
-      --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+      --shadow-card: 0 4px 8px rgba(0,0,0,.4);
     }
   }
   *{ box-sizing:border-box; }
@@ -69,19 +69,19 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   .topbar{ display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line); flex-shrink:0; background:var(--surface); }
   .topbar--brand{ border-bottom:none; background:transparent; padding-bottom:4px; }
-  .brand-mark{ font-size:20px; font-weight:800; letter-spacing:-0.02em; cursor:pointer; }
+  .brand-mark{ font-size:20px; font-weight:700; cursor:pointer; }
   .topbar-title{ display:flex; flex-direction:column; line-height:1.25; min-width:0; }
   .topbar-title strong{ font-size:15px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .topbar-title span{ font-size:12px; color:var(--muted); }
 
-  .icon-btn{ width:36px; height:36px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-pill); border:1px solid var(--line); background:var(--surface); color:var(--ink); cursor:pointer; }
+  .icon-btn{ width:36px; height:36px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); cursor:pointer; }
   .icon-btn:active{ transform:scale(.96); }
 
   .screen-body{ flex:1; overflow-y:auto; padding:20px 20px 28px; -webkit-overflow-scrolling:touch; }
 
-  .page-title{ font-size:27px; line-height:1.24; font-weight:800; letter-spacing:-0.03em; margin:4px 0 10px; }
+  .page-title{ font-size:26px; line-height:1.38; font-weight:700; margin:4px 0 10px; }
   .page-sub{ font-size:14.5px; line-height:1.65; font-weight:400; color:var(--ink-soft); margin:0 0 20px; }
-  .section-label{ font-size:12.5px; font-weight:700; letter-spacing:-0.01em; color:var(--ink-soft); margin:0 0 8px; display:block; }
+  .section-label{ font-size:12.5px; font-weight:700; color:var(--ink-soft); margin:0 0 8px; display:block; }
 
   .form{ display:flex; flex-direction:column; gap:16px; }
   .field{ display:flex; flex-direction:column; gap:6px; }
@@ -91,10 +91,10 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     padding:0 14px; font-size:16px; outline:none; width:100%;
   }
   .field select:focus, .field input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
-  .field input::placeholder, .chat-input-row input::placeholder{ color:var(--muted); opacity:1; }
+  .field input::placeholder, .chat-input-row input::placeholder{ color:var(--placeholder); opacity:1; }
   .field-row{ display:flex; gap:10px; }
   .field-row .field{ flex:1; min-width:0; }
-  .hint-box{ background:var(--primary-soft); color:var(--primary-dark); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
+  .hint-box{ background:var(--surface-alt); border:1px solid var(--line); color:var(--ink-soft); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
 
   /* ===== 스플래시: 선 → 핀 → 글자 순서로 등장 ===== */
   .splash{ flex:1; display:flex; align-items:center; justify-content:center; padding:24px; }
@@ -104,7 +104,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     stroke-dasharray:168; stroke-dashoffset:168; animation:line-draw .55s .1s ease-out forwards; }
   .splash-dot{ fill:var(--primary); transform-origin:18px 26px; transform:scale(0); animation:pop .3s .05s cubic-bezier(.16,1,.3,1) forwards; }
   .splash-pin{ fill:var(--primary); transform-origin:186px 40px; transform:scale(0); animation:pop .38s .6s cubic-bezier(.16,1,.3,1) forwards; }
-  .splash-word{ display:flex; gap:2px; margin:14px 0 0; font-size:64px; line-height:1.1; font-weight:800; letter-spacing:-0.04em; }
+  .splash-word{ display:flex; gap:2px; margin:14px 0 0; font-size:64px; line-height:1.1; font-weight:700; }
   .splash-ch{ opacity:0; transform:translateY(14px); animation:rise .42s cubic-bezier(.2,.7,.3,1) forwards; }
   .splash-ch:nth-child(1){ animation-delay:.78s; }
   .splash-ch:nth-child(2){ animation-delay:.88s; }
@@ -141,7 +141,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .route-cell input{ width:100%; height:48px; border-radius:var(--radius-input); border:1px solid var(--line);
     background:var(--surface); color:var(--ink); padding:0 14px; font-size:16px; outline:none; }
   .route-cell input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
-  .route-arrow{ flex-shrink:0; color:var(--primary); font-weight:800; font-size:17px; }
+  .route-arrow{ flex-shrink:0; color:var(--primary); font-weight:700; font-size:17px; }
 
   /* 출발 시간 휠 피커. 가운데 밴드에 걸린 항목이 선택값이다. */
   .wheel-picker{ position:relative; display:flex; align-items:center; justify-content:center; gap:2px;
@@ -155,15 +155,15 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .wheel::before, .wheel::after{ content:''; display:block; height:54px; }
   .wheel-item{ height:42px; line-height:42px; scroll-snap-align:center; font-size:17px; font-weight:600;
     color:var(--muted); padding:0 10px; white-space:nowrap; cursor:pointer; }
-  .wheel-item.is-sel{ color:var(--ink); font-weight:800; }
-  .wheel-colon{ position:relative; z-index:1; font-size:17px; font-weight:800; color:var(--ink); }
+  .wheel-item.is-sel{ color:var(--ink); font-weight:700; }
+  .wheel-colon{ position:relative; z-index:1; font-size:17px; font-weight:700; color:var(--ink); }
 
   /* 최대 탑승자 수 스테퍼 */
   .stepper-box{ display:flex; align-items:center; justify-content:space-between; margin-top:14px;
     padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-input); background:var(--surface);
     font-size:15px; font-weight:600; }
   .stepper{ display:flex; align-items:center; gap:16px; }
-  .stepper strong{ font-size:17px; font-weight:800; min-width:18px; text-align:center; }
+  .stepper strong{ font-size:17px; font-weight:700; min-width:18px; text-align:center; }
   .step-btn{ width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:var(--surface);
     color:var(--primary); font-size:19px; font-weight:700; line-height:1; cursor:pointer; }
   .step-btn:hover:not(:disabled){ border-color:var(--primary); }
@@ -178,7 +178,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chip-row--collapsible{ display:none; }
   .chip-row--collapsible.is-open{ display:flex; }
   .chip{ font:inherit; font-size:13px; font-weight:600; color:var(--ink-soft); background:var(--paper);
-         border:1px solid var(--line); border-radius:999px; padding:10px 14px; cursor:pointer; }
+         border:1px solid var(--line); border-radius:var(--radius-chip); padding:10px 14px; cursor:pointer; }
   .chip:hover{ border-color:var(--primary); color:var(--primary); }
   .chip[aria-pressed="true"]{ background:var(--primary); border-color:var(--primary); color:#fff; }
   .autocomplete-list{ position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:20; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-input); box-shadow:var(--shadow-card); max-height:220px; overflow-y:auto; }
@@ -187,10 +187,11 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .autocomplete-item:first-child{ border-top:none; }
   .autocomplete-item:hover, .autocomplete-item:active{ background:var(--primary-soft); }
 
-  .btn{ appearance:none; border:none; cursor:pointer; font-weight:700; font-size:15px; border-radius:var(--radius-pill); padding:0 20px; height:48px; display:inline-flex; align-items:center; justify-content:center; gap:6px; transition:transform 160ms cubic-bezier(0.23,1,0.32,1), opacity 160ms ease; }
+  .btn{ appearance:none; border:none; cursor:pointer; font-weight:600; font-size:15px; border-radius:var(--radius-input); padding:0 20px; height:48px; display:inline-flex; align-items:center; justify-content:center; gap:6px; transition:transform 160ms cubic-bezier(0.23,1,0.32,1), opacity 160ms ease; }
   .btn:active{ transform:scale(.98); }
   .btn--primary{ background:var(--primary); color:var(--on-primary); }
-  .btn--primary:disabled{ opacity:.4; cursor:not-allowed; transform:none; }
+  /* SOCAR 비활성 규칙: 기하는 그대로 두고 색 대비만 낮춘다 (투명도 처리 금지) */
+  .btn--primary:disabled{ background:var(--input-fill); color:var(--placeholder); cursor:not-allowed; transform:none; }
   .btn--ghost{ background:var(--surface); color:var(--ink); border:1px solid var(--line); }
   .btn--danger{ background:var(--danger); color:#fff; }
   .btn--sm{ padding:0 16px; font-size:13px; white-space:nowrap; height:38px; }
@@ -199,17 +200,19 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   .cta-dock{ flex-shrink:0; padding:14px 20px calc(20px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); display:flex; flex-direction:column; gap:10px; }
 
-  .status-card{ background:var(--primary-soft); border-radius:var(--radius-card); padding:18px 20px; margin-bottom:24px;
-    box-shadow:0 1px 2px rgba(21,23,43,.04), 0 12px 28px -14px var(--primary); }
+  /* SOCAR 규칙: 브랜드 블루를 넓은 배경에 깔지 않는다. 면은 achromatic으로 두고
+     파란색은 상태 점·태그와 액션 버튼에만 남긴다. */
+  .status-card{ background:var(--surface-alt); border:1px solid var(--line); border-radius:var(--radius-card);
+    padding:18px 20px; margin-bottom:24px; box-shadow:var(--shadow-card); }
   .status-card .status-tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:9px; }
   .status-dot{ width:7px; height:7px; border-radius:50%; background:var(--primary); animation:pulse 1.4s ease-in-out infinite; }
   @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
-  .status-card strong{ display:block; font-size:19px; font-weight:800; letter-spacing:-0.01em; margin-bottom:5px; }
+  .status-card strong{ display:block; font-size:19px; font-weight:700; margin-bottom:5px; }
   .status-card p{ font-size:12.5px; color:var(--ink-soft); margin:0 0 14px; line-height:1.5; }
 
   .select-row{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
   .select-row select{ flex:1; min-width:120px; height:40px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:12.5px; padding:0 8px; }
-  .filter-chip{ appearance:none; cursor:pointer; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:12.5px; font-weight:700; padding:0 14px; height:36px; border-radius:var(--radius-pill); transition:transform 160ms cubic-bezier(0.23,1,0.32,1); }
+  .filter-chip{ appearance:none; cursor:pointer; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-size:12.5px; font-weight:700; padding:0 14px; height:36px; border-radius:var(--radius-chip); transition:transform 160ms cubic-bezier(0.23,1,0.32,1); }
   .filter-chip:active{ transform:scale(.96); }
   .filter-chip.active{ background:var(--primary); border-color:var(--primary); color:var(--on-primary); }
 
@@ -221,19 +224,19 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .pod-card:active{ transform:scale(.99); }
   .pod-card.is-blocked{ opacity:.55; }
   .pod-card-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .pod-card-top strong{ font-size:16px; font-weight:800; letter-spacing:-0.01em; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pod-card-top strong{ font-size:16px; font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .pod-card-leader{ flex-shrink:0; display:inline-flex; align-items:center; font-size:11px; font-weight:700;
-    padding:4px 10px; border-radius:var(--radius-pill); background:var(--orange-soft); color:var(--orange); white-space:nowrap; }
+    padding:4px 10px; border-radius:var(--radius-chip); background:var(--orange-soft); color:var(--orange); white-space:nowrap; }
   .pod-meta{ font-size:12.5px; color:var(--muted); }
   .pod-savings{ display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--green);
     background:var(--green-soft); padding:8px 12px; border-radius:var(--radius-input); }
   .pod-savings svg{ flex-shrink:0; }
   .pod-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:10px; border-top:1px solid var(--line); }
   .pod-stats div{ display:flex; flex-direction:column; gap:2px; }
-  .pod-stats strong{ font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
+  .pod-stats strong{ font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; }
   .pod-stats span{ font-size:11px; color:var(--muted); }
 
-  .badge{ display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--radius-pill); white-space:nowrap; }
+  .badge{ display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--radius-chip); white-space:nowrap; }
   .badge--leader{ background:var(--orange-soft); color:var(--orange); }
   .badge--me{ background:var(--primary-soft); color:var(--primary-dark); }
   .badge--recruit{ background:var(--pending-soft); color:var(--pending); }
@@ -257,7 +260,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .callout{ font-size:15px; font-weight:700; line-height:1.5; margin:0 0 8px; }
   .fine-note{ font-size:12px; color:var(--muted); line-height:1.5; margin:0; }
 
-  .avatar{ width:34px; height:34px; border-radius:50%; background:var(--primary-soft); color:var(--primary-dark); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+  .avatar{ width:34px; height:34px; border-radius:50%; background:var(--input-fill); color:var(--ink-soft); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
   .participant-row{ display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-top:1px dashed var(--line); }
   .participant-row:first-child{ border-top:none; }
   .participant-info{ flex:1; min-width:0; }
@@ -270,13 +273,13 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chat-msg.me{ align-self:flex-end; background:var(--primary); color:var(--on-primary); border-bottom-right-radius:4px; }
   .chat-msg .chat-name{ display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:2px; }
   .chat-input-row{ display:flex; gap:8px; }
-  .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-pill); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:16px; }
+  .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:16px; }
   /* 채팅이 아직 없을 때: 가짜 인사말 대신 무슨 말을 하면 좋을지 추천만 해준다. */
   .chat-empty{ text-align:center; padding:22px 12px 6px; color:var(--muted); }
   .chat-empty p{ font-size:13px; margin:0 0 12px; }
   .chat-suggest-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
   .chat-suggest{ font:inherit; font-size:12.5px; font-weight:600; color:var(--primary-dark); background:var(--primary-soft);
-    border:none; border-radius:999px; padding:8px 13px; cursor:pointer; }
+    border:none; border-radius:var(--radius-chip); padding:8px 13px; cursor:pointer; }
   .chat-suggest:hover{ background:var(--primary); color:#fff; }
   /* 남은 자리: 실제 사람이 없는 빈 좌석을 점선 카드로 보여준다 */
   .participant-row--empty{ color:var(--muted); font-size:13px; align-items:center; }
@@ -287,14 +290,14 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   .stop-row{ display:flex; gap:12px; padding:12px 0; }
   .stop-row + .stop-row{ border-top:1px dashed var(--line); }
-  .stop-num{ flex-shrink:0; width:26px; height:26px; border-radius:50%; background:var(--primary-soft); color:var(--primary-dark); font-size:12px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .stop-num{ flex-shrink:0; width:26px; height:26px; border-radius:50%; background:var(--input-fill); color:var(--ink-soft); font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
   .stop-row strong{ display:block; font-size:14px; }
   .stop-row p{ margin:2px 0 0; font-size:12px; color:var(--muted); line-height:1.5; }
 
   .modal-overlay{ position:fixed; inset:0; background:rgba(15,16,32,.5); display:flex; align-items:center; justify-content:center; padding:24px; z-index:100; }
   .modal-overlay[hidden]{ display:none; }
   .modal-card{ width:100%; max-width:340px; background:var(--surface); border-radius:var(--radius-card); padding:22px; box-shadow:var(--shadow-card); }
-  .modal-card h2{ font-size:17px; font-weight:800; margin:0 0 8px; }
+  .modal-card h2{ font-size:17px; font-weight:700; margin:0 0 8px; }
   .modal-card p{ font-size:13.5px; color:var(--ink-soft); line-height:1.6; margin:0; }
   .modal-actions{ display:flex; gap:10px; margin-top:20px; }
   .modal-actions .btn{ flex:1; height:44px; font-size:14px; }
@@ -1243,7 +1246,7 @@ async function paintRouteMap(containerId, { stops, originName, leaderDest, dropP
   const bounds = new kakao.maps.LatLngBounds();
 
   const path = stops.map(n => placeCoord(n)).filter(Boolean).map(c => new kakao.maps.LatLng(c.lat, c.lng));
-  const straightLine = new kakao.maps.Polyline({ map, path, strokeWeight: 4, strokeColor: '#4d3df0', strokeOpacity: 0.9, strokeStyle: 'solid' });
+  const straightLine = new kakao.maps.Polyline({ map, path, strokeWeight: 4, strokeColor: '#0078ff', strokeOpacity: 0.9, strokeStyle: 'solid' });
 
   // 실제 도로 경로로 교체 (응답 도착 시).
   // 그리는 건 언제나 출발지→팟장 목적지 경로 하나다. 하차지점은 이 경로 위 마커로만 표시한다.
@@ -1252,7 +1255,7 @@ async function paintRouteMap(containerId, { stops, originName, leaderDest, dropP
     if (route && route.path.length) {
       straightLine.setMap(null);
       const roadPath = route.path.map(p => new kakao.maps.LatLng(p.lat, p.lng));
-      new kakao.maps.Polyline({ map, path: roadPath, strokeWeight: 5, strokeColor: '#4d3df0', strokeOpacity: 0.9, strokeStyle: 'solid' });
+      new kakao.maps.Polyline({ map, path: roadPath, strokeWeight: 5, strokeColor: '#0078ff', strokeOpacity: 0.9, strokeStyle: 'solid' });
       roadPath.forEach(p => bounds.extend(p));
       if (!bounds.isEmpty()) map.setBounds(bounds, 40);
     }
@@ -1268,12 +1271,12 @@ async function paintRouteMap(containerId, { stops, originName, leaderDest, dropP
     new kakao.maps.Marker({ map, position: pos });
     new kakao.maps.CustomOverlay({
       map, position: pos, yAnchor: 2.4,
-      content: `<div style="background:${color};color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);">${label}</div>`,
+      content: `<div style="background:${color};color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:12px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);">${label}</div>`,
     });
   }
   stops.forEach(n => {
     const who = riders[n] && riders[n].length ? ` (${riders[n].join(', ')})` : '';
-    let color = '#5b6478', label = n + ' 하차' + who;
+    let color = '#697383', label = n + ' 하차' + who;
     if (n === leaderDest) { color = 'var(--blue)'; label = `${n} 하차 · 종점${who}`; }
     if (n === dropPoint) { color = 'var(--orange)'; label = `내 하차 · ${n}`; }
     if (n === originName) { color = 'var(--green)'; label = '출발 · ' + n; }
@@ -1291,7 +1294,7 @@ async function paintRouteMap(containerId, { stops, originName, leaderDest, dropP
       bounds.extend(pos);
       new kakao.maps.CustomOverlay({
         map, position: pos, yAnchor: 2.4,
-        content: `<div style="background:var(--danger);color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);">내 목적지 · ${myDest}</div>`,
+        content: `<div style="background:var(--danger);color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:12px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);">내 목적지 · ${myDest}</div>`,
       });
     }
   }
@@ -1954,7 +1957,7 @@ async function renderPodDetail(podId){
       <div class="map-legend">
         <span><span class="legend-dot" style="background:var(--green);"></span>출발지</span>
         <span><span class="legend-dot" style="background:var(--orange);"></span>내 하차지점</span>
-        <span><span class="legend-dot" style="background:#5b6478;"></span>다른 사람 하차</span>
+        <span><span class="legend-dot" style="background:#697383;"></span>다른 사람 하차</span>
         <span><span class="legend-dot" style="background:var(--blue);"></span>종점(팟장 목적지)</span>
         <span id="${map2.id}_legend">실선: 경로 조회 중… / 점선: 도보 경로</span>
       </div>
