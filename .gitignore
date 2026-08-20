@@ -1,2 +1,3 @@
 *.local.js
 .vercel
+.env*

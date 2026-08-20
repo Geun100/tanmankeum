@@ -1,11 +1,17 @@
--- 탄만큼 DB 스키마
+-- 탄만큼 DB 스키마 (로그인 없음 — 브라우저 uuid 방식)
 -- Supabase 대시보드 > SQL Editor에 통째로 붙여넣고 실행한다. 여러 번 실행해도 안전하다.
+--
+-- 로그인이 없으므로 "이 요청을 진짜 그 사람이 보냈다"를 서버가 검증할 방법이 없다.
+-- user_id는 클라이언트가 localStorage에 저장해둔 uuid를 그대로 보내는 값이라,
+-- anon 키만 있으면 누구든 다른 사람의 user_id를 흉내 낼 수 있다.
+-- 아래 RLS는 그 전제 위에서 "구조적으로 말이 되는 값인지"만 검사한다 — 신원 검증은 못 한다.
+-- 테스트 단계에서 감수하기로 한 트레이드오프다. 실사용 단계에서는 인증을 다시 넣어야 한다.
 
 -- ============ 1. 프로필 ============
--- auth.users는 카카오 로그인이 만들어준다. 여기엔 서비스에서 쓰는 값만 둔다.
+-- id는 브라우저가 처음 접속할 때 발급해 localStorage에 저장해둔 uuid. 서버가 만들어주지 않는다.
 -- 닉네임 중복은 허용한다(unique 제약 없음).
 create table if not exists public.profiles (
-  id         uuid primary key references auth.users(id) on delete cascade,
+  id         uuid primary key,
   nickname   text not null,
   gender     text not null check (gender in ('여성', '남성')),
   created_at timestamptz not null default now()
@@ -132,69 +138,66 @@ create trigger pods_add_leader
   for each row execute function public.add_leader_as_participant();
 
 -- ============ 6. RLS ============
--- anon 키는 공개되는 키다. 실제 접근 제어는 전부 아래 정책이 한다.
+-- 로그인이 없어 auth.uid()를 쓸 수 없다. anon 역할에게 구조적 검사만 거는 정도로 열어둔다.
+-- (신원 검증이 아니라 "이 값이 말이 되는 모양인가"만 확인 — 예: 메시지는 실제 그 팟 참여자 목록에 있는
+--  user_id로만 남길 수 있다. 다만 그 user_id가 진짜 그 사람 브라우저에서 왔는지는 확인 못 한다.)
 alter table public.profiles         enable row level security;
 alter table public.pods             enable row level security;
 alter table public.pod_participants enable row level security;
 alter table public.pod_messages     enable row level security;
 
--- 프로필: 로그인한 사람은 다 읽을 수 있다(참여자 목록에 닉네임을 띄워야 한다). 쓰기는 본인만.
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles
-  for select to authenticated using (true);
+  for select to anon using (true);
 
 drop policy if exists profiles_upsert on public.profiles;
 create policy profiles_upsert on public.profiles
-  for insert to authenticated with check (id = auth.uid());
+  for insert to anon with check (true);
 
 drop policy if exists profiles_update on public.profiles;
 create policy profiles_update on public.profiles
-  for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
+  for update to anon using (true) with check (true);
 
--- 팟: 해체된 팟은 안 보인다. 만들기는 본인이 팟장일 때만, 고치기·지우기는 팟장만.
+-- 팟: 해체된 팟은 안 보인다.
 drop policy if exists pods_select on public.pods;
 create policy pods_select on public.pods
-  for select to authenticated using (status <> 'dissolved');
+  for select to anon using (status <> 'dissolved');
 
 drop policy if exists pods_insert on public.pods;
 create policy pods_insert on public.pods
-  for insert to authenticated with check (leader_id = auth.uid());
+  for insert to anon with check (true);
 
 drop policy if exists pods_update on public.pods;
 create policy pods_update on public.pods
-  for update to authenticated using (leader_id = auth.uid()) with check (leader_id = auth.uid());
+  for update to anon using (true) with check (true);
 
 drop policy if exists pods_delete on public.pods;
 create policy pods_delete on public.pods
-  for delete to authenticated using (leader_id = auth.uid());
+  for delete to anon using (true);
 
--- 참여자: 목록은 다 읽힌다(팟 카드에 인원수·하차지점을 띄운다). 넣고 빼는 건 본인 행만.
+-- 참여자: 목록은 다 읽힌다(팟 카드에 인원수·하차지점을 띄운다).
 drop policy if exists participants_select on public.pod_participants;
 create policy participants_select on public.pod_participants
-  for select to authenticated using (true);
+  for select to anon using (true);
 
 drop policy if exists participants_insert on public.pod_participants;
 create policy participants_insert on public.pod_participants
-  for insert to authenticated with check (user_id = auth.uid());
+  for insert to anon with check (true);
 
 drop policy if exists participants_delete on public.pod_participants;
 create policy participants_delete on public.pod_participants
-  for delete to authenticated using (user_id = auth.uid());
+  for delete to anon using (true);
 
--- 채팅: 그 팟에 속한 사람만 읽고 쓴다.
+-- 채팅: 구조적으로 "그 팟 참여자 목록에 있는 user_id"만 메시지를 남길 수 있게 한다.
 drop policy if exists messages_select on public.pod_messages;
 create policy messages_select on public.pod_messages
-  for select to authenticated using (
-    exists (select 1 from public.pod_participants p
-             where p.pod_id = pod_messages.pod_id and p.user_id = auth.uid())
-  );
+  for select to anon using (true);
 
 drop policy if exists messages_insert on public.pod_messages;
 create policy messages_insert on public.pod_messages
-  for insert to authenticated with check (
-    user_id = auth.uid()
-    and exists (select 1 from public.pod_participants p
-                 where p.pod_id = pod_messages.pod_id and p.user_id = auth.uid())
+  for insert to anon with check (
+    exists (select 1 from public.pod_participants p
+             where p.pod_id = pod_messages.pod_id and p.user_id = pod_messages.user_id)
   );
 
 -- ============ 7. 실시간 구독 ============

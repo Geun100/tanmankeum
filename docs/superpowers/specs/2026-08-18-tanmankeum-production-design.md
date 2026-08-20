@@ -14,7 +14,7 @@
 
 카카오모빌리티 Directions API는 CORS가 열려 있음을 확인했다(`Access-Control-Allow-Origin`이 요청 origin을 반사, preflight에서 `authorization` 헤더 허용). 따라서 API 프록시 서버는 불필요하다.
 
-카카오 앱은 기존 앱(ID 1548866, 이름 "나란히")을 그대로 재사용한다. 앱 이름은 라벨일 뿐 기능에 영향이 없다. 이 앱에 카카오맵, 카카오 로그인 제품만 추가 활성화한다.
+카카오 앱은 기존 앱(ID 1548866, 이름 "나란히")을 그대로 재사용한다. 앱 이름은 라벨일 뿐 기능에 영향이 없다. 카카오맵 JS SDK는 도메인 화이트리스트를 검사하므로, 플랫폼 키 → JS SDK 도메인에 실행할 도메인을 모두 등록해야 한다(`http://localhost:8935`, `https://tanmankeum.vercel.app`). 미등록 도메인에서는 SDK 요청이 401로 막힌다.
 
 ## 1. 데이터 구조 (Supabase Postgres)
 
@@ -39,18 +39,21 @@ pod_messages
 
 RLS 정책: open 상태 팟은 누구나 읽기 가능, 참여자 행은 본인 것만 insert/delete 가능, 메시지는 해당 팟 참여자만 insert 가능.
 
-## 2. 인증 (카카오 소셜 로그인)
+## 2. 인증 — 없음 (2026-08-20 변경)
+
+당초 카카오 소셜 로그인을 넣기로 했으나, 테스트를 빨리 돌리기 위해 인증을 빼기로 했다.
 
 ```
-1. "카카오로 시작하기" 버튼 → supabase.auth.signInWithOAuth({provider:'kakao'})
-2. 카카오 로그인 화면 리다이렉트 → 동의 후 콜백 복귀
-3. 세션 생성, auth.users row 자동 생성
-4. 최초 로그인 시 public.users에 프로필 upsert
-   (닉네임은 카카오 기본값을 가져오되 사용자가 수정 가능)
-5. 이후 세션 유지, 로그아웃 버튼 제공
+1. 최초 접속 시 crypto.randomUUID()로 uuid 생성 → localStorage 저장
+2. 이후 모든 요청에 그 uuid를 user_id로 실어 보냄
+3. profiles 테이블에 (uuid, 닉네임, 성별) upsert
 ```
 
-사전 준비: 카카오 디벨로퍼스에서 카카오 로그인 제품 활성화, Client Secret 발급 후 Supabase 대시보드 Kakao provider에 입력, Redirect URI에 Supabase 콜백 URL 등록.
+같은 브라우저면 재접속해도 닉네임·내 팟이 유지된다.
+
+**감수한 트레이드오프**: 서버가 "이 요청이 진짜 그 사람 브라우저에서 왔다"를 검증할 수 없다. anon 키만 있으면 누구나 남의 `user_id`를 흉내 내 팟을 만들거나 남의 참가를 취소시킬 수 있다. `auth.uid()`를 쓸 수 없으므로 RLS도 신원 검사를 못 하고, 구조적 검사(예: 메시지는 그 팟 참여자 목록에 있는 user_id로만 insert 가능)만 남는다. 실사용 단계에서는 인증을 다시 넣어야 한다.
+
+`supabase-keys.local.js`에 값이 비어 있으면 `SUPA_ENABLED=false`가 되어 인메모리 프로토타입(시드 팟, 새로고침 시 소실)으로 동작한다. 키 없이도 로컬에서 계산 로직을 계속 테스트할 수 있게 남겨둔 폴백이다.
 
 ## 3. 실시간 동기화 (Supabase Realtime)
 

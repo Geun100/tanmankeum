@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>탄만큼 - 경로 기반 택시 합승 매칭</title>
 <script src="kakao-keys.local.js"></script>
+<script src="supabase-keys.local.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 // 카카오맵 JS SDK를 동적으로 삽입해 appkey를 kakao-keys.local.js 값으로 주입한다.
 // (script 태그 src는 정적이라 로드 시점에 만들어야 로컬 키를 반영할 수 있음)
@@ -412,8 +414,98 @@ const STATE = {
   pods: [],           // 팟 배열 (내 자동생성 팟 포함)
   myPodId: null,       // 내가 속한 팟 id (항상 존재: 처음엔 나만 있는 자동 팟의 팟장)
   committed: false,    // true면 실제로 남의 팟에 참가한 상태 → 다른 팟 참가 막힘
-  chatMessages: {},    // podId -> [{who, text}]
+  chatMessages: {},    // podId -> [{who, text}] — Supabase 미연결일 때만 씀(폴백)
 };
+
+/* ============ 1-1. Supabase 데이터 계층 ============
+   로그인이 없어(카카오 로그인 제외 결정) 서버가 "이 요청이 진짜 그 사람 브라우저에서 왔다"를
+   검증할 수 없다. localStorage uuid를 신원처럼 쓰고, RLS는 구조적 검사만 한다(SETUP.md 참고).
+   supabase-keys.local.js에 값이 없으면 SUPA_ENABLED=false로 인메모리 프로토타입 그대로 동작한다
+   (이전처럼 새로고침하면 날아감) — 로컬에서 키 없이도 계속 테스트할 수 있게 하는 폴백이다. */
+const SUPA_ENABLED = !!(window.SUPABASE_KEYS && window.SUPABASE_KEYS.url && window.SUPABASE_KEYS.anonKey);
+const supa = SUPA_ENABLED ? window.supabase.createClient(window.SUPABASE_KEYS.url, window.SUPABASE_KEYS.anonKey) : null;
+
+function getOrCreateUserId(){
+  const KEY = 'tanmankeum_uid';
+  let id = localStorage.getItem(KEY);
+  if (!id) { id = crypto.randomUUID(); localStorage.setItem(KEY, id); }
+  return id;
+}
+
+async function upsertProfile(id, nickname, gender){
+  const { error } = await supa.from('profiles').upsert({ id, nickname, gender });
+  if (error) throw error;
+}
+
+// DB row(팟 + 참여자 + 프로필)를 makePod()이 만드는 것과 같은 모양의 pod 객체로 되살린다.
+// dropOff/요금 같은 계산값은 저장된 걸 믿지 않고 항상 다시 계산한다 — 클라이언트 경로 캐시
+// 상태에 따라 값이 달라질 수 있어서, 저장해둔 값은 금방 낡은 값이 되기 때문이다.
+function podFromRow(podRow){
+  // 다른 사람이 자동완성으로 고른 장소(고정 테이블 밖)일 수 있으니 좌표를 먼저 등록해둔다.
+  registerPlace(podRow.origin_name, podRow.origin_lat, podRow.origin_lng);
+  registerPlace(podRow.leader_dest, podRow.leader_dest_lat, podRow.leader_dest_lng);
+  const routeStops = buildRouteStops(podRow.origin_name, podRow.leader_dest);
+  const participants = (podRow.pod_participants || [])
+    .slice()
+    .sort((a, b) => new Date(a.joined_at) - new Date(b.joined_at))
+    .map(row => {
+      const isLeader = row.user_id === podRow.leader_id;
+      const p = {
+        id: row.user_id,
+        nickname: (row.profiles && row.profiles.nickname) || '알 수 없음',
+        gender: (row.profiles && row.profiles.gender) || '여성',
+        dest: row.dest_name, isLeader,
+      };
+      registerPlace(row.dest_name, row.dest_lat, row.dest_lng);
+      p.dropOff = isLeader
+        ? { point: podRow.leader_dest, walkDist: 0, walkTime: 0 }
+        : recommendDropOff(row.dest_name, { routeStops, originName: podRow.origin_name, leaderDest: podRow.leader_dest });
+      return p;
+    });
+  return {
+    id: podRow.id, leaderId: podRow.leader_id, leaderDest: podRow.leader_dest, originName: podRow.origin_name,
+    routeStops, departTime: podRow.depart_time.slice(0, 5), departDate: podRow.depart_date,
+    desiredSize: podRow.desired_size, participants,
+    status: podRow.status === 'open' ? 'recruiting' : podRow.status,
+  };
+}
+
+const POD_SELECT = '*, pod_participants(*, profiles(nickname, gender))';
+
+async function loadOpenPods(){
+  const { data, error } = await supa.from('pods').select(POD_SELECT).neq('status', 'dissolved');
+  if (error) throw error;
+  return data.map(podFromRow);
+}
+
+async function loadPod(podId){
+  const { data, error } = await supa.from('pods').select(POD_SELECT).eq('id', podId).single();
+  if (error) throw error;
+  return podFromRow(data);
+}
+
+async function loadMessages(podId){
+  const { data, error } = await supa.from('pod_messages')
+    .select('*, profiles(nickname)').eq('pod_id', podId).order('created_at', { ascending: true });
+  if (error) throw error;
+  return data.map(m => ({ who: (m.profiles && m.profiles.nickname) || '?', mine: m.user_id === STATE.user.id, text: m.text }));
+}
+
+// 팟 상세/채팅 화면에서만 구독한다(목록 화면은 진입 시 재조회로 충분 — 설계 결정).
+// 화면을 나가거나 다른 팟을 볼 때 이전 채널을 반드시 끊어야 구독이 쌓이지 않는다.
+let realtimeChannel = null;
+function subscribePod(podId, onChange){
+  if (realtimeChannel) { supa.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (!SUPA_ENABLED) return;
+  realtimeChannel = supa.channel('pod:' + podId)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pod_participants', filter: 'pod_id=eq.' + podId }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pod_messages', filter: 'pod_id=eq.' + podId }, onChange)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pods', filter: 'id=eq.' + podId }, onChange)
+    .subscribe();
+}
+function unsubscribePod(){
+  if (realtimeChannel) { supa.removeChannel(realtimeChannel); realtimeChannel = null; }
+}
 
 /* ============ 2. 유틸 ============ */
 function toRad(d){ return d * Math.PI / 180; }
@@ -748,6 +840,8 @@ function seedPods(){
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  // 실시간 구독은 팟 상세/채팅 화면에서만 필요하다. 다른 화면으로 나가면 끊는다.
+  if (id !== 'screen-pod-detail' && id !== 'screen-pod-chat') unsubscribePod();
 }
 document.querySelectorAll('[data-back]').forEach(btn => {
   btn.addEventListener('click', () => showScreen(btn.dataset.back));
@@ -764,6 +858,15 @@ function openModal({ title, body, confirmLabel = '확인', onConfirm, danger = f
   document.getElementById('modal-overlay').hidden = false;
 }
 function closeModal(){ document.getElementById('modal-overlay').hidden = true; modalConfirmHandler = null; }
+// DB 오류(정원 마감, 네트워크 등)를 기존 모달로 그냥 알려준다. 별도 토스트 컴포넌트를 새로 안 만든다.
+function showError(message){ openModal({ title: '문제가 발생했어요', body: message, confirmLabel: '확인', onConfirm: () => {} }); }
+function friendlyDbError(e){
+  const msg = (e && e.message) || String(e);
+  if (msg.includes('정원이 찼습니다')) return '방금 정원이 다 찼어요. 다른 팟을 찾아볼까요?';
+  if (msg.includes('이미 참여 중인 팟이 있습니다')) return '이미 다른 팟에 참여 중이에요.';
+  if (msg.includes('이미 마감된 팟입니다')) return '이미 마감되거나 취소된 팟이에요.';
+  return '네트워크 문제로 처리하지 못했어요. 다시 시도해주세요.';
+}
 document.getElementById('modal-cancel').addEventListener('click', closeModal);
 document.getElementById('modal-confirm').addEventListener('click', () => {
   const fn = modalConfirmHandler; closeModal(); if (fn) fn();
@@ -965,39 +1068,76 @@ async function paintRouteMap(containerId, { stops, originName, leaderDest, dropP
 }
 
 /* ============ 7. 팟 생성 / 참가 / 취소 로직 ============ */
-function createOwnPod(){
+async function createOwnPod(){
   const u = STATE.user;
-  const pod = makePod({ id: 'pod_' + Date.now(), originName: u.origin, leaderNickname: u.nickname, leaderGender: u.gender,
-    leaderDest: u.dest, departTime: u.time, departDate: u.date, desiredSize: u.partySize, extras: [] });
-  pod.leaderId = u.id;
-  pod.participants[0].id = u.id;
+  if (!SUPA_ENABLED) {
+    const pod = makePod({ id: 'pod_' + Date.now(), originName: u.origin, leaderNickname: u.nickname, leaderGender: u.gender,
+      leaderDest: u.dest, departTime: u.time, departDate: u.date, desiredSize: u.partySize, extras: [] });
+    pod.leaderId = u.id;
+    pod.participants[0].id = u.id;
+    STATE.pods.push(pod);
+    STATE.myPodId = pod.id;
+    STATE.committed = false;
+    STATE.chatMessages[pod.id] = [];
+    return;
+  }
+  const originC = placeCoord(u.origin), destC = placeCoord(u.dest);
+  const { data, error } = await supa.from('pods').insert({
+    leader_id: u.id, origin_name: u.origin, origin_lat: originC.lat, origin_lng: originC.lng,
+    leader_dest: u.dest, leader_dest_lat: destC.lat, leader_dest_lng: destC.lng,
+    depart_date: u.date, depart_time: u.time, desired_size: u.partySize,
+  }).select(POD_SELECT).single();
+  if (error) throw error;
+  const pod = podFromRow(data);
   STATE.pods.push(pod);
   STATE.myPodId = pod.id;
   STATE.committed = false;
-  STATE.chatMessages[pod.id] = [];
 }
 
-function joinPod(pod){
+async function joinPod(pod){
   const u = STATE.user;
-  const dropOff = recommendDropOff(u.dest, pod);
-  pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false, dropOff });
   const ownPodId = STATE.myPodId;
-  if (ownPodId && ownPodId !== pod.id) {
-    STATE.pods = STATE.pods.filter(p => p.id !== ownPodId);
-    delete STATE.chatMessages[ownPodId];
+
+  if (SUPA_ENABLED) {
+    const dropOff = recommendDropOff(u.dest, pod);
+    const destC = placeCoord(u.dest);
+    const { error } = await supa.from('pod_participants').insert({
+      pod_id: pod.id, user_id: u.id, dest_name: u.dest, dest_lat: destC.lat, dest_lng: destC.lng,
+      dropoff_point: dropOff.point, walk_dist: dropOff.walkDist, walk_time: dropOff.walkTime,
+    });
+    if (error) throw error; // 정원 초과·중복 참가 등은 DB 트리거가 막고 여기로 에러가 온다
+    if (ownPodId && ownPodId !== pod.id) {
+      await supa.from('pods').update({ status: 'dissolved' }).eq('id', ownPodId);
+    }
+    const fresh = await loadPod(pod.id);
+    STATE.pods = STATE.pods.filter(p => p.id !== ownPodId && p.id !== pod.id);
+    STATE.pods.push(fresh);
+  } else {
+    const dropOff = recommendDropOff(u.dest, pod);
+    pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false, dropOff });
+    if (ownPodId && ownPodId !== pod.id) {
+      STATE.pods = STATE.pods.filter(p => p.id !== ownPodId);
+      delete STATE.chatMessages[ownPodId];
+    }
   }
+
   STATE.myPodId = pod.id;
   STATE.committed = true;
   STATE.userState = '채팅방';
   if (!STATE.chatMessages[pod.id]) STATE.chatMessages[pod.id] = [];
 }
 
-function dissolvePod(pod){
-  STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
-  delete STATE.chatMessages[pod.id];
+async function dissolvePod(pod){
+  if (SUPA_ENABLED) {
+    await supa.from('pods').update({ status: 'dissolved' }).eq('id', pod.id);
+    STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
+  } else {
+    STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
+    delete STATE.chatMessages[pod.id];
+  }
   STATE.committed = false;
   STATE.userState = '대기';
-  createOwnPod();
+  await createOwnPod();
 }
 
 function findPod(id){ return STATE.pods.find(p => p.id === id); }
@@ -1122,7 +1262,7 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   if (!placeCoord(originName)) { originInput.focus(); return; }
   if (!placeCoord(destName)) { destInput.focus(); return; }
   STATE.user = {
-    id: 'u_' + Date.now(),
+    id: getOrCreateUserId(),
     nickname,
     gender: document.getElementById('ob-gender').value,
     origin: originName,
@@ -1136,9 +1276,19 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   btn.textContent = '경로 확인 중…';
   try {
     await prefetchBaseRoutes(originName, destName);
-    STATE.pods = seedPods();
-    STATE.userState = '대기';
-    createOwnPod();
+    if (SUPA_ENABLED) {
+      await upsertProfile(STATE.user.id, STATE.user.nickname, STATE.user.gender);
+      STATE.pods = await loadOpenPods();
+      // 이미 내가 참여 중인(만든 것 포함) 열린 팟이 있으면 그걸 내 팟으로 삼고, 없을 때만 새로 만든다.
+      const mine = STATE.pods.find(p => p.participants.some(x => x.id === STATE.user.id));
+      STATE.myPodId = mine ? mine.id : null;
+      STATE.committed = !!(mine && mine.leaderId !== STATE.user.id);
+      STATE.userState = STATE.committed ? '채팅방' : '대기';
+    } else {
+      STATE.pods = seedPods();
+      STATE.userState = '대기';
+    }
+    if (!STATE.myPodId) await createOwnPod();
     await Promise.all(STATE.pods.map(warmPodRoutes));
   } finally {
     btn.disabled = false;
@@ -1157,7 +1307,12 @@ document.getElementById('filter-same-dest').addEventListener('click', (e) => {
   renderPodList();
 });
 
-function renderHome(){
+async function renderHome(){
+  // 목록 화면은 실시간 구독을 하지 않는다(설계 결정) — 진입할 때마다 새로 받아오는 걸로 충분하다.
+  if (SUPA_ENABLED) {
+    STATE.pods = await loadOpenPods();
+    await Promise.all(STATE.pods.map(warmPodRoutes));
+  }
   const u = STATE.user, myPod = findPod(STATE.myPodId);
   const isLeaderOfOwn = myPod && myPod.leaderId === u.id;
   const card = document.getElementById('my-status-card');
@@ -1245,8 +1400,16 @@ function renderPodList(){
 }
 
 /* ============ 10. 화면 3: 팟 상세 (PRD 8번 레이아웃 순서) ============ */
-function renderPodDetail(podId){
-  const u = STATE.user, pod = findPod(podId);
+async function renderPodDetail(podId){
+  const u = STATE.user;
+  if (SUPA_ENABLED) {
+    const fresh = await loadPod(podId);
+    const idx = STATE.pods.findIndex(p => p.id === podId);
+    if (idx >= 0) STATE.pods[idx] = fresh; else STATE.pods.push(fresh);
+    // 보는 중에 다른 사람이 참가/탈퇴하면 정원·요금이 실시간으로 바뀐다.
+    subscribePod(podId, () => { if (document.getElementById('screen-pod-detail').classList.contains('active')) renderPodDetail(podId); });
+  }
+  const pod = findPod(podId);
   document.getElementById('detail-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
   document.getElementById('detail-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
 
@@ -1355,10 +1518,15 @@ function renderPodDetail(podId){
         title: '이 팟에 참가할까요?',
         body: `${pod.originName} → ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분, 예상 부담금 ${won(prev.mine.fare)}. 참가하면 바로 채팅방으로 이동해요.`,
         confirmLabel: '참가하기',
-        onConfirm: () => {
-          joinPod(pod);
-          renderPodChat(pod.id);
-          showScreen('screen-pod-chat');
+        onConfirm: async () => {
+          try {
+            await joinPod(pod);
+            renderPodChat(pod.id);
+            showScreen('screen-pod-chat');
+          } catch (e) {
+            showError(friendlyDbError(e));
+            renderPodDetail(pod.id); // 정원 마감 등으로 실패하면 최신 상태로 다시 그린다
+          }
         },
       });
     });
@@ -1366,8 +1534,16 @@ function renderPodDetail(podId){
 }
 
 /* ============ 11. 화면 4: 팟 채팅방 ============ */
-function renderPodChat(podId){
-  const u = STATE.user, pod = findPod(podId);
+async function renderPodChat(podId){
+  const u = STATE.user;
+  if (SUPA_ENABLED) {
+    const fresh = await loadPod(podId);
+    const idx = STATE.pods.findIndex(p => p.id === podId);
+    if (idx >= 0) STATE.pods[idx] = fresh; else STATE.pods.push(fresh);
+    // 다른 참여자의 입장/퇴장/메시지가 오면 이 화면을 다시 그린다. 화면을 나가면 showScreen()이 구독을 끊는다.
+    subscribePod(podId, () => { if (document.getElementById('screen-pod-chat').classList.contains('active')) renderPodChat(podId); });
+  }
+  const pod = findPod(podId);
   document.getElementById('chat-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
   document.getElementById('chat-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
 
@@ -1411,14 +1587,21 @@ function renderPodChat(podId){
     pWrap.appendChild(row);
   });
 
-  // 채팅 메시지 렌더
-  if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
-  if (STATE.chatMessages[podId].length === 0) {
-    STATE.chatMessages[podId].push({ who: pod.participants[0].nickname, mine: false, text: '안녕하세요! 탑승 장소는 정문 앞에서 만나요 :)' });
+  // 채팅 메시지 렌더. Supabase 연결 시 DB에서 읽고, 아니면 인메모리 폴백을 쓴다.
+  let messages;
+  if (SUPA_ENABLED) {
+    messages = await loadMessages(podId);
+  } else {
+    if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
+    messages = STATE.chatMessages[podId];
+  }
+  if (messages.length === 0) {
+    // 첫 안내 문구는 화면에만 보여주는 것이라 DB/폴백 어느 쪽에도 저장하지 않는다.
+    messages = [{ who: pod.participants[0].nickname, mine: false, text: '안녕하세요! 탑승 장소는 정문 앞에서 만나요 :)' }];
   }
   const msgWrap = document.getElementById('chat-messages');
   msgWrap.innerHTML = '';
-  STATE.chatMessages[podId].forEach(m => {
+  messages.forEach(m => {
     const div = document.createElement('div');
     div.className = 'chat-msg ' + (m.mine ? 'me' : 'other');
     div.innerHTML = (m.mine ? '' : `<span class="chat-name">${m.who}</span>`) + m.text;
@@ -1428,12 +1611,17 @@ function renderPodChat(podId){
 
   document.getElementById('btn-chat-send').addEventListener('click', sendChat);
   document.getElementById('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
-  function sendChat(){
+  async function sendChat(){
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if (!text) return;
-    STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text });
     input.value = '';
+    if (SUPA_ENABLED) {
+      const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text });
+      if (error) { showError(friendlyDbError(error)); return; }
+    } else {
+      STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text });
+    }
     renderPodChat(podId);
   }
 
@@ -1455,12 +1643,17 @@ function renderPodChat(podId){
       title: '팟을 확정할까요?',
       body: `현재 ${pod.participants.length}명으로 팟을 확정해요. 확정 후에는 최종 경로와 요금이 계산되고, 팟을 취소할 수 없어요.`,
       confirmLabel: '확정하기',
-      onConfirm: () => {
-        pod.status = 'confirmed';
-        pod.finalResult = calcFinalRouteAndFare(pod);
-        STATE.userState = '팟확정';
-        renderFinal(pod.id);
-        showScreen('screen-final');
+      onConfirm: async () => {
+        try {
+          if (SUPA_ENABLED) await supa.from('pods').update({ status: 'confirmed' }).eq('id', pod.id);
+          pod.status = 'confirmed';
+          pod.finalResult = calcFinalRouteAndFare(pod);
+          STATE.userState = '팟확정';
+          renderFinal(pod.id);
+          showScreen('screen-final');
+        } catch (e) {
+          showError(friendlyDbError(e));
+        }
       },
     });
   });
@@ -1471,10 +1664,14 @@ function renderPodChat(podId){
       body: '팟이 해체되고, 참여자 전원은 다시 매칭 대기 화면으로 돌아가요. 되돌릴 수 없어요.',
       confirmLabel: '팟 취소하기',
       danger: true,
-      onConfirm: () => {
-        dissolvePod(pod);
-        renderHome();
-        showScreen('screen-home');
+      onConfirm: async () => {
+        try {
+          await dissolvePod(pod);
+          renderHome();
+          showScreen('screen-home');
+        } catch (e) {
+          showError(friendlyDbError(e));
+        }
       },
     });
   });
@@ -1601,19 +1798,24 @@ document.getElementById('btn-finish-pod').addEventListener('click', () => {
     title: '정산을 완료하고 팟을 종료할까요?',
     body: '팟이 완료 상태로 바뀌고, 다시 참가할 수 없어요.',
     confirmLabel: '팟 종료하기',
-    onConfirm: () => {
-      pod.status = 'done';
-      STATE.userState = '완료';
-      showScreen('screen-done');
+    onConfirm: async () => {
+      try {
+        if (SUPA_ENABLED) await supa.from('pods').update({ status: 'done' }).eq('id', pod.id);
+        pod.status = 'done';
+        STATE.userState = '완료';
+        showScreen('screen-done');
+      } catch (e) {
+        showError(friendlyDbError(e));
+      }
     },
   });
 });
 
 /* ============ 14. 화면 7: 완료 → 재매칭 ============ */
-document.getElementById('btn-rematch').addEventListener('click', () => {
+document.getElementById('btn-rematch').addEventListener('click', async () => {
   STATE.myPodId = null;
   STATE.committed = false;
-  createOwnPod();
+  await createOwnPod();
   STATE.userState = '대기';
   renderHome();
   showScreen('screen-home');
