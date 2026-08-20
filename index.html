@@ -1521,6 +1521,7 @@ if (cachedOnboarding) {
     document.getElementById('ob-dest').value = cachedOnboarding.dest;
     partySize = cachedOnboarding.partySize;
     sizeValueEl.textContent = String(partySize);
+    document.getElementById('btn-find-pod').textContent = '그대로 등록하기';
     showScreen('screen-ob-route');
     setWheelTime(cachedOnboarding.time);
   });
