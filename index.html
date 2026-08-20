@@ -199,12 +199,13 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   .cta-dock{ flex-shrink:0; padding:14px 20px calc(20px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); display:flex; flex-direction:column; gap:10px; }
 
-  .status-card{ background:var(--primary-soft); border-radius:var(--radius-card); padding:16px 18px; margin-bottom:22px; }
-  .status-card .status-tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:8px; }
+  .status-card{ background:var(--primary-soft); border-radius:var(--radius-card); padding:18px 20px; margin-bottom:24px;
+    box-shadow:0 1px 2px rgba(21,23,43,.04), 0 12px 28px -14px var(--primary); }
+  .status-card .status-tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:9px; }
   .status-dot{ width:7px; height:7px; border-radius:50%; background:var(--primary); animation:pulse 1.4s ease-in-out infinite; }
   @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
-  .status-card strong{ display:block; font-size:16px; margin-bottom:4px; }
-  .status-card p{ font-size:12.5px; color:var(--ink-soft); margin:0 0 12px; }
+  .status-card strong{ display:block; font-size:19px; font-weight:800; letter-spacing:-0.01em; margin-bottom:5px; }
+  .status-card p{ font-size:12.5px; color:var(--ink-soft); margin:0 0 14px; line-height:1.5; }
 
   .select-row{ display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
   .select-row select{ flex:1; min-width:120px; height:40px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:12.5px; padding:0 8px; }
@@ -213,16 +214,23 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .filter-chip.active{ background:var(--primary); border-color:var(--primary); color:var(--on-primary); }
 
   .pod-list{ display:flex; flex-direction:column; gap:12px; }
-  .pod-card{ border:1px solid var(--line); background:var(--surface); border-radius:var(--radius-card); padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:var(--shadow-card); cursor:pointer; }
+  .pod-card{ border:1px solid var(--line); background:var(--surface); border-radius:var(--radius-card); padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:var(--shadow-card); cursor:pointer;
+    animation:pod-card-in 360ms cubic-bezier(0.23,1,0.32,1) backwards; animation-delay:calc(var(--i, 0) * 45ms); }
+  @keyframes pod-card-in{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:translateY(0); } }
+  @media (prefers-reduced-motion:reduce){ .pod-card{ animation:none; } }
   .pod-card:active{ transform:scale(.99); }
   .pod-card.is-blocked{ opacity:.55; }
   .pod-card-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .pod-card-top strong{ font-size:15px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pod-card-leader{ flex-shrink:0; font-size:12px; font-weight:600; color:var(--muted); }
+  .pod-card-top strong{ font-size:16px; font-weight:800; letter-spacing:-0.01em; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pod-card-leader{ flex-shrink:0; display:inline-flex; align-items:center; font-size:11px; font-weight:700;
+    padding:4px 10px; border-radius:var(--radius-pill); background:var(--orange-soft); color:var(--orange); white-space:nowrap; }
   .pod-meta{ font-size:12.5px; color:var(--muted); }
+  .pod-savings{ display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--green);
+    background:var(--green-soft); padding:8px 12px; border-radius:var(--radius-input); }
+  .pod-savings svg{ flex-shrink:0; }
   .pod-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:10px; border-top:1px solid var(--line); }
   .pod-stats div{ display:flex; flex-direction:column; gap:2px; }
-  .pod-stats strong{ font-size:15px; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
+  .pod-stats strong{ font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
   .pod-stats span{ font-size:11px; color:var(--muted); }
 
   .badge{ display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--radius-pill); white-space:nowrap; }
@@ -1439,6 +1447,7 @@ document.getElementById('ob-dest').value = '영일대해수욕장';
 
 // 포항에서 자주 오가는 곳 빠른 선택. 좌표를 이미 아는 장소라 고르면 바로 계산에 쓸 수 있다.
 // 직접 입력(자동완성)이 기본이고, 이건 타이핑을 줄여주는 보조 수단이다.
+const SAVE_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교'];
 const POPULAR_DESTS = ['영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널'];
 
@@ -1848,9 +1857,10 @@ function renderPodList(){
     ul.innerHTML = `<li class="empty-hero"><span class="emoji">🚕</span><p class="page-sub">${msg}</p></li>`;
     return;
   }
-  withPreview.forEach(({ pod, prev }) => {
+  withPreview.forEach(({ pod, prev }, idx) => {
     const li = document.createElement('li');
     li.className = 'pod-card';
+    li.style.setProperty('--i', idx);
     const blocked = STATE.committed && pod.id !== STATE.myPodId;
     if (blocked) li.classList.add('is-blocked');
     // 목록에는 참가 가능한 팟만 올라온다(위에서 걸러냈다).
@@ -1858,14 +1868,18 @@ function renderPodList(){
       ? ` · ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분`
       : ` · ${prev.dropOff.point}에서 바로 하차`;
     const leaderNickname = (pod.participants.find(p => p.isLeader) || {}).nickname || '알 수 없음';
+    const savingsHtml = prev.savings
+      ? `<div class="pod-savings">${SAVE_ICON} 혼자 탈 때보다 ${won(prev.savings)} 절약</div>`
+      : '';
     li.innerHTML = `
       <div class="pod-card-top">
         <strong>${pod.originName} → ${pod.leaderDest}</strong>
         <span class="pod-card-leader">${leaderNickname} 팟장</span>
       </div>
       <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}</p>
+      ${savingsHtml}
       <div class="pod-stats">
-        <div><strong>${won(prev.mine.fare)}</strong><span>예상 1인 요금${prev.savings ? ` <b style="color:var(--primary-dark);">· ${won(prev.savings)} 절약</b>` : ''}</span></div>
+        <div><strong>${won(prev.mine.fare)}</strong><span>예상 1인 요금</span></div>
         <div><strong>${pod.participants.length}/${pod.desiredSize}</strong><span>현재 인원</span></div>
         <div><strong>약 ${prev.myTaxiMins}분</strong><span>예상 소요</span></div>
       </div>
@@ -1963,16 +1977,16 @@ async function renderPodDetail(podId){
   `;
 
   // 4) 1인 예상 요금 (핵심 수치라 카드 유지, 여백을 더 줘 강조)
-  const savingsRow = prev.savings != null
-    ? `<p class="info-row"><span>혼자 탔다면</span><strong>${won(prev.soloFare)}</strong></p>
-       <p class="info-row info-row--highlight" style="color:var(--primary-dark);"><span>지금 같이 타면 이만큼 절약</span><strong>${won(prev.savings)}</strong></p>`
+  const savingsRow = prev.savings
+    ? `<p class="fine-note" style="margin:2px 0 10px;">혼자 탔다면 <s>${won(prev.soloFare)}</s></p>
+       <div class="pod-savings">${SAVE_ICON} 지금 같이 타면 ${won(prev.savings)} 절약</div>`
     : '';
   html += `
     <div class="info-box" style="margin-top:20px;">
       <h3>1인 예상 요금</h3>
       <p class="info-row info-row--highlight"><span>나의 예상 부담금</span><strong>${won(prev.mine.fare)}</strong></p>
       ${savingsRow}
-      <p class="fine-note">아직 인원이 다 안 찼어요 — 참여자와 최종 경로에 따라 달라질 수 있어요.</p>
+      <p class="fine-note" style="margin-top:10px;">아직 인원이 다 안 찼어요 — 참여자와 최종 경로에 따라 달라질 수 있어요.</p>
     </div>
   `;
 
