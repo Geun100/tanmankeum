@@ -197,9 +197,9 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .map-picker-search .autocomplete-list{ left:20px; right:20px; top:calc(100% - 2px); }
   .map-picker-stage{ position:relative; flex:1; min-height:0; }
   #map-picker-map{ position:absolute; inset:0; }
-  .map-picker-pin{ position:absolute; left:50%; top:50%; transform:translate(-50%, -100%); pointer-events:none; filter:drop-shadow(0 3px 4px rgba(0,0,0,.25)); }
+  .map-picker-pin{ position:absolute; left:50%; top:50%; transform:translate(-50%, -100%); pointer-events:none; filter:drop-shadow(0 3px 4px rgba(0,0,0,.25)); z-index:5; }
   .map-picker-gps-btn{ position:absolute; right:16px; bottom:16px; width:44px; height:44px; border-radius:50%; border:none;
-    background:var(--surface); color:var(--ink); box-shadow:var(--shadow-card); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+    background:var(--surface); color:var(--ink); box-shadow:var(--shadow-card); display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:5; }
   .map-picker-footer{ flex-shrink:0; padding:14px 20px calc(20px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); }
   .map-picker-footer .fine-note{ margin:0 0 10px; text-align:center; }
   .autocomplete-item{ padding:10px 14px; font-size:13px; color:var(--ink); cursor:pointer; border-top:1px solid var(--line); }
@@ -1601,6 +1601,11 @@ async function mapPickerInit(){
       const c = mapPickerMap.getCenter();
       mapPickerReverseGeocode(c.getLat(), c.getLng());
     }, 200);
+  });
+  // 드래그로 중앙 핀을 맞추는 대신, 지도를 탭한 지점으로 바로 이동해서 고르는 것도 지원한다.
+  // panTo가 끝나면 idle이 다시 뜨니 역지오코딩은 위 리스너가 그대로 처리한다.
+  mapPickerMap.addListener('click', (mouseEvent) => {
+    mapPickerMap.panTo(mouseEvent.latLng);
   });
 }
 
