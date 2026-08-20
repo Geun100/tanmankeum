@@ -894,6 +894,13 @@ function calcMatchScore(user, pod){
   return { total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible };
 }
 
+// 실제 경로 API 응답이 아직 없을 때만 쓰는 근사치: 기본 4,800원/1.6km + 이후 131m당 100원.
+function estimateFareMins(totalMeters){
+  const fare = Math.round((4800 + Math.ceil(Math.max(0, totalMeters - 1600) / 131) * 100) / 100) * 100;
+  const mins = Math.max(3, Math.round(totalMeters / 1000 * 2.2 + 3));
+  return { fare, mins };
+}
+
 // 확정 시점 참여자 기준 최종 경로 재계산 + 구간별 인원수 비례 요금 배분
 function calcFinalRouteAndFare(pod){
   const participants = pod.participants;
@@ -933,11 +940,9 @@ function calcFinalRouteAndFare(pod){
     const minShares = splitProportional(Math.max(1, Math.round(baseRoute.duration / 60)), weights);
     segments.forEach((s, i) => { s.fare = fareShares[i]; s.mins = minShares[i]; });
   } else {
-    // 경로를 아직 못 받았을 때만 쓰는 근사치: 기본 4,800원/1.6km + 이후 131m당 100원.
-    // 기본요금은 전체 운행에 한 번만 붙이고, 나머지를 구간 거리 비율로 나눈다.
+    // 경로를 아직 못 받았을 때만 쓰는 근사치.
     const totalM = segments.reduce((a, x) => a + x.meters, 0);
-    const estimate = Math.round((4800 + Math.ceil(Math.max(0, totalM - 1600) / 131) * 100) / 100) * 100;
-    const estMins = Math.max(3, Math.round(totalM / 1000 * 2.2 + 3));
+    const { fare: estimate, mins: estMins } = estimateFareMins(totalM);
     const fareShares = splitProportional(estimate, segments.map(s => s.meters));
     const minShares = splitProportional(estMins, segments.map(s => s.meters));
     segments.forEach((s, i) => { s.fare = fareShares[i]; s.mins = minShares[i]; });
@@ -966,18 +971,28 @@ function calcFinalRouteAndFare(pod){
   return { stops, segments, totalFare, totalMins, perPerson, isRealFare };
 }
 
-// 홈 목록/팟 상세 화면에서 "내가 참가했다면"을 미리 계산 (참가 전 미리보기, 참가 로직과 동일 계산 재사용)
+// 홈 목록/팟 상세 화면에서 "내가 참가했다면"을 미리 계산 (참가 전 미리보기)
 function previewJoin(pod, user){
   const matchScore = calcMatchScore(user, pod);
   if (!matchScore.eligible) return { eligible: false, matchScore };
   const dropOff = recommendDropOff(user.dest, pod);
-  const hypoPod = Object.assign({}, pod, {
+  // 이미 이 팟에 있으면(내 팟을 보는 경우) 가짜 참가자를 또 추가하지 않는다 — 안 그러면
+  // 나를 두 번 세서 인원수가 부풀고, 지도에도 나와 겹치는 하차지점 마커가 하나 더 생긴다.
+  const alreadyIn = pod.participants.some(p => p.id === user.id);
+  const hypoPod = alreadyIn ? pod : Object.assign({}, pod, {
     participants: pod.participants.concat([{ id: '__me__', nickname: user.nickname, dest: user.dest, dropOff }]),
   });
   const result = calcFinalRouteAndFare(hypoPod);
-  const mine = result.perPerson.find(p => p.id === '__me__');
-  const myDropSegIdx = result.stops.indexOf(mine.dropPoint) - 1;
+  const mineExact = result.perPerson.find(p => p.id === (alreadyIn ? user.id : '__me__'));
+  const myDropSegIdx = result.stops.indexOf(mineExact.dropPoint) - 1;
   const myTaxiMins = result.segments.slice(0, myDropSegIdx + 1).reduce((s, x) => s + x.mins, 0);
+
+  // 1인 요금은 거리 기반 정밀 배분(calcFinalRouteAndFare) 대신 단순 1/n으로 보여준다 — 확정
+  // 전엔 최종 인원도 하차 순서도 안 정해져서 정밀 배분값은 자릿수만 그럴듯하고 계속 바뀐다.
+  // 정확한 개인별 배분은 팟장이 확정한 뒤 채팅방/최종화면에서 calcFinalRouteAndFare 그대로 보여준다.
+  const n = alreadyIn ? pod.participants.length : pod.participants.length + 1;
+  const mine = Object.assign({}, mineExact, { fare: Math.round(result.totalFare / n / 10) * 10 });
+
   // 혼자 탔으면 얼마였을지 — 내 출발지→내 목적지 직행 요금(prefetchBaseRoutes가 이미 캐싱해둠).
   // 아직 인원이 안 찼을 수 있어 "지금 기준" 절감액이지 확정값이 아니다.
   const soloRoute = cachedRoute([pod.originName, user.dest]);
