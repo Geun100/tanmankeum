@@ -2557,7 +2557,12 @@ async function renderPodChat(podId){
   autoGrow();
   syncSendState();
   chatInput.oninput = () => { autoGrow(); syncSendState(); };
-  chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } };
+  // e.isComposing(+keyCode 229 폴백)로 한글 조합 중 Enter를 걸러낸다. 안 걸러내면 마지막 글자가
+  // 아직 조합 중일 때 Enter가 전송을 트리거해서, 조합이 끝난 뒤 남은 글자가 새 메시지로 또 나간다
+  // (예: "안녕하세요" 입력 중 Enter → "안녕하세요" 전송 + 조합 마무리된 "요"가 별도 메시지로 남음).
+  chatInput.onkeydown = e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); sendChat(); }
+  };
   sendBtn.onclick = sendChat;
 
   const aiBtn = document.getElementById('btn-ai-suggest');
