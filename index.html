@@ -36,19 +36,6 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     --radius-card:16px; --radius-input:12px; --radius-chip:14px; --radius-pill:999px;
     --shadow-card: 0px 4px 8px 0px rgba(0,0,0,0.1);
   }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --ink:#eef0fb; --ink-soft:#b7bad2; --muted:#7d80a0;
-      --paper:#0f1020; --surface:#181a2e; --line:#2a2c46;
-      --primary:#8478ff; --primary-dark:#9992ff; --primary-soft:#232253; --on-primary:#0f1020;
-      --green:#4fd6a0; --green-soft:#123328;
-      --blue:#6ea3ff; --blue-soft:#122a4d;
-      --orange:#ffb15c; --orange-soft:#3a2a11;
-      --danger-soft:#3a1414;
-      --pending:#e6c260; --pending-soft:#332a0c;
-      --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
-    }
-  }
   *{ box-sizing:border-box; }
   html,body{ margin:0; padding:0; }
   body{ font-family:var(--font-sans); background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; }
@@ -95,7 +82,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     padding:0 14px; font-size:16px; outline:none; width:100%;
   }
   .field select:focus, .field input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
-  .field input::placeholder, .chat-input-row input::placeholder{ color:var(--placeholder); opacity:1; }
+  .field input::placeholder, .chat-input::placeholder{ color:var(--placeholder); opacity:1; }
   .field-row{ display:flex; gap:10px; }
   .file-picker{ display:flex; align-items:center; gap:10px; height:48px; border-radius:var(--radius-input); border:1px solid var(--line);
     background:var(--surface); padding:0 6px 0 6px; cursor:pointer; }
@@ -296,8 +283,13 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chat-msg.other{ align-self:flex-start; background:var(--surface); border:1px solid var(--line); border-bottom-left-radius:4px; }
   .chat-msg.me{ align-self:flex-end; background:var(--primary); color:var(--on-primary); border-bottom-right-radius:4px; }
   .chat-msg .chat-name{ display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:2px; }
-  .chat-input-row{ display:flex; gap:8px; }
-  .chat-input-row input{ flex:1; height:44px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:0 16px; font-size:16px; }
+  .chat-input-dock{ flex-shrink:0; display:flex; align-items:flex-end; gap:8px; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); }
+  .chat-input{ flex:1; max-height:104px; min-height:40px; resize:none; border-radius:20px; border:1px solid var(--line); background:var(--fill); color:var(--ink); padding:9px 16px; font-size:15.5px; line-height:1.4; outline:none; overflow-y:auto; }
+  .chat-input:focus{ border-color:var(--primary); background:var(--surface); }
+  .chat-send-btn{ flex-shrink:0; width:38px; height:38px; border-radius:50%; border:none; background:var(--fill); color:var(--placeholder); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s,color .15s,transform .1s; }
+  .chat-send-btn:not(:disabled){ background:var(--primary); color:var(--on-primary); }
+  .chat-send-btn:not(:disabled):active{ transform:scale(.92); }
+  .chat-send-btn:disabled{ cursor:default; }
   /* 채팅이 아직 없을 때: 가짜 인사말 대신 무슨 말을 하면 좋을지 추천만 해준다. */
   .chat-empty{ text-align:center; padding:22px 12px 6px; color:var(--muted); }
   .chat-empty p{ font-size:13px; margin:0 0 12px; }
@@ -521,6 +513,12 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <div class="topbar-title"><strong id="chat-route-label"></strong><span id="chat-meta-label"></span></div>
       </header>
       <div class="screen-body" id="chat-body"></div>
+      <div class="chat-input-dock">
+        <textarea id="chat-input" class="chat-input" placeholder="탑승 장소 등을 조율해보세요" maxlength="200" rows="1"></textarea>
+        <button type="button" class="chat-send-btn" id="btn-chat-send" aria-label="전송" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+        </button>
+      </div>
       <div class="cta-dock" id="chat-cta"></div>
     </section>
 
@@ -2313,11 +2311,7 @@ async function renderPodChat(podId){
       <p class="info-row"><span>예상 택시 시간</span><strong>약 ${result.totalMins}분</strong></p>
     </div>
   `;
-  html += `<span class="section-label">채팅</span><div class="chat-box" id="chat-messages"></div>
-    <div class="chat-input-row">
-      <input type="text" id="chat-input" placeholder="탑승 장소 등을 조율해보세요" maxlength="200">
-      <button class="btn btn--primary btn--sm" id="btn-chat-send">전송</button>
-    </div>`;
+  html += `<span class="section-label">채팅</span><div class="chat-box" id="chat-messages"></div>`;
 
   document.getElementById('chat-body').innerHTML = html;
 
@@ -2373,6 +2367,7 @@ async function renderPodChat(podId){
       btn.addEventListener('click', () => {
         const input = document.getElementById('chat-input');
         input.value = btn.textContent;
+        input.dispatchEvent(new Event('input'));
         input.focus();
       });
     });
@@ -2402,13 +2397,21 @@ async function renderPodChat(podId){
   }
   msgWrap.scrollTop = msgWrap.scrollHeight;
 
-  document.getElementById('btn-chat-send').addEventListener('click', sendChat);
-  document.getElementById('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+  const chatInput = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('btn-chat-send');
+  const autoGrow = () => { chatInput.style.height = 'auto'; chatInput.style.height = chatInput.scrollHeight + 'px'; };
+  const syncSendState = () => { sendBtn.disabled = !chatInput.value.trim(); };
+  autoGrow();
+  syncSendState();
+  chatInput.oninput = () => { autoGrow(); syncSendState(); };
+  chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } };
+  sendBtn.onclick = sendChat;
   async function sendChat(){
-    const input = document.getElementById('chat-input');
-    const text = input.value.trim();
+    const text = chatInput.value.trim();
     if (!text) return;
-    input.value = '';
+    chatInput.value = '';
+    autoGrow();
+    syncSendState();
     if (SUPA_ENABLED) {
       const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text });
       if (error) { showError(friendlyDbError(error)); return; }
