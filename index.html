@@ -686,25 +686,21 @@ async function enterHome(){
   if (SUPA_ENABLED) {
     await upsertProfile(STATE.user.id, STATE.user.nickname, STATE.user.gender);
     STATE.pods = await loadOpenPods();
-    const mine = STATE.pods.find(p => p.participants.some(x => x.id === STATE.user.id));
+    // loadOpenPods는 이름과 달리 dissolved만 뺀 전체를 가져온다(done 포함) — 완료된 옛날 팟도
+    // pod_participants 행이 안 지워지니, 여기서 done을 걸러내지 않으면 이미 끝난 팟이 영원히
+    // "내 현재 팟"으로 잡힌다. DB 트리거(check_pod_capacity)의 "한 팟만" 기준도 done은 뺀다 —
+    // 여기도 그 기준과 맞춘다.
+    const mine = STATE.pods.find(p => p.status !== 'done' && p.participants.some(x => x.id === STATE.user.id));
     STATE.myPodId = mine ? mine.id : null;
     STATE.committed = !!(mine && mine.leaderId !== STATE.user.id);
     STATE.userState = STATE.committed ? '채팅방' : '대기';
 
     if (mine && mine.leaderId === STATE.user.id && mine.participants.length === 1) {
-      const originC = placeCoord(STATE.user.origin), destC = placeCoord(STATE.user.dest);
-      const { error: podErr } = await supa.from('pods').update({
-        origin_name: STATE.user.origin, origin_lat: originC.lat, origin_lng: originC.lng,
-        leader_dest: STATE.user.dest, leader_dest_lat: destC.lat, leader_dest_lng: destC.lng,
-        depart_date: STATE.user.date, depart_time: STATE.user.time, desired_size: STATE.user.partySize,
-      }).eq('id', mine.id);
-      if (podErr) throw podErr;
-      const { error: partErr } = await supa.from('pod_participants').update({
-        dest_name: STATE.user.dest, dest_lat: destC.lat, dest_lng: destC.lng, dropoff_point: STATE.user.dest,
-      }).eq('pod_id', mine.id).eq('user_id', STATE.user.id);
-      if (partErr) throw partErr;
-      const updated = await loadPod(mine.id);
-      if (updated) STATE.pods = STATE.pods.map(p => p.id === mine.id ? updated : p);
+      // 예전엔 이 팟 행을 그대로 두고 경로만 업데이트했다 — 근데 이 팟이 한때 다른 사람도
+      // 있다가 다 나가서 혼자 남은 경우라면, 그때 나눴던 채팅(인사말·정산내역 등)이 pod_messages에
+      // 그대로 남아있어서 "새로 등록한 팟"인데 남의 흔적이 보이는 버그가 났다. 팟은 가벼운 값이니
+      // 그냥 해체하고 새로 만드는 편이 안전하다 — dissolvePod가 해체+createOwnPod까지 해준다.
+      await dissolvePod(mine);
     } else if (mine && mine.leaderId === STATE.user.id && mine.participants.length > 1) {
       showError('이미 다른 사람이 참가한 팟이라 경로를 바꿀 수 없어요. 바꾸려면 채팅방에서 팟을 취소한 뒤 다시 등록해주세요.');
     } else if (mine && mine.leaderId !== STATE.user.id) {
