@@ -73,6 +73,9 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .page-title{ font-size:26px; line-height:1.38; font-weight:700; margin:4px 0 10px; }
   .page-sub{ font-size:14.5px; line-height:1.65; font-weight:400; color:var(--ink-soft); margin:0 0 20px; }
   .section-label{ font-size:12.5px; font-weight:700; color:var(--ink-soft); margin:0 0 8px; display:block; }
+  .chat-section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .chat-section-head .section-label{ margin-bottom:0; }
+  .chat-section-head .btn{ height:30px; padding:0 12px; font-size:12.5px; }
 
   .form{ display:flex; flex-direction:column; gap:16px; }
   .field{ display:flex; flex-direction:column; gap:6px; }
@@ -726,30 +729,27 @@ function podFromRow(podRow){
   // 다른 사람이 자동완성으로 고른 장소(고정 테이블 밖)일 수 있으니 좌표를 먼저 등록해둔다.
   registerPlace(podRow.origin_name, podRow.origin_lat, podRow.origin_lng);
   registerPlace(podRow.leader_dest, podRow.leader_dest_lat, podRow.leader_dest_lng);
-  const routeStops = buildRouteStops(podRow.origin_name, podRow.leader_dest);
   const participants = (podRow.pod_participants || [])
     .slice()
     .sort((a, b) => new Date(a.joined_at) - new Date(b.joined_at))
     .map(row => {
-      const isLeader = row.user_id === podRow.leader_id;
-      const p = {
+      registerPlace(row.dest_name, row.dest_lat, row.dest_lng);
+      return {
         id: row.user_id,
         nickname: (row.profiles && row.profiles.nickname) || '알 수 없음',
         gender: (row.profiles && row.profiles.gender) || '여성',
-        dest: row.dest_name, isLeader,
+        dest: row.dest_name, isLeader: row.user_id === podRow.leader_id,
       };
-      registerPlace(row.dest_name, row.dest_lat, row.dest_lng);
-      p.dropOff = isLeader
-        ? { point: podRow.leader_dest, walkDist: 0, walkTime: 0 }
-        : recommendDropOff(row.dest_name, { routeStops, originName: podRow.origin_name, leaderDest: podRow.leader_dest });
-      return p;
     });
-  return {
-    id: podRow.id, leaderId: podRow.leader_id, leaderDest: podRow.leader_dest, originName: podRow.origin_name,
-    routeStops, departTime: podRow.depart_time.slice(0, 5), departDate: podRow.depart_date,
+  const pod = {
+    id: podRow.id, leaderId: podRow.leader_id, originName: podRow.origin_name,
+    departTime: podRow.depart_time.slice(0, 5), departDate: podRow.depart_date,
     desiredSize: podRow.desired_size, participants,
     status: podRow.status === 'open' ? 'recruiting' : podRow.status,
   };
+  // leaderDest(=trunk)/routeStops/각자 dropOff는 저장된 값을 안 믿고 현재 참가자 구성으로
+  // 항상 다시 정한다 — DB의 leader_dest 컬럼은 최초 생성 당시 값이라 참가자가 늘면 낡는다.
+  return applyTrunk(pod);
 }
 
 const POD_SELECT = '*, pod_participants(*, profiles(nickname, gender))';
@@ -840,9 +840,10 @@ function splitProportional(total, weights){
 
 /* ============ 3. 계산 함수 4종 ============ */
 
-const ANGLE_THRESHOLD_DEG = 25; // 팟장 경로 벡터 vs 후보 목적지 벡터 허용 각도차 (실제 경로를 아직 못 받았을 때만 사용)
-const DIST_BUFFER = 1.15;       // "거리가 비슷하면"의 허용 오차(15%)
-const ROUTE_CORRIDOR_M = 500;   // 실제 도로 경로에서 이만큼 안쪽이면 "경로 위"로 본다(도보 약 7분)
+const ANGLE_THRESHOLD_DEG = 25; // 후보 정류장(routeStops) 필터링용 각도차 (실제 경로를 아직 못 받았을 때만 사용)
+const DIST_BUFFER = 1.15;       // "거리가 비슷하면"의 허용 오차(15%, 위와 같은 용도)
+const ROUTE_CORRIDOR_M = 500;   // 실제 도로 경로에서 이만큼 안쪽이면 "경로 위"로 본다(도보 약 7분, 위와 같은 용도)
+const WALK_CAP_MIN = 10;        // 하차지점에서 실제 목적지까지 허용하는 최대 도보 시간(분). 매칭 성립의 최종 기준.
 
 // 점 p와 선분 ab 사이 최단거리(미터). 위경도를 등거리 평면으로 근사한다 —
 // 수 km 범위에서 오차가 무시할 수준이라 경로선 판정에는 충분하다.
@@ -888,7 +889,9 @@ function distToPath(coord, path){
   return best;
 }
 
-// 팟장 출발지→목적지 벡터와 각도가 크게 벌어지거나, 팟장 목적지보다 훨씬 먼 곳은 참가 불가 (PRD 6번)
+// 매칭 성립 여부 판정에는 더 이상 안 쓴다(그건 allWalkable의 도보 10분 캡으로 대체됨).
+// 여기서는 buildRouteStops()가 "원점→목적지" 직선 근방의 고정 정류장 후보를 거를 때만 쓰는
+// 대략적인 각도/거리 필터다 — 후보를 좁히는 용도지, 매칭 정합성 기준이 아니다.
 function isRouteEligible(userDest, pod){
   const o = placeCoord(pod.originName), l = placeCoord(pod.leaderDest), u = placeCoord(userDest);
   if (!o || !l || !u) return false;
@@ -942,6 +945,38 @@ function recommendDropOff(userDest, pod){
 
 function walkTimeOf(meters){ return meters < 1 ? 0 : Math.max(1, Math.round(meters / 70)); } // 도보 약 70m/분
 
+// 그룹 안에서 원점으로부터 가장 먼 목적지 = 택시가 실제로 가는 최종 목적지(trunk 경로의 종점).
+// "팟장"은 고정된 사회적 역할(확정/취소 권한)일 뿐이고, 실제 경로 종점은 인원이 바뀔 때마다 다시 정한다 —
+// 그래야 나중에 합류한 사람이 더 멀어도 "먼저 판 만든 사람이 팟장"이라는 이유만으로 거부되지 않는다.
+// 여기선 아직 실제 도로 경로가 없을 수도 있어 직선거리로 고른다(누가 더 먼지 대소 비교만 하면 되므로 근사로 충분).
+function trunkDestOf(originName, dests){
+  if (!dests.length) return null;
+  const o = placeCoord(originName);
+  let best = dests[0], bestDist = -Infinity;
+  dests.forEach(d => {
+    const c = placeCoord(d);
+    const dd = (o && c) ? dist(o, c) : 0;
+    if (dd > bestDist) { bestDist = dd; best = d; }
+  });
+  return best;
+}
+
+// pod.leaderDest(=trunk)/routeStops/참가자별 하차지점을 현재 참가자 구성 기준으로 다시 계산해 pod에 반영한다.
+// trunk가 바뀌면 원래 있던 사람들 하차지점도 같이 바뀌므로, 참가자가 늘거나 줄 때마다 반드시 다시 불러야 한다
+// (podFromRow/makePod/join 이후 등 — 저장된 값을 믿지 않고 항상 다시 계산한다는 기존 원칙의 연장).
+function applyTrunk(pod){
+  if (!pod.participants.length) return pod;
+  pod.leaderDest = trunkDestOf(pod.originName, pod.participants.map(p => p.dest));
+  pod.routeStops = buildRouteStops(pod.originName, pod.leaderDest);
+  pod.participants.forEach(p => { p.dropOff = recommendDropOff(p.dest, pod); });
+  return pod;
+}
+
+// 이 조합이 성립하는지: 참가자 전원이 하차 후 도보 10분(WALK_CAP_MIN) 안에 자기 목적지에 닿아야 한다.
+function allWalkable(pod){
+  return pod.participants.every(p => p.dropOff.walkTime <= WALK_CAP_MIN);
+}
+
 // 경로선 위에서 좌표와 가장 가까운 지점과 그 거리.
 function nearestPointOnPath(coord, path){
   const mPerDegLat = 111320, mPerDegLng = 111320 * Math.cos(toRad(coord.lat));
@@ -978,7 +1013,20 @@ function calcMatchScore(user, pod){
   // 정확한 합류 지점은 채팅으로 조율한다.
   const ORIGIN_WALK_RADIUS_M = 300;
   const nearOrigin = originDist <= ORIGIN_WALK_RADIUS_M;
-  const eligible = nearOrigin && isRouteEligible(user.dest, pod);
+
+  // 내가 합류했을 때를 가정해 trunk(최종 목적지)를 다시 잡고 전원 하차지점을 재계산한다.
+  // 이미 이 팟에 있으면(내 팟을 보는 경우) 나를 또 추가하지 않는다 — 안 그러면 인원수가 부풀고
+  // 참가자 목록에도 나와 겹치는 항목이 하나 더 생긴다.
+  const alreadyIn = pod.participants.some(p => p.id === user.id);
+  const myId = alreadyIn ? user.id : '__me__';
+  const hypoParticipants = (alreadyIn ? pod.participants : pod.participants.concat([{ id: myId, nickname: user.nickname, dest: user.dest }]))
+    .map(p => Object.assign({}, p));
+  const hypoPod = applyTrunk(Object.assign({}, pod, { participants: hypoParticipants }));
+
+  // 이 조합이 성립하려면: 참가자 전원(나 포함)이 각자 하차지점에서 도보 10분 안에 목적지에 닿아야 한다.
+  // 내가 trunk를 더 멀리 밀어내는 쪽이면, 원래 있던 사람들 하차가 그만큼 멀어질 수도 있으므로
+  // 그 사람들까지 같이 재검증한다 — 나 혼자 걸을 만하다고 매칭이 성립하는 게 아니다.
+  const eligible = nearOrigin && allWalkable(hypoPod);
   const routeScore = eligible ? 25 : 0;
 
   const diffMin = Math.abs(timeToMin(user.time) - timeToMin(pod.departTime));
@@ -988,7 +1036,7 @@ function calcMatchScore(user, pod){
   const sizeScore = sizeDiff === 0 ? 5 : sizeDiff === 1 ? 3 : sizeDiff === 2 ? 1 : 0;
 
   const total = Math.min(100, originScore + fitScore + routeScore + timeScore + sizeScore);
-  return { total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible };
+  return { total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, hypoPod, myId };
 }
 
 // 실제 경로 API 응답이 아직 없을 때만 쓰는 근사치: 기본 4,800원/1.6km + 이후 131m당 100원.
@@ -1072,22 +1120,18 @@ function calcFinalRouteAndFare(pod){
 function previewJoin(pod, user){
   const matchScore = calcMatchScore(user, pod);
   if (!matchScore.eligible) return { eligible: false, matchScore };
-  const dropOff = recommendDropOff(user.dest, pod);
-  // 이미 이 팟에 있으면(내 팟을 보는 경우) 가짜 참가자를 또 추가하지 않는다 — 안 그러면
-  // 나를 두 번 세서 인원수가 부풀고, 지도에도 나와 겹치는 하차지점 마커가 하나 더 생긴다.
-  const alreadyIn = pod.participants.some(p => p.id === user.id);
-  const hypoPod = alreadyIn ? pod : Object.assign({}, pod, {
-    participants: pod.participants.concat([{ id: '__me__', nickname: user.nickname, dest: user.dest, dropOff }]),
-  });
+  // hypoPod는 calcMatchScore가 이미 trunk 재계산 + 전원 하차지점 갱신까지 끝내둔 상태다.
+  const hypoPod = matchScore.hypoPod;
+  const dropOff = hypoPod.participants.find(p => p.id === matchScore.myId).dropOff;
   const result = calcFinalRouteAndFare(hypoPod);
-  const mineExact = result.perPerson.find(p => p.id === (alreadyIn ? user.id : '__me__'));
+  const mineExact = result.perPerson.find(p => p.id === matchScore.myId);
   const myDropSegIdx = result.stops.indexOf(mineExact.dropPoint) - 1;
   const myTaxiMins = result.segments.slice(0, myDropSegIdx + 1).reduce((s, x) => s + x.mins, 0);
 
   // 1인 요금은 거리 기반 정밀 배분(calcFinalRouteAndFare) 대신 단순 1/n으로 보여준다 — 확정
   // 전엔 최종 인원도 하차 순서도 안 정해져서 정밀 배분값은 자릿수만 그럴듯하고 계속 바뀐다.
   // 정확한 개인별 배분은 팟장이 확정한 뒤 채팅방/최종화면에서 calcFinalRouteAndFare 그대로 보여준다.
-  const n = alreadyIn ? pod.participants.length : pod.participants.length + 1;
+  const n = hypoPod.participants.length;
   const mine = Object.assign({}, mineExact, { fare: Math.round(result.totalFare / n / 10) * 10 });
 
   // 혼자 탔으면 얼마였을지 — 내 출발지→내 목적지 직행 요금(prefetchBaseRoutes가 이미 캐싱해둠).
@@ -1100,20 +1144,17 @@ function previewJoin(pod, user){
 
 /* ============ 4. 시드 팟 데이터 ============ */
 function makePod({ id, originName, leaderNickname, leaderGender, leaderDest, departTime, departDate, desiredSize, extras }){
-  const routeStops = buildRouteStops(originName, leaderDest);
   const leader = { id: id + '_leader', nickname: leaderNickname, gender: leaderGender, dest: leaderDest, isLeader: true };
-  // 팟장은 경로의 종점에서 내린다. 목적지가 정류장 테이블에 없는 곳이어도 마찬가지다.
-  leader.dropOff = { point: leaderDest, walkDist: 0, walkTime: 0 };
   const participants = [leader];
   (extras || []).forEach((ep, i) => {
-    const p = { id: id + '_p' + i, nickname: ep.nickname, gender: ep.gender, dest: ep.dest, isLeader: false };
-    p.dropOff = recommendDropOff(ep.dest, { routeStops, originName });
-    participants.push(p);
+    participants.push({ id: id + '_p' + i, nickname: ep.nickname, gender: ep.gender, dest: ep.dest, isLeader: false });
   });
-  return {
-    id, leaderId: leader.id, leaderDest, originName, routeStops,
+  const pod = {
+    id, leaderId: leader.id, originName,
     departTime, departDate, desiredSize, participants, status: 'recruiting',
   };
+  // leaderDest(=trunk)/routeStops/각자 dropOff는 applyTrunk가 참가자 구성 기준으로 정한다.
+  return applyTrunk(pod);
 }
 
 // 시드 팟의 출발 시각은 "지금부터 n분 뒤"로 잡는다. 고정 시각으로 두면 그 시각이 지난 뒤에
@@ -1268,12 +1309,24 @@ async function runSelfCheck(){
     check('인당 요금 음수 없음', real.perPerson.every(p => p.fare >= 0));
     check('하차 순서가 경로 진행 순', real.stops.every((n, i, arr) =>
       i === 0 || progressAlongPath(placeCoord(arr[i - 1]), route.path) <= progressAlongPath(placeCoord(n), route.path)));
-    check('팟장은 종점에서 하차', real.perPerson.find(p => p.nickname === 'L').dropPoint === pod.leaderDest);
+    // 팟장이 항상 종점은 아니다 — trunk(최종 목적지)를 실제로 가진 사람이 종점에서 내려야 한다.
+    const trunkHolder = real.perPerson.find(p => p.dest === pod.leaderDest);
+    check('trunk 보유자는 종점에서 하차', !trunkHolder || trunkHolder.dropPoint === pod.leaderDest);
   }
 
   // 출발지 하차 회귀 검사: 경로를 벗어난 목적지라도 출발지에서 내리라고 하면 안 된다.
   const off = recommendDropOff('포항공과대학교', pod); // 환호공원 경로와 정반대 방향(서쪽)
   check('출발지 하차 아님', off.point !== pod.originName);
+
+  // 도보 캡 불변식: 하차지점에서 실제 목적지까지 WALK_CAP_MIN(10분)을 넘는 참가자가 있으면 안 된다.
+  check('전원 도보 10분 이내', pod.participants.every(p => p.dropOff.walkTime <= WALK_CAP_MIN));
+
+  // 회귀 검사(사용자 리포트 재현): 경로에서 완전히 벗어난 목적지는 매칭 자체가 거부돼야 한다.
+  // 한동대→포항역 팟에 영일대해수욕장(전혀 다른 방향, 실제 택시로 20분 거리)이 매칭됐던 버그.
+  const farPod = makePod({ id: '__check_far', originName: '한동대학교', leaderNickname: 'L2', leaderGender: '여성',
+    leaderDest: '포항역', departTime: '19:00', desiredSize: 4, extras: [] });
+  const badMatch = calcMatchScore({ id: '__cand', origin: '한동대학교', dest: '영일대해수욕장', time: '19:00', partySize: 1 }, farPod);
+  check('경로 밖 목적지는 매칭 거부', badMatch.eligible === false);
 
   console[fails.length ? 'error' : 'log'](fails.length ? '자체점검 실패: ' + fails.join(', ') : '자체점검 통과');
   return { passed: fails.length === 0, fails };
@@ -1331,7 +1384,7 @@ async function paintRouteMap(containerId, { stops, originName, leaderDest, dropP
   const straightLine = new kakao.maps.Polyline({ map, path, strokeWeight: 4, strokeColor: '#4d3df0', strokeOpacity: 0.9, strokeStyle: 'solid' });
 
   // 실제 도로 경로로 교체 (응답 도착 시).
-  // 그리는 건 언제나 출발지→팟장 목적지 경로 하나다. 하차지점은 이 경로 위 마커로만 표시한다.
+  // 그리는 건 언제나 출발지→trunk(최종 목적지) 경로 하나다. 하차지점은 이 경로 위 마커로만 표시한다.
   fetchRoute([originName, leaderDest]).then(route => {
     if (!document.getElementById(containerId)) return; // 화면이 이미 바뀌었으면 중단
     if (route && route.path.length) {
@@ -1415,7 +1468,12 @@ async function joinPod(pod){
   const ownPodId = STATE.myPodId;
 
   if (SUPA_ENABLED) {
-    const dropOff = recommendDropOff(u.dest, pod);
+    // 합류하면 trunk(최종 목적지)가 바뀔 수 있으니, 내 하차지점도 그 가정 위에서 계산한다.
+    // 이 값은 DB에 기록용으로만 남고, 실제로는 다음 로드 때 podFromRow가 참가자 전체 기준으로 다시 정한다.
+    const hypoPod = applyTrunk(Object.assign({}, pod, {
+      participants: pod.participants.concat([{ id: u.id, nickname: u.nickname, dest: u.dest }]).map(p => Object.assign({}, p)),
+    }));
+    const dropOff = hypoPod.participants.find(p => p.id === u.id).dropOff;
     const destC = placeCoord(u.dest);
 
     // 내 팟을 먼저 해체해야 한다. DB 트리거가 "한 사람은 한 팟에만" 규칙을 강제하므로,
@@ -1440,8 +1498,8 @@ async function joinPod(pod){
     STATE.pods = STATE.pods.filter(p => p.id !== ownPodId && p.id !== pod.id);
     if (fresh) STATE.pods.push(fresh); // null이면 방금 참가한 그 순간 팟이 사라진 극단적 경쟁 상황 — 다음 화면 재조회 때 자연히 빠진다
   } else {
-    const dropOff = recommendDropOff(u.dest, pod);
-    pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false, dropOff });
+    pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false });
+    applyTrunk(pod); // trunk 재계산 + 전원(신규 포함) 하차지점 갱신
     if (ownPodId && ownPodId !== pod.id) {
       STATE.pods = STATE.pods.filter(p => p.id !== ownPodId);
       delete STATE.chatMessages[ownPodId];
@@ -1883,15 +1941,13 @@ async function prefetchBaseRoutes(userOrigin, userDest){
   await Promise.all(routes.map(r => fetchRoute(r)));
 }
 
-// 팟 계산에 필요한 경로는 출발지→팟장 목적지 하나뿐이다.
+// 팟 계산에 필요한 경로는 출발지→trunk(최종 목적지) 하나뿐이다.
 // 하차 순서·구간 거리·총요금이 전부 이 경로 하나에서 나온다.
 async function warmPodRoutes(pod){
   await fetchRoute([pod.originName, pod.leaderDest]);
-  // 경로를 받고 나면 하차지점을 다시 잡는다(경로가 없을 때 잡힌 폴백 값을 덮어쓴다).
-  pod.participants.forEach(p => {
-    if (p.isLeader) return; // 팟장은 항상 종점에서 내린다
-    p.dropOff = recommendDropOff(p.dest, pod);
-  });
+  // 경로를 받고 나면 하차지점을 다시 잡는다(경로가 없을 때 잡힌 직선 근사 폴백 값을 덮어쓴다).
+  // trunk 보유자가 팟장이 아닐 수도 있으므로 전원 다시 계산한다(applyTrunk가 알아서 처리).
+  applyTrunk(pod);
 }
 
 // 하차지점 이름은 "그 사람 목적지" 기준으로 짓는다.
@@ -1967,8 +2023,10 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
         const updated = await loadPod(mine.id);
         if (updated) STATE.pods = STATE.pods.map(p => p.id === mine.id ? updated : p);
       } else {
-        mine.originName = originName; mine.leaderDest = destName;
+        mine.originName = originName;
+        mine.participants[0].dest = destName; // trunk(leaderDest)는 applyTrunk가 이 값으로 다시 정한다
         mine.departTime = time; mine.departDate = date; mine.desiredSize = partySize;
+        applyTrunk(mine);
       }
       STATE.user = { ...STATE.user, origin: originName, dest: destName, time, date, partySize };
       saveOnboardingCache(STATE.user);
@@ -2162,7 +2220,7 @@ async function renderPodDetail(podId){
     html += `
       <div class="info-box is-danger">
         <h3 style="color:var(--danger);">참가할 수 없어요</h3>
-        <p class="fine-note" style="color:var(--danger);">내 목적지(${u.dest})가 팟장의 경로 안에 없어요. 팟장의 최종 목적지(${pod.leaderDest})를 지나쳐야 갈 수 있는 곳이라 이 팟에는 참가할 수 없어요.</p>
+        <p class="fine-note" style="color:var(--danger);">내 목적지(${u.dest})가 이 팟 경로에서 너무 멀어요. 하차지점에서 도보 ${WALK_CAP_MIN}분 안에 닿을 수 있어야 참가할 수 있어요.</p>
       </div>
     `;
     body.innerHTML = html;
@@ -2172,7 +2230,7 @@ async function renderPodDetail(podId){
     return;
   }
 
-  // 2) 지도: 팟출발지(초록) / 팟장목적지(파랑) / 내 추천 하차지점(주황) / 내 목적지(핀) / 택시경로(실선) / 도보경로(별도)
+  // 2) 지도: 팟출발지(초록) / 최종 목적지(파랑) / 내 추천 하차지점(주황) / 내 목적지(핀) / 택시경로(실선) / 도보경로(별도)
   const map2 = mapContainerHTML({ large: true });
   html += `
     <div class="map-card">
@@ -2181,7 +2239,7 @@ async function renderPodDetail(podId){
         <span><span class="legend-dot" style="background:var(--green);"></span>출발지</span>
         <span><span class="legend-dot" style="background:var(--orange);"></span>내 하차지점</span>
         <span><span class="legend-dot" style="background:#5b6478;"></span>다른 사람 하차</span>
-        <span><span class="legend-dot" style="background:var(--blue);"></span>종점(팟장 목적지)</span>
+        <span><span class="legend-dot" style="background:var(--blue);"></span>종점(최종 목적지)</span>
         <span id="${map2.id}_legend">실선: 경로 조회 중… / 점선: 도보 경로</span>
       </div>
     </div>
@@ -2306,12 +2364,17 @@ async function renderPodChat(podId){
     <div class="info-box">
       <h3>경로 요약</h3>
       <p class="info-row"><span>출발</span><strong>${pod.originName}</strong></p>
-      <p class="info-row"><span>팟장 목적지</span><strong>${pod.leaderDest}</strong></p>
+      <p class="info-row"><span>최종 목적지</span><strong>${pod.leaderDest}</strong></p>
       <p class="info-row"><span>출발 시간</span><strong>${pod.departTime}</strong></p>
       <p class="info-row"><span>예상 택시 시간</span><strong>약 ${result.totalMins}분</strong></p>
     </div>
   `;
-  html += `<span class="section-label">채팅</span><div class="chat-box" id="chat-messages"></div>`;
+  html += `
+    <div class="chat-section-head">
+      <span class="section-label">채팅</span>
+      <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-suggest">✨ 문구 추천</button>
+    </div>
+    <div class="chat-box" id="chat-messages"></div>`;
 
   document.getElementById('chat-body').innerHTML = html;
 
@@ -2406,6 +2469,37 @@ async function renderPodChat(podId){
   chatInput.oninput = () => { autoGrow(); syncSendState(); };
   chatInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } };
   sendBtn.onclick = sendChat;
+
+  const aiBtn = document.getElementById('btn-ai-suggest');
+  aiBtn.addEventListener('click', async () => {
+    const myInfo = fareMap[u.id] || {};
+    aiBtn.disabled = true;
+    aiBtn.textContent = '생각 중…';
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originName: pod.originName, trunkDest: pod.leaderDest,
+          myNickname: u.nickname, myDest: u.dest, isLeader,
+          myDropPoint: myInfo.dropPoint, myWalkTime: myInfo.walkTime,
+          departTime: pod.departTime,
+          participants: pod.participants.filter(p => p.id !== u.id).map(p => ({ nickname: p.nickname, dest: p.dest })),
+          recentMessages: messages.map(m => ({ who: m.mine ? u.nickname : m.who, text: m.text })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.suggestion) throw new Error(data.error || '추천 실패');
+      chatInput.value = data.suggestion;
+      chatInput.dispatchEvent(new Event('input'));
+      chatInput.focus();
+    } catch (e) {
+      showError('문구 추천을 못 받아왔어요. 잠시 후 다시 시도해보세요.');
+    } finally {
+      aiBtn.disabled = false;
+      aiBtn.textContent = '✨ 문구 추천';
+    }
+  });
   async function sendChat(){
     const text = chatInput.value.trim();
     if (!text) return;
