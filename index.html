@@ -1307,7 +1307,13 @@ async function fetchRoute(stops, departureTime){
 
   let route = null;
   try {
-    const res = await fetch(url, { headers: { Authorization: 'KakaoAK ' + restKey } });
+    // 타임아웃 없이 fetch만 걸면, 네트워크가 응답도 에러도 안 주고 그냥 멈췄을 때(방화벽이 조용히
+    // 패킷을 버리는 경우 등) 이 await가 영원히 안 끝나서 "경로 확인 중…" 버튼이 그대로 굳는다.
+    // 8초 안에 응답 없으면 포기하고 폴백(직선+추정요금)으로 넘어간다.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(url, { headers: { Authorization: 'KakaoAK ' + restKey }, signal: controller.signal });
+    clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();
       const r = data.routes && data.routes[0];
