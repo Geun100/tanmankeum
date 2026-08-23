@@ -1257,7 +1257,29 @@ const MAX_WAYPOINTS = 5; // 카카오모빌리티 길찾기 API 제한
 function routeKey(stops){ return stops.join('>'); }
 function cachedRoute(stops){ return ROUTE_CACHE.get(routeKey(stops)) || null; }
 
-async function fetchRoute(stops){
+// 출발 시각이 지금보다 나중이면 그 시각 기준 예상 교통정보로 경로를 받는다(미래 운행 정보 길찾기).
+// 카카오 API는 "현재 이후" 시각만 받으므로, 이미 지난 시각이면 null을 돌려주고 fetchRoute가
+// 일반 길찾기(현재 시각 기준)로 대체한다.
+function futureDepartureParam(pod){
+  if (!pod.departDate || !pod.departTime) return null;
+  const dt = new Date(`${pod.departDate}T${pod.departTime}:00`);
+  if (isNaN(dt) || dt <= new Date()) return null;
+  const p2 = n => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}${p2(dt.getMonth() + 1)}${p2(dt.getDate())}${p2(dt.getHours())}${p2(dt.getMinutes())}`;
+}
+
+// 화면에 "이 예상치는 출발 시각 기준 교통정보로 계산했다"는 걸 밝혀주는 문구.
+// 미래 시각이 아니면(이미 지났거나 지금이면) 빈 문자열 — 그때는 그냥 현재 교통 기준이라 밝힐 게 없다.
+function futureNoteHtml(pod){
+  return futureDepartureParam(pod)
+    ? `<p class="fine-note">${pod.departTime} 출발 기준 예상 교통정보로 계산했어요.</p>`
+    : '';
+}
+
+// departureTime(YYYYMMDDHHMM)을 주면 미래 운행 정보 길찾기(/v1/future/directions)를, 안 주면
+// 일반 길찾기(/v1/directions)를 쓴다. 캐시 키는 stops만 쓴다(departureTime 유무로 안 나눔) —
+// 같은 팟의 출발 시각은 고정값이라, 먼저 받아온 쪽이 그 stops 조합의 대표값이 되는 걸로 충분하다.
+async function fetchRoute(stops, departureTime){
   const key = routeKey(stops);
   if (ROUTE_CACHE.has(key)) return ROUTE_CACHE.get(key);
 
@@ -1270,13 +1292,14 @@ async function fetchRoute(stops){
   // ponytail: 경유지가 5개를 넘으면 앞에서부터 5개만 보낸다. 지금 정류장 데이터로는 최대 3개라 실제로는 걸리지 않음.
   const waypoints = mid.slice(0, MAX_WAYPOINTS).map((n, i) => asParam(n, i + 1)).join('|');
 
-  const url = 'https://apis-navi.kakaomobility.com/v1/directions'
+  const url = (departureTime ? 'https://apis-navi.kakaomobility.com/v1/future/directions' : 'https://apis-navi.kakaomobility.com/v1/directions')
     + `?origin=${asParam(stops[0], 0)}`
     + `&destination=${asParam(stops[stops.length - 1], stops.length - 1)}`
     + (waypoints ? `&waypoints=${waypoints}` : '')
     // RECOMMEND는 실시간 교통을 반영해 호출할 때마다 다른 경로를 준다. 그러면 같은 팟이 접속 시점에 따라
     // 참가 가능/불가로 뒤집히므로, 판정이 흔들리지 않도록 최단거리 경로로 고정한다.
-    + '&priority=DISTANCE';
+    + '&priority=DISTANCE'
+    + (departureTime ? `&departure_time=${departureTime}` : '');
 
   let route = null;
   try {
@@ -1988,14 +2011,15 @@ async function prefetchBaseRoutes(userOrigin, userDest){
 // 팟 계산에 필요한 경로는 출발지→trunk(최종 목적지) 하나뿐이다.
 // 하차 순서·구간 거리·총요금이 전부 이 경로 하나에서 나온다.
 async function warmPodRoutes(pod){
-  await fetchRoute([pod.originName, pod.leaderDest]);
+  const dep = futureDepartureParam(pod); // 출발이 미래 시각이면 그 시각 기준 예상 경로를 받는다
+  await fetchRoute([pod.originName, pod.leaderDest], dep);
   // 경로를 받고 나면 하차지점을 다시 잡는다(경로가 없을 때 잡힌 직선 근사 폴백 값을 덮어쓴다).
   // trunk 보유자가 팟장이 아닐 수도 있으므로 전원 다시 계산한다(applyTrunk가 알아서 처리).
   applyTrunk(pod);
   // 하차지점(경유지)이 확정됐으니, 이걸 낀 실제 경로도 받아서 구간별 실거리/실시간을 캐시해둔다
   // (calcFinalRouteAndFare가 있으면 근사치 대신 이걸 쓴다). stops는 순서 계산에 근사 경로면 충분하다.
   const stops = calcFinalRouteAndFare(pod).stops;
-  if (stops.length > 2) await fetchRoute(stops);
+  if (stops.length > 2) await fetchRoute(stops, dep);
 }
 
 // 하차지점 이름은 "그 사람 목적지" 기준으로 짓는다.
@@ -2303,6 +2327,7 @@ async function renderPodDetail(podId){
         ? `여기서 내리면 목적지까지 도보 ${prev.dropOff.walkTime}분이에요.`
         : '하차지점이 곧 내 목적지예요. 더 걷지 않아도 돼요.'}</p>
       <p class="info-row" style="border-top:1px solid var(--line); margin-top:12px; padding-top:12px;"><span>예상 택시 시간</span><strong>약 ${prev.myTaxiMins}분</strong></p>
+      ${futureNoteHtml(pod)}
       <div class="kakao-link-row">
         <a class="btn btn--ghost btn--sm" target="_blank" rel="noopener"
            href="${kakaoMapPlaceUrl(prev.dropOff.point)}">${ICON_PIN} 하차지점 위치 보기</a>
@@ -2410,7 +2435,7 @@ async function renderPodChat(podId){
   // 경유지 낀 실제 경로가 아직 캐시에 없으면(막 확정됐거나 처음 보는 화면) 받아온 뒤 한 번 다시 그린다.
   // 그래야 구간별 요금/시간이 근사치가 아니라 실측값이 된다.
   if (result.stops.length > 2 && !cachedRoute(result.stops)) {
-    fetchRoute(result.stops).then(r => {
+    fetchRoute(result.stops, futureDepartureParam(pod)).then(r => {
       if (r && document.getElementById('screen-pod-chat').classList.contains('active')) renderPodChat(podId);
     });
   }
@@ -2423,6 +2448,7 @@ async function renderPodChat(podId){
       <p class="info-row"><span>최종 목적지</span><strong>${pod.leaderDest}</strong></p>
       <p class="info-row"><span>출발 시간</span><strong>${pod.departTime}</strong></p>
       <p class="info-row"><span>예상 택시 시간</span><strong>약 ${result.totalMins}분</strong></p>
+      ${futureNoteHtml(pod)}
     </div>
   `;
   html += `
@@ -2663,7 +2689,7 @@ function renderFinal(podId){
   // 경유지 낀 실제 경로가 아직 없으면 받아온 뒤 다시 그린다 — 확정 화면은 실제 정산 기준이라
   // 근사치보다 실측 구간 요금이 특히 중요하다.
   if (result.stops.length > 2 && !cachedRoute(result.stops)) {
-    fetchRoute(result.stops).then(r => {
+    fetchRoute(result.stops, futureDepartureParam(pod)).then(r => {
       if (r && document.getElementById('screen-final').classList.contains('active')) renderFinal(podId);
     });
   }
@@ -2694,7 +2720,9 @@ function renderFinal(podId){
   });
   html += `<p class="fine-note" style="margin-top:8px;">${result.isRealFare
     ? '카카오내비 경로 기준 예상 요금이에요. 실제 요금은 교통상황에 따라 달라질 수 있어요.'
-    : '경로 조회에 실패해 추정 요금으로 계산했어요. 실제 요금과 차이가 클 수 있어요.'}</p></div>`;
+    : '경로 조회에 실패해 추정 요금으로 계산했어요. 실제 요금과 차이가 클 수 있어요.'}</p>
+    ${futureNoteHtml(pod)}
+  </div>`;
 
   document.getElementById('final-body').innerHTML = html;
   const needsRefresh = !cachedRoute([pod.originName, pod.leaderDest]);
