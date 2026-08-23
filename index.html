@@ -1066,24 +1066,43 @@ function calcFinalRouteAndFare(pod){
   const stops = [pod.originName, ...new Set(dropPoints.filter(p => p !== pod.originName))]
     .sort((a, b) => progressOf(a) - progressOf(b));
 
-  // 구간 길이도 경로 위 진행거리 차이로 잰다(직선거리가 아니라 실제 주행거리).
+  // 경유지(하차지점)를 낀 실제 경로가 캐시돼 있으면(warmPodRoutes가 미리 받아둔 것) 구간별
+  // 실거리/실시간을 그대로 쓴다 — 카카오모빌리티 길찾기 API는 waypoints를 주면 경유지 수+1개
+  // 섹션으로 나눠서 구간별 distance/duration을 준다. 없으면 2점 경로 위에 하차지점을 투영한
+  // 근사치를 쓴다(폴백, 기존 방식).
+  const preciseRoute = stops.length > 2 ? cachedRoute(stops) : null;
+  const hasPrecise = !!(preciseRoute && preciseRoute.sections && preciseRoute.sections.length === stops.length - 1);
+  const fareRoute = hasPrecise ? preciseRoute : baseRoute;
+
   const segments = [];
   for (let i = 0; i < stops.length - 1; i++){
-    const a = stops[i], b = stops[i + 1];
-    const meters = hasPath
-      ? Math.max(1, progressOf(b) - progressOf(a))
-      : Math.max(1, dist(placeCoord(a), placeCoord(b)));
-    segments.push({ from: a, to: b, meters, fare: 0, mins: 0 });
+    if (hasPrecise) {
+      segments.push({
+        from: stops[i], to: stops[i + 1],
+        meters: Math.max(1, preciseRoute.sections[i].distance),
+        fare: 0, mins: Math.round(preciseRoute.sections[i].duration / 60),
+      });
+    } else {
+      const a = stops[i], b = stops[i + 1];
+      const meters = hasPath
+        ? Math.max(1, progressOf(b) - progressOf(a))
+        : Math.max(1, dist(placeCoord(a), placeCoord(b)));
+      segments.push({ from: a, to: b, meters, fare: 0, mins: 0 });
+    }
   }
 
-  const isRealFare = !!(baseRoute && baseRoute.fare > 0 && segments.length);
+  const isRealFare = !!(fareRoute && fareRoute.fare > 0 && segments.length);
   if (isRealFare) {
     // 총액은 경로 하나의 실제 택시요금이다. 구간별로 나눌 때는 주행거리 비율을 쓴다
     // (구간마다 기본요금을 따로 매기면 택시 요금 체계와 어긋난다).
     const weights = segments.map(s => s.meters);
-    const fareShares = splitProportional(baseRoute.fare, weights);
-    const minShares = splitProportional(Math.max(1, Math.round(baseRoute.duration / 60)), weights);
-    segments.forEach((s, i) => { s.fare = fareShares[i]; s.mins = minShares[i]; });
+    const fareShares = splitProportional(fareRoute.fare, weights);
+    segments.forEach((s, i) => { s.fare = fareShares[i]; });
+    if (!hasPrecise) {
+      // 정밀 구간시간이 없을 때만 비율로 나눈다 — 정밀 모드는 위에서 이미 실제 구간 duration을 넣었다.
+      const minShares = splitProportional(Math.max(1, Math.round(fareRoute.duration / 60)), weights);
+      segments.forEach((s, i) => { s.mins = minShares[i]; });
+    }
   } else {
     // 경로를 아직 못 받았을 때만 쓰는 근사치.
     const totalM = segments.reduce((a, x) => a + x.meters, 0);
@@ -1275,6 +1294,9 @@ async function fetchRoute(stops){
           fare: (r.summary.fare && r.summary.fare.taxi) || 0,
           distance: r.summary.distance,
           duration: r.summary.duration,
+          // 경유지가 있으면 경유지 수+1개 섹션으로 나뉜다. 섹션별 실제 구간 거리/시간 —
+          // calcFinalRouteAndFare가 이걸로 하차 구간 요금/시간을 근사치 대신 실측으로 나눈다.
+          sections: (r.sections || []).map(sec => ({ distance: sec.distance, duration: sec.duration })),
         };
       }
     }
@@ -1327,6 +1349,28 @@ async function runSelfCheck(){
     leaderDest: '포항역', departTime: '19:00', desiredSize: 4, extras: [] });
   const badMatch = calcMatchScore({ id: '__cand', origin: '한동대학교', dest: '영일대해수욕장', time: '19:00', partySize: 1 }, farPod);
   check('경로 밖 목적지는 매칭 거부', badMatch.eligible === false);
+
+  // 정밀 구간 계산 회귀 검사: 경유지(하차지점) 낀 실제 경로가 캐시돼 있으면 근사치 대신
+  // 그 구간별 distance/duration을 쓰는지 확인한다. 네트워크 없이도 돌아가도록 캐시를 직접 주입한다.
+  {
+    const precisePod = makePod({ id: '__check_precise', originName: '포항역', leaderNickname: 'L3', leaderGender: '여성',
+      leaderDest: '환호공원', departTime: '19:00', desiredSize: 3,
+      extras: [{ nickname: 'A', gender: '여성', dest: '영일대해수욕장' }] });
+    const beforeStops = calcFinalRouteAndFare(precisePod).stops;
+    check('정밀 검사 전제: 경유지 1개 이상', beforeStops.length > 2);
+    if (beforeStops.length > 2) {
+      // 근사치와 확실히 다르게 잡히도록 일부러 비대칭인 가짜 구간을 캐시에 직접 넣는다.
+      const fakeSections = beforeStops.slice(1).map((_, i) => ({ distance: 1000 * (i + 1), duration: 120 * (i + 1) }));
+      const fakeFare = 9990;
+      ROUTE_CACHE.set(routeKey(beforeStops), { path: [], fare: fakeFare, distance: 3000, duration: 360, sections: fakeSections });
+      const precise = calcFinalRouteAndFare(precisePod);
+      check('정밀 경로 캐시 시 구간 거리를 그대로 씀', precise.segments[0].meters === fakeSections[0].distance);
+      check('정밀 경로 캐시 시 구간 시간을 그대로 씀', precise.segments[0].mins === Math.round(fakeSections[0].duration / 60));
+      check('정밀 모드에서도 총액=가짜 직행요금', precise.totalFare === fakeFare);
+      check('정밀 모드에서도 구간합=총액', precise.segments.reduce((s, x) => s + x.fare, 0) === precise.totalFare);
+      ROUTE_CACHE.delete(routeKey(beforeStops)); // 다른 검사에 영향 안 주게 정리
+    }
+  }
 
   console[fails.length ? 'error' : 'log'](fails.length ? '자체점검 실패: ' + fails.join(', ') : '자체점검 통과');
   return { passed: fails.length === 0, fails };
@@ -1948,6 +1992,10 @@ async function warmPodRoutes(pod){
   // 경로를 받고 나면 하차지점을 다시 잡는다(경로가 없을 때 잡힌 직선 근사 폴백 값을 덮어쓴다).
   // trunk 보유자가 팟장이 아닐 수도 있으므로 전원 다시 계산한다(applyTrunk가 알아서 처리).
   applyTrunk(pod);
+  // 하차지점(경유지)이 확정됐으니, 이걸 낀 실제 경로도 받아서 구간별 실거리/실시간을 캐시해둔다
+  // (calcFinalRouteAndFare가 있으면 근사치 대신 이걸 쓴다). stops는 순서 계산에 근사 경로면 충분하다.
+  const stops = calcFinalRouteAndFare(pod).stops;
+  if (stops.length > 2) await fetchRoute(stops);
 }
 
 // 하차지점 이름은 "그 사람 목적지" 기준으로 짓는다.
@@ -2359,6 +2407,14 @@ async function renderPodChat(podId){
   const result = calcFinalRouteAndFare(pod);
   const fareMap = {}; result.perPerson.forEach(p => fareMap[p.id] = p);
 
+  // 경유지 낀 실제 경로가 아직 캐시에 없으면(막 확정됐거나 처음 보는 화면) 받아온 뒤 한 번 다시 그린다.
+  // 그래야 구간별 요금/시간이 근사치가 아니라 실측값이 된다.
+  if (result.stops.length > 2 && !cachedRoute(result.stops)) {
+    fetchRoute(result.stops).then(r => {
+      if (r && document.getElementById('screen-pod-chat').classList.contains('active')) renderPodChat(podId);
+    });
+  }
+
   let html = `<div class="info-box"><h3>참여자 ${pod.participants.length}/${pod.desiredSize}</h3><div id="chat-participants"></div></div>`;
   html += `
     <div class="info-box">
@@ -2603,6 +2659,14 @@ function renderFinal(podId){
   // 확정 시점엔 추정요금이었더라도, 그 사이 실제 경로가 도착했으면 실제 요금으로 다시 계산한다.
   if (!result.isRealFare && cachedRoute([pod.originName, pod.leaderDest])) result = calcFinalRouteAndFare(pod);
   pod.finalResult = result;
+
+  // 경유지 낀 실제 경로가 아직 없으면 받아온 뒤 다시 그린다 — 확정 화면은 실제 정산 기준이라
+  // 근사치보다 실측 구간 요금이 특히 중요하다.
+  if (result.stops.length > 2 && !cachedRoute(result.stops)) {
+    fetchRoute(result.stops).then(r => {
+      if (r && document.getElementById('screen-final').classList.contains('active')) renderFinal(podId);
+    });
+  }
 
   const finalStop = result.stops[result.stops.length - 1];
   // 최종 화면에서도 "내 하차"는 나를 기준으로 표시한다(경로 종점이 아니라).
