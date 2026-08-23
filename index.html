@@ -1132,7 +1132,7 @@ function calcFinalRouteAndFare(pod){
 
   const perPerson = participants.map((p, pi) => ({
     id: p.id, nickname: p.nickname, dest: p.dest,
-    dropPoint: p.dropOff.point, walkDist: p.dropOff.walkDist, walkTime: p.dropOff.walkTime,
+    dropPoint: p.dropOff.point, dropCoord: p.dropOff.coord, walkDist: p.dropOff.walkDist, walkTime: p.dropOff.walkTime,
     fare: fares[pi],
   }));
   return { stops, segments, totalFare, totalMins, perPerson, isRealFare };
@@ -1446,17 +1446,22 @@ function setMapLegend(containerId, isRealRoute){
 // API가 실패하면 직선이 그대로 남는다(폴백). 경로를 받으면 onRoute(route)를 호출한다.
 // stops는 "실제로 사람이 내리는 지점"만 출발지 순으로 담는다(후보 정류장 목록이 아니다).
 // riders는 지점 이름 → 그곳에서 내리는 사람 닉네임 배열.
-async function paintRouteMap(containerId, { stops, originName, leaderDest, dropPoint, myDest, riders = {}, onRoute }){
+async function paintRouteMap(containerId, { stops, originName, leaderDest, dropPoint, myDest, riders = {}, stopCoords = {}, onRoute }){
   await window.__kakaoReady;
   const el = document.getElementById(containerId);
   if (!el) return; // 화면 전환으로 이미 사라졌으면 중단
   el.innerHTML = ''; // 다시 그릴 때 이전 마커·오버레이가 남지 않게 비운다
 
-  const center = placeCoord(originName) || placeCoord(stops[0]);
+  // 하차지점 이름("영일대해수욕장 인근" 등)은 이 팟만의 것이 아니다 — 다른 팟을 미리보기할 때도
+  // 같은 이름으로 다른 좌표가 계산돼 전역 PLACE_REGISTRY를 덮어쓸 수 있다. placeCoord(이름)로
+  // 다시 찾으면 그 사이 다른 팟이 등록해둔 좌표를 주워올 위험이 있어서, 이 지도를 그릴 때 실제로
+  // 쓴 좌표(stopCoords)가 있으면 그걸 우선한다.
+  const coordOf = n => stopCoords[n] || placeCoord(n);
+  const center = coordOf(originName) || coordOf(stops[0]);
   const map = new kakao.maps.Map(el, { center: new kakao.maps.LatLng(center.lat, center.lng), level: 7 });
   const bounds = new kakao.maps.LatLngBounds();
 
-  const path = stops.map(n => placeCoord(n)).filter(Boolean).map(c => new kakao.maps.LatLng(c.lat, c.lng));
+  const path = stops.map(n => coordOf(n)).filter(Boolean).map(c => new kakao.maps.LatLng(c.lat, c.lng));
   const straightLine = new kakao.maps.Polyline({ map, path, strokeWeight: 4, strokeColor: '#4d3df0', strokeOpacity: 0.9, strokeStyle: 'solid' });
 
   // 실제 도로 경로로 교체 (응답 도착 시).
@@ -1475,7 +1480,7 @@ async function paintRouteMap(containerId, { stops, originName, leaderDest, dropP
   });
 
   function addMarker(name, color, label){
-    const c = placeCoord(name);
+    const c = coordOf(name);
     if (!c) return;
     const pos = new kakao.maps.LatLng(c.lat, c.lng);
     bounds.extend(pos);
@@ -1495,7 +1500,7 @@ async function paintRouteMap(containerId, { stops, originName, leaderDest, dropP
   });
 
   if (dropPoint !== myDest) {
-    const dCoord = placeCoord(dropPoint), mCoord = placeCoord(myDest);
+    const dCoord = coordOf(dropPoint), mCoord = placeCoord(myDest);
     if (dCoord && mCoord) {
       new kakao.maps.Polyline({
         map, path: [new kakao.maps.LatLng(dCoord.lat, dCoord.lng), new kakao.maps.LatLng(mCoord.lat, mCoord.lng)],
@@ -2367,13 +2372,14 @@ async function renderPodDetail(podId){
   // (그때는 캐시에 값이 있어 onRoute를 넘기지 않으므로 재귀하지 않는다)
   const needsRefresh = !cachedRoute([pod.originName, pod.leaderDest]);
   // 지도에는 실제로 사람이 내리는 지점만 찍는다(내가 참가했을 때 기준).
-  const ridersAt = {};
+  const ridersAt = {}, stopCoords2 = {};
   prev.result.perPerson.forEach(p => {
     (ridersAt[p.dropPoint] = ridersAt[p.dropPoint] || []).push(p.id === '__me__' ? '나' : p.nickname);
+    if (p.dropCoord) stopCoords2[p.dropPoint] = p.dropCoord;
   });
   paintRouteMap(map2.id, {
     stops: prev.result.stops, originName: pod.originName, leaderDest: pod.leaderDest,
-    dropPoint: prev.dropOff.point, myDest: u.dest, riders: ridersAt,
+    dropPoint: prev.dropOff.point, myDest: u.dest, riders: ridersAt, stopCoords: stopCoords2,
     onRoute: needsRefresh ? (route => { if (route) renderPodDetail(podId); }) : null,
   });
 
@@ -2785,11 +2791,14 @@ function renderFinal(podId){
 
   document.getElementById('final-body').innerHTML = html;
   const needsRefresh = !cachedRoute([pod.originName, pod.leaderDest]);
-  const ridersAt3 = {};
-  result.perPerson.forEach(p => { (ridersAt3[p.dropPoint] = ridersAt3[p.dropPoint] || []).push(p.nickname); });
+  const ridersAt3 = {}, stopCoords3 = {};
+  result.perPerson.forEach(p => {
+    (ridersAt3[p.dropPoint] = ridersAt3[p.dropPoint] || []).push(p.nickname);
+    if (p.dropCoord) stopCoords3[p.dropPoint] = p.dropCoord;
+  });
   paintRouteMap(map3.id, {
     stops: result.stops, originName: pod.originName, leaderDest: pod.leaderDest,
-    dropPoint: myFinalDrop, myDest: STATE.user.dest, riders: ridersAt3,
+    dropPoint: myFinalDrop, myDest: STATE.user.dest, riders: ridersAt3, stopCoords: stopCoords3,
     onRoute: needsRefresh ? (route => { if (route) { pod.finalResult = null; renderFinal(podId); } }) : null,
   });
 }
