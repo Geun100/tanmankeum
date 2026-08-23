@@ -707,6 +707,10 @@ async function enterHome(){
       if (updated) STATE.pods = STATE.pods.map(p => p.id === mine.id ? updated : p);
     } else if (mine && mine.leaderId === STATE.user.id && mine.participants.length > 1) {
       showError('이미 다른 사람이 참가한 팟이라 경로를 바꿀 수 없어요. 바꾸려면 채팅방에서 팟을 취소한 뒤 다시 등록해주세요.');
+    } else if (mine && mine.leaderId !== STATE.user.id) {
+      // 남의 팟에 참가자로 낀 채로 새 경로를 입력했다 — 그 값은 적용 안 되고 원래 참가 중인
+      // 팟이 그대로 유지된다는 걸 알려준다. 말없이 무시하면 카드에 뭐가 반영된 건지 헷갈린다.
+      showError('이미 참가 중인 팟이 있어요. 새 경로로 등록하려면 먼저 채팅방에서 참가를 취소해주세요.');
     }
   } else {
     STATE.pods = seedPods();
@@ -2157,10 +2161,12 @@ async function renderHome(){
   const u = STATE.user, myPod = findPod(STATE.myPodId);
   const isLeaderOfOwn = myPod && myPod.leaderId === u.id;
   const card = document.getElementById('my-status-card');
+  // 남의 팟에 참가 중일 땐 내가 입력했던 값(STATE.user)이 아니라 실제 참가 중인 팟(myPod)의
+  // 경로/시간을 보여준다 — 둘이 다를 수 있다(재등록 시도 등으로 STATE.user만 바뀐 경우).
   card.innerHTML = `
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
-    <strong>${u.origin} → ${u.dest}</strong>
-    <p>${u.time} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명${isLeaderOfOwn ? ' · <span class="status-leader-note">팟원이 모일 때까지는 내가 팟장이에요</span>' : ''}</p>
+    <strong>${myPod.originName} → ${myPod.leaderDest}</strong>
+    <p>${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명${isLeaderOfOwn ? ' · <span class="status-leader-note">팟원이 모일 때까지는 내가 팟장이에요</span>' : ''}</p>
     <button class="btn btn--ghost btn--block" id="btn-my-pod-chat">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}</button>
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
