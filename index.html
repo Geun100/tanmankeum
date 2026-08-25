@@ -1276,7 +1276,6 @@ document.getElementById('modal-confirm').addEventListener('click', () => {
 // 정류장 목록 → 실제 도로 경로/요금/소요시간. 실패하면 null을 캐시해 같은 경로를 반복 호출하지 않는다.
 // 응답을 캐시해두면 calcFinalRouteAndFare()가 동기 함수인 채로 실제 요금을 쓸 수 있다.
 const ROUTE_CACHE = new Map();
-const MAX_WAYPOINTS = 5; // 카카오모빌리티 길찾기 API 제한
 
 function routeKey(stops){ return stops.join('>'); }
 function cachedRoute(stops){ return ROUTE_CACHE.get(routeKey(stops)) || null; }
@@ -1303,27 +1302,16 @@ function futureNoteHtml(pod){
 // departureTime(YYYYMMDDHHMM)을 주면 미래 운행 정보 길찾기(/v1/future/directions)를, 안 주면
 // 일반 길찾기(/v1/directions)를 쓴다. 캐시 키는 stops만 쓴다(departureTime 유무로 안 나눔) —
 // 같은 팟의 출발 시각은 고정값이라, 먼저 받아온 쪽이 그 stops 조합의 대표값이 되는 걸로 충분하다.
+// 카카오모빌리티 REST 키는 서버(/api/kakao-route)에만 둔다 — 브라우저에서 직접 카카오를 부르면
+// 그 키가 아무나 devtools/view-source로 꺼내갈 수 있는 정적 파일에 그대로 노출된다(실제로 그랬던
+// 문제를 여기서 고쳤다). 클라이언트는 좌표를 알고 있으니(PLACE_COORDS/자동완성 결과) 그것만 서버에
+// 넘기고, 실제 카카오 API 호출과 키 사용은 서버리스 함수가 대신한다.
 async function fetchRoute(stops, departureTime){
   const key = routeKey(stops);
   if (ROUTE_CACHE.has(key)) return ROUTE_CACHE.get(key);
 
   const coords = stops.map(placeCoord);
-  const restKey = window.KAKAO_KEYS && window.KAKAO_KEYS.restApiKey;
-  if (coords.some(c => !c) || coords.length < 2 || !restKey) { ROUTE_CACHE.set(key, null); return null; }
-
-  const asParam = (name, i) => `${coords[i].lng},${coords[i].lat},name=${encodeURIComponent(name)}`;
-  const mid = stops.slice(1, -1);
-  // ponytail: 경유지가 5개를 넘으면 앞에서부터 5개만 보낸다. 지금 정류장 데이터로는 최대 3개라 실제로는 걸리지 않음.
-  const waypoints = mid.slice(0, MAX_WAYPOINTS).map((n, i) => asParam(n, i + 1)).join('|');
-
-  const url = (departureTime ? 'https://apis-navi.kakaomobility.com/v1/future/directions' : 'https://apis-navi.kakaomobility.com/v1/directions')
-    + `?origin=${asParam(stops[0], 0)}`
-    + `&destination=${asParam(stops[stops.length - 1], stops.length - 1)}`
-    + (waypoints ? `&waypoints=${waypoints}` : '')
-    // RECOMMEND는 실시간 교통을 반영해 호출할 때마다 다른 경로를 준다. 그러면 같은 팟이 접속 시점에 따라
-    // 참가 가능/불가로 뒤집히므로, 판정이 흔들리지 않도록 최단거리 경로로 고정한다.
-    + '&priority=DISTANCE'
-    + (departureTime ? `&departure_time=${departureTime}` : '');
+  if (coords.some(c => !c) || coords.length < 2) { ROUTE_CACHE.set(key, null); return null; }
 
   let route = null;
   try {
@@ -1332,26 +1320,19 @@ async function fetchRoute(stops, departureTime){
     // 8초 안에 응답 없으면 포기하고 폴백(직선+추정요금)으로 넘어간다.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url, { headers: { Authorization: 'KakaoAK ' + restKey }, signal: controller.signal });
+    const res = await fetch('/api/kakao-route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stops: stops.map((name, i) => ({ name, lat: coords[i].lat, lng: coords[i].lng })),
+        departureTime: departureTime || null,
+      }),
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();
-      const r = data.routes && data.routes[0];
-      if (r && r.result_code === 0) {
-        const path = [];
-        (r.sections || []).forEach(sec => (sec.roads || []).forEach(road => {
-          for (let i = 0; i + 1 < road.vertexes.length; i += 2) path.push({ lng: road.vertexes[i], lat: road.vertexes[i + 1] });
-        }));
-        route = {
-          path,
-          fare: (r.summary.fare && r.summary.fare.taxi) || 0,
-          distance: r.summary.distance,
-          duration: r.summary.duration,
-          // 경유지가 있으면 경유지 수+1개 섹션으로 나뉜다. 섹션별 실제 구간 거리/시간 —
-          // calcFinalRouteAndFare가 이걸로 하차 구간 요금/시간을 근사치 대신 실측으로 나눈다.
-          sections: (r.sections || []).map(sec => ({ distance: sec.distance, duration: sec.duration })),
-        };
-      }
+      route = data.route || null;
     }
   } catch (e) {
     route = null; // 네트워크 실패 → 폴백(직선 + 추정요금)

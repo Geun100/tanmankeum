@@ -11,12 +11,16 @@ function writeIfMissing(file, content) {
   console.log(`wrote ${file}`);
 }
 
-const { KAKAO_REST_API_KEY, KAKAO_JS_KEY, SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+const { KAKAO_JS_KEY, SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
 
-if (KAKAO_REST_API_KEY && KAKAO_JS_KEY) {
-  writeIfMissing('kakao-keys.local.js', `window.KAKAO_KEYS = {\n  restApiKey: '${KAKAO_REST_API_KEY}',\n  jsKey: '${KAKAO_JS_KEY}',\n};\n`);
+// KAKAO_REST_API_KEY는 여기서 파일로 안 쓴다 — 이 파일은 브라우저가 그대로 다운받는 정적 파일이라,
+// 여기 적으면 REST 키가 누구나 볼 수 있게 노출된다(실제로 그랬음). REST 키는 api/kakao-route.js가
+// process.env에서 서버 쪽에서만 읽는다. JS 키는 카카오맵 SDK용이라 원래 클라이언트에 노출돼도
+// 되는 키(도메인 제한으로 보호)라 여기 그대로 둔다.
+if (KAKAO_JS_KEY) {
+  writeIfMissing('kakao-keys.local.js', `window.KAKAO_KEYS = {\n  jsKey: '${KAKAO_JS_KEY}',\n};\n`);
 } else {
-  console.warn('KAKAO_REST_API_KEY/KAKAO_JS_KEY 환경변수 없음 — kakao-keys.local.js 생성 건너뜀');
+  console.warn('KAKAO_JS_KEY 환경변수 없음 — kakao-keys.local.js 생성 건너뜀');
 }
 
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
