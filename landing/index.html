@@ -15,12 +15,12 @@
 <style>
   :root{
     --font-sans:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
-    --ink:#354153; --ink-soft:#697383;
-    --paper:#ffffff; --line:#e5e8ef; --fill:#f2f3f8; --region:#f9f9fb; --foot:#f5f5f5;
+    --ink:#354153; --ink-soft:#697383; --muted:#697383;
+    --paper:#ffffff; --surface:#ffffff; --line:#e5e8ef; --fill:#f2f3f8; --region:#f9f9fb; --foot:#f5f5f5;
     --primary:#0078ff; --primary-dark:#0060cc; --primary-soft:#e6f2ff;
     --green:#137a52; --green-soft:#e1f5ec;
     --orange:#9c5008; --orange-soft:#fdecd8;
-    --radius-card:16px; --radius-input:12px; --radius-chip:14px;
+    --radius-card:16px; --radius-input:12px; --radius-chip:14px; --radius-pill:999px;
     --shadow-card:0px 4px 8px 0px rgba(0,0,0,0.1);
   }
   *{box-sizing:border-box}
@@ -42,6 +42,7 @@
   .btn--ghost{background:var(--fill);color:var(--ink);font-size:15px;padding:11px 18px}
   .btn--ghost:hover{background:#e8eaf2}
   .btn--lg{font-size:16px;padding:15px 26px}
+  .btn--block{width:100%}
 
   section{padding:64px 0}
   @media(min-width:820px){section{padding:88px 0}}
@@ -72,22 +73,28 @@
   .proto-badge{position:absolute;top:-14px;right:8px;background:var(--ink);color:#fff;font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;box-shadow:var(--shadow-card);z-index:3}
   @media(min-width:900px){.phone-mock{transform:translateY(-6px)}}
 
-  /* route visual */
-  .route-card{background:#fff;border-radius:14px;box-shadow:0 2px 6px rgba(15,23,42,.06);padding:16px}
-  .route-head{font-size:13px;color:var(--ink-soft);font-weight:600}
-  .route-line{margin:18px 0 4px;position:relative;padding-left:26px}
-  .route-line::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--line)}
-  .stop{position:relative;padding:9px 0;font-size:15px;font-weight:600}
-  .stop small{display:block;font-size:13px;font-weight:500;color:var(--ink-soft)}
-  .stop::before{content:"";position:absolute;left:-26px;top:15px;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--line)}
-  .stop.a::before{border-color:var(--green)}
-  .stop.b::before{border-color:var(--orange)}
-  .stop.c::before{border-color:var(--primary)}
-  .walk{margin-left:-4px;padding:8px 10px;background:var(--orange-soft);color:var(--orange);border-radius:var(--radius-chip);font-size:13px;font-weight:600;display:inline-block}
-  .fare{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:baseline;justify-content:space-between}
-  .fare b{font-size:20px;font-weight:700;white-space:nowrap}
-  .fare s{color:var(--ink-soft);font-size:14px}
-  .save-badge{background:var(--green-soft);color:var(--green);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+  /* 아래부터는 손으로 그린 목업이 아니라 실제 서비스(index.html)의 클래스를 그대로 옮긴 것이다 —
+     같은 마크업 + 같은 CSS라서 "실제 앱 화면" 배지가 진짜다. 실제 서비스 쪽 스타일이 바뀌면
+     여기도 같이 옮겨야 한다. */
+  .status-card{background:var(--primary-soft);border-radius:var(--radius-card);padding:18px 20px;box-shadow:var(--shadow-card)}
+  .status-card .status-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:9px}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--primary);animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .status-card strong{display:block;font-size:19px;font-weight:800;margin-bottom:5px}
+  .status-card p{font-size:12.5px;color:var(--ink-soft);margin:0;line-height:1.5}
+  .status-leader-note{color:var(--orange);font-weight:700}
+
+  .pod-card{background:var(--surface);border-radius:var(--radius-card);padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow-card)}
+  .pod-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .pod-card-top strong{font-size:16px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pod-card-leader{flex-shrink:0;display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:4px 10px;border-radius:var(--radius-pill);background:var(--orange-soft);color:var(--orange);white-space:nowrap}
+  .pod-meta{font-size:12.5px;color:var(--muted)}
+  .pod-savings{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--green);background:var(--green-soft);padding:8px 12px;border-radius:var(--radius-input)}
+  .pod-savings svg{flex-shrink:0}
+  .pod-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-top:10px;border-top:1px solid var(--line)}
+  .pod-stats div{display:flex;flex-direction:column;gap:2px}
+  .pod-stats strong{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+  .pod-stats span{font-size:11px;color:var(--muted)}
 
   /* steps */
   .steps{display:grid;gap:16px;margin-top:32px}
@@ -198,17 +205,22 @@
         <div class="phone-screen">
           <div class="phone-statusbar"><span>9:41</span><span class="icons">•••• LTE</span></div>
           <div class="phone-body">
-            <div class="route-card" aria-label="팟 예시 카드">
-              <div class="route-head">오늘 19:00 출발 · 2/4명</div>
-              <div class="route-line">
-                <div class="stop a">포항역<small>팟 출발지 · 여기서 함께 탑승</small></div>
-                <div class="stop b">죽도시장<small>내 추천 하차 지점</small></div>
-                <div class="stop c">영일대해수욕장<small>최종 목적지</small></div>
+            <div class="status-card" aria-label="내 팟 상태 예시">
+              <span class="status-tag"><span class="status-dot"></span>매칭 대기 중</span>
+              <strong>포항역 → 영일대해수욕장</strong>
+              <p>19:00 출발 · 1/4명 · <span class="status-leader-note">팟원이 모일 때까지는 내가 팟장이에요</span></p>
+            </div>
+            <div class="pod-card" style="margin-top:12px" aria-label="추천 팟 예시">
+              <div class="pod-card-top">
+                <strong>포항역 → 영일대해수욕장</strong>
+                <span class="pod-card-leader">동근 팟장</span>
               </div>
-              <span class="walk">여기서 내리면 목적지까지 도보 4분 · 280m</span>
-              <div class="fare">
-                <div><s>혼자 12,000원</s><br><b>1인 약 3,500원</b></div>
-                <span class="save-badge">8,500원 절약</span>
+              <p class="pod-meta">19:00 출발 · 현재 2/4명 · 영일대해수욕장 인근 하차 후 도보 2분</p>
+              <div class="pod-savings"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 혼자 탈 때보다 8,500원 절약</div>
+              <div class="pod-stats">
+                <div><strong>3,500원</strong><span>예상 1인 요금</span></div>
+                <div><strong>2/4</strong><span>현재 인원</span></div>
+                <div><strong>약 18분</strong><span>예상 소요</span></div>
               </div>
             </div>
           </div>
