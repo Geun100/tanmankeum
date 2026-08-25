@@ -285,11 +285,37 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .fine-note{ font-size:12px; color:var(--muted); line-height:1.5; margin:0; }
 
   .avatar{ width:34px; height:34px; border-radius:50%; background:var(--primary-soft); color:var(--primary-dark); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
-  .participant-row{ display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-top:1px dashed var(--line); }
+
+  /* 채팅방 상단: 인원 현황을 아바타 한 줄로 즉시 훑을 수 있게 하고, 사람별 상세(하차지·요금)는
+     그 아래 카드 하나에 몰아서 흰 박스가 반복 적층되는 느낌을 없앤다. */
+  .chat-status{ padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid var(--line); }
+  .chat-status-line{ display:flex; align-items:center; gap:7px; font-size:13px; font-weight:700; color:var(--ink); margin:0 0 14px; }
+  .chat-status-line .muted{ font-weight:500; color:var(--muted); }
+  .avatar-strip{ display:flex; gap:14px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+  .avatar-strip::-webkit-scrollbar{ display:none; }
+  .avatar-slot{ display:flex; flex-direction:column; align-items:center; gap:6px; flex-shrink:0; width:52px; }
+  .avatar-slot .avatar{ width:44px; height:44px; font-size:15px; box-shadow:0 0 0 2px var(--paper); }
+  .avatar-slot .avatar--me{ box-shadow:0 0 0 2px var(--paper), 0 0 0 4px var(--primary); }
+  .avatar-slot .avatar--leader{ box-shadow:0 0 0 2px var(--paper), 0 0 0 4px var(--orange); }
+  .avatar-slot .avatar--leader.avatar--me{ box-shadow:0 0 0 2px var(--paper), 0 0 0 4px var(--primary), 0 0 0 6px var(--orange); }
+  .avatar-slot .avatar--empty{ background:transparent; border:1.5px dashed var(--line); color:var(--placeholder); font-size:18px; font-weight:400; }
+  .avatar-slot-label{ font-size:11px; color:var(--ink-soft); max-width:52px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
+  .avatar-slot-label--empty{ color:var(--placeholder); }
+  .avatar-slot-role{ font-size:9.5px; font-weight:700; color:var(--orange); margin-top:-3px; }
+
+  .route-summary{ margin-bottom:16px; }
+  .route-summary .fine-note{ margin-top:6px; }
+  .route-flow{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .route-flow strong{ font-size:15px; font-weight:700; }
+  .route-flow span{ font-size:12.5px; color:var(--muted); flex-shrink:0; }
+
+  .people-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); margin-bottom:16px; overflow:hidden; }
+  .participant-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-top:1px solid var(--line); }
   .participant-row:first-child{ border-top:none; }
   .participant-info{ flex:1; min-width:0; }
   .participant-info .p-name{ display:flex; align-items:center; gap:6px; font-size:14px; font-weight:700; }
   .participant-info p{ margin:3px 0 0; font-size:12px; color:var(--muted); line-height:1.5; }
+  .participant-fare{ flex-shrink:0; text-align:right; font-size:14.5px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
 
   .chat-box{ display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
   .chat-msg{ max-width:80%; padding:10px 14px; border-radius:16px; font-size:13.5px; line-height:1.5; }
@@ -2523,16 +2549,17 @@ async function renderPodChat(podId){
     });
   }
 
-  let html = `<div class="info-box"><h3>참여자 ${pod.participants.length}/${pod.desiredSize}</h3><div id="chat-participants"></div></div>`;
-  html += `
-    <div class="info-box">
-      <h3>경로 요약</h3>
-      <p class="info-row"><span>출발</span><strong>${pod.originName}</strong></p>
-      <p class="info-row"><span>최종 목적지</span><strong>${pod.leaderDest}</strong></p>
-      <p class="info-row"><span>출발 시간</span><strong>${pod.departTime}</strong></p>
-      <p class="info-row"><span>예상 택시 시간</span><strong>약 ${result.totalMins}분</strong></p>
+  const statusText = seatsLeft > 0 ? `${pod.participants.length}/${pod.desiredSize}명 · 모집 중` : '정원이 다 찼어요';
+  let html = `
+    <div class="chat-status">
+      <p class="chat-status-line"><span class="status-dot"></span>${statusText}<span class="muted">· ${pod.departTime} 출발</span></p>
+      <div class="avatar-strip" id="chat-avatar-strip"></div>
+    </div>
+    <div class="route-summary">
+      <div class="route-flow"><strong>${pod.originName} → ${pod.leaderDest}</strong><span>약 ${result.totalMins}분</span></div>
       ${futureNoteHtml(pod)}
     </div>
+    <div class="people-card" id="chat-participants"></div>
   `;
   html += `
     <div class="chat-section-head">
@@ -2546,8 +2573,28 @@ async function renderPodChat(podId){
 
   document.getElementById('chat-body').innerHTML = html;
 
-  // 참여자 카드: 실제 인원 다음에 남은 자리를 점선 슬롯으로 보여준다.
-  // "3/4명"이라는 숫자보다, 빈 좌석이 눈에 보이는 편이 몇 명 더 필요한지 직관적으로 와닿는다.
+  // 아바타 한 줄 = "누가, 몇 명" 즉시 훑기용. 사람별 상세(성별·하차지·요금)는 아래 카드 하나에
+  // 몰아서, 빈자리마다 "아직 빈자리예요" 문장을 반복해 세로 공간을 잡아먹지 않게 한다.
+  const stripWrap = document.getElementById('chat-avatar-strip');
+  stripWrap.innerHTML = '';
+  pod.participants.forEach(p => {
+    const isMe = p.id === u.id, isLeader = p.id === pod.leaderId;
+    const slot = document.createElement('div');
+    slot.className = 'avatar-slot';
+    slot.innerHTML = `
+      <span class="avatar${isMe ? ' avatar--me' : ''}${isLeader ? ' avatar--leader' : ''}">${p.nickname.slice(0, 1)}</span>
+      ${isLeader ? '<span class="avatar-slot-role">팟장</span>' : ''}
+      <span class="avatar-slot-label">${isMe ? '나' : p.nickname}</span>
+    `;
+    stripWrap.appendChild(slot);
+  });
+  for (let i = 0; i < seatsLeft; i++){
+    const slot = document.createElement('div');
+    slot.className = 'avatar-slot';
+    slot.innerHTML = `<span class="avatar avatar--empty">+</span><span class="avatar-slot-label avatar-slot-label--empty">빈자리</span>`;
+    stripWrap.appendChild(slot);
+  }
+
   const pWrap = document.getElementById('chat-participants');
   pWrap.innerHTML = '';
   pod.participants.forEach(p => {
@@ -2555,23 +2602,17 @@ async function renderPodChat(podId){
     const row = document.createElement('div');
     row.className = 'participant-row';
     row.innerHTML = `
-      <span class="avatar">${p.nickname.slice(0, 1)}</span>
       <div class="participant-info">
         <span class="p-name">${p.nickname}
           ${p.id === pod.leaderId ? '<span class="badge badge--leader">팟장</span>' : ''}
           ${p.id === u.id ? '<span class="badge badge--me">나</span>' : ''}
         </span>
-        <p>${p.gender} · 목적지 ${p.dest} · 하차 ${f.dropPoint}(도보 ${f.walkTime}분) · 예상 ${won(f.fare)}</p>
+        <p>${p.gender} · 목적지 ${p.dest} · 하차 ${f.dropPoint}(도보 ${f.walkTime}분)</p>
       </div>
+      <div class="participant-fare">${won(f.fare)}</div>
     `;
     pWrap.appendChild(row);
   });
-  for (let i = 0; i < seatsLeft; i++){
-    const row = document.createElement('div');
-    row.className = 'participant-row participant-row--empty';
-    row.innerHTML = `<span class="avatar avatar--empty">?</span><span>아직 빈자리예요</span>`;
-    pWrap.appendChild(row);
-  }
 
   // 채팅 메시지 렌더. Supabase 연결 시 DB에서 읽고, 아니면 인메모리 폴백을 쓴다.
   let messages;
