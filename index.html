@@ -1231,11 +1231,20 @@ function showScreen(id){
   // 실시간 구독은 팟 상세/채팅 화면에서만 필요하다. 다른 화면으로 나가면 끊는다.
   if (id !== 'screen-pod-detail' && id !== 'screen-pod-chat') unsubscribePod();
 }
+// 뒤로가기로 홈에 돌아갈 땐 항상 renderHome()을 다시 돌린다 — 안 그러면 그새 팟에 참가/탈퇴해도
+// 홈 카드가 마지막으로 renderHome()이 실제로 실행됐던 시점 그대로 멈춰있는다(예: 다른 팟 참가하고
+// 채팅방에서 뒤로가기 누르면 옛날 내 솔로팟이 그대로 보이던 버그).
 document.querySelectorAll('[data-back]').forEach(btn => {
-  btn.addEventListener('click', () => showScreen(btn.dataset.back));
+  btn.addEventListener('click', async () => {
+    const target = btn.dataset.back;
+    if (target === 'screen-home') await renderHome();
+    showScreen(target);
+  });
 });
-document.getElementById('home-logo').addEventListener('click', () => {
-  if (STATE.user) showScreen('screen-home');
+document.getElementById('home-logo').addEventListener('click', async () => {
+  if (!STATE.user) return;
+  await renderHome();
+  showScreen('screen-home');
 });
 
 let modalConfirmHandler = null;
