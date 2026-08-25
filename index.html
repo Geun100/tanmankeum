@@ -2303,18 +2303,21 @@ async function renderPodDetail(podId){
     subscribePod(podId, () => { if (document.getElementById('screen-pod-detail').classList.contains('active')) renderPodDetail(podId); });
   }
   const pod = findPod(podId);
-  document.getElementById('detail-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
-  document.getElementById('detail-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
-
   const body = document.getElementById('detail-body');
   const cta = document.getElementById('detail-cta');
   const isOwnPod = pod.leaderId === u.id;
   const prev = previewJoin(pod, u);
+  // 내가 합류하면 trunk(최종 목적지)가 지금 팟 상태(pod.leaderDest)와 달라질 수 있다 — 내가 지금
+  // 참가자 중 제일 멀면 내 목적지가 새 종점이 된다. 화면에는 항상 "내가 합류했다고 가정한" 트렁크를
+  // 보여줘야 한다 — pod.leaderDest(나 없는 현재 상태)를 쓰면 지도 마커랑 라벨이 서로 어긋난다.
+  const displayDest = prev.eligible ? prev.matchScore.hypoPod.leaderDest : pod.leaderDest;
+  document.getElementById('detail-route-label').textContent = `${pod.originName} → ${displayDest}`;
+  document.getElementById('detail-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
 
   // 1) 경로+시각+인원
   let html = `
     <div class="info-box">
-      <div class="callout">${pod.originName} → ${pod.leaderDest}</div>
+      <div class="callout">${pod.originName} → ${displayDest}</div>
       <p class="fine-note">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명 모집</p>
     </div>
   `;
@@ -2389,7 +2392,7 @@ async function renderPodDetail(podId){
   body.innerHTML = html;
   // 실제 경로가 아직 없으면, 응답이 온 뒤 실제 요금으로 한 번 다시 그린다.
   // (그때는 캐시에 값이 있어 onRoute를 넘기지 않으므로 재귀하지 않는다)
-  const needsRefresh = !cachedRoute([pod.originName, pod.leaderDest]);
+  const needsRefresh = !cachedRoute([pod.originName, displayDest]);
   // 지도에는 실제로 사람이 내리는 지점만 찍는다(내가 참가했을 때 기준).
   const ridersAt = {}, stopCoords2 = {};
   prev.result.perPerson.forEach(p => {
@@ -2397,7 +2400,7 @@ async function renderPodDetail(podId){
     if (p.dropCoord) stopCoords2[p.dropPoint] = p.dropCoord;
   });
   paintRouteMap(map2.id, {
-    stops: prev.result.stops, originName: pod.originName, leaderDest: pod.leaderDest,
+    stops: prev.result.stops, originName: pod.originName, leaderDest: displayDest,
     dropPoint: prev.dropOff.point, myDest: u.dest, riders: ridersAt, stopCoords: stopCoords2,
     onRoute: needsRefresh ? (route => { if (route) renderPodDetail(podId); }) : null,
   });
