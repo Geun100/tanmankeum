@@ -51,7 +51,7 @@
   .sec-sub{margin-top:10px;color:var(--ink-soft);font-size:16px}
 
   /* hero */
-  .hero{padding-top:48px;background:linear-gradient(180deg,#f7faff 0%,#ffffff 100%);overflow:hidden}
+  .hero{padding-top:48px;background:linear-gradient(180deg,#f7faff 0%,#ffffff 100%)}
   .hero-grid{display:grid;gap:36px;align-items:center}
   @media(min-width:900px){.hero-grid{grid-template-columns:1.05fr .95fr;gap:48px}}
   h1{font-size:26px;font-weight:700;line-height:1.38;letter-spacing:-.015em}
@@ -61,42 +61,48 @@
   .chips{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px}
   .chip{background:#fff;border:1px solid var(--line);border-radius:var(--radius-chip);padding:7px 12px;font-size:13px;font-weight:600;color:var(--ink-soft)}
 
+  /* phone mockup */
+  .phone-mock{position:relative;margin:0 auto;width:100%;max-width:340px}
+  .phone-frame{position:relative;background:#0b0d12;border-radius:40px;padding:12px;box-shadow:0 24px 48px -12px rgba(15,23,42,.28),0 0 0 1px rgba(15,23,42,.06)}
+  .phone-notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:104px;height:22px;background:#0b0d12;border-radius:0 0 14px 14px;z-index:2}
+  .phone-screen{position:relative;background:var(--region);border-radius:30px;overflow:hidden;min-height:420px;display:flex;flex-direction:column}
+  .phone-statusbar{display:flex;align-items:center;justify-content:space-between;padding:14px 22px 4px;font-size:13px;font-weight:600;color:var(--ink)}
+  .phone-statusbar .icons{display:flex;align-items:center;gap:4px}
+  .phone-body{padding:6px 14px 20px;flex:1}
+  .phone-home{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);width:110px;height:4px;border-radius:999px;background:#0b0d12;opacity:.8}
   .proto-badge{position:absolute;top:-14px;right:8px;background:var(--ink);color:#fff;font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;box-shadow:var(--shadow-card);z-index:3}
+  @media(min-width:900px){.phone-mock{transform:translateY(-6px)}}
 
-  /* 이용 방법: 단계마다 실제 앱 스크린샷 한 장. shots/*.png는 playwright로 프로덕션
-     (tanmankeum.vercel.app)을 직접 조작해서 찍은 진짜 화면이다 — 손으로 그린 목업이 아니다.
-     UI가 바뀌면 landing/scripts/shoot.py를 다시 돌려서 갱신할 것. */
-  .how-list{display:flex;flex-direction:column;gap:56px;margin-top:44px}
-  @media(min-width:900px){.how-list{gap:88px}}
-  .how-item{display:grid;gap:24px;align-items:start}
-  @media(min-width:900px){
-    .how-item{grid-template-columns:1fr 1fr;gap:64px}
-    .how-item:nth-child(even) .how-text{order:2}
-    /* 스크린샷이 세로로 길어서, 텍스트는 스크롤 중에도 붙어 있게 둔다(그늘로와 같은 읽기 리듬). */
-    .how-text{position:sticky;top:112px}
-  }
-  .how-num{font-size:13px;font-weight:800;color:var(--primary);letter-spacing:.08em;margin-bottom:12px}
-  .how-text h3{font-size:24px;font-weight:700;line-height:1.35;letter-spacing:-.015em}
-  @media(min-width:900px){.how-text h3{font-size:30px}}
-  .how-text p{margin-top:14px;font-size:16px;color:var(--ink-soft)}
-  .how-tag{display:inline-flex;align-items:center;gap:6px;margin-top:18px;padding:9px 15px;border-radius:var(--radius-pill);background:var(--primary-soft);color:var(--primary-dark);font-size:14px;font-weight:700}
-  .how-tag--green{background:var(--green-soft);color:var(--green)}
-  .how-tag--orange{background:var(--orange-soft);color:var(--orange)}
+  /* 아래부터는 손으로 그린 목업이 아니라 실제 서비스(index.html)의 클래스를 그대로 옮긴 것이다 —
+     같은 마크업 + 같은 CSS라서 "실제 앱 화면" 배지가 진짜다. 실제 서비스 쪽 스타일이 바뀌면
+     여기도 같이 옮겨야 한다. */
+  .status-card{background:var(--primary-soft);border-radius:var(--radius-card);padding:18px 20px;box-shadow:var(--shadow-card)}
+  .status-card .status-tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:9px}
+  .status-dot{width:7px;height:7px;border-radius:50%;background:var(--primary);animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .status-card strong{display:block;font-size:19px;font-weight:800;margin-bottom:5px}
+  .status-card p{font-size:12.5px;color:var(--ink-soft);margin:0;line-height:1.5}
+  .status-leader-note{color:var(--orange);font-weight:700}
 
-  .shot{position:relative;margin:0 auto;width:100%;max-width:300px}
-  @media(min-width:900px){.shot{max-width:330px}}
-  /* 휴대폰에서 보면 폭이 이 최대치를 그대로 채워서 화면 전체를 잡아먹었다 — 실제 폰으로 보면
-     화면에 폰 목업 하나가 꽉 차는 크기라 과했다. 좁은 화면에서는 한 번 더 좁힌다. */
-  @media(max-width:640px){ .shot{max-width:220px} }
-  .shot-frame{position:relative;background:#0b0d12;border-radius:42px;padding:11px;box-shadow:0 28px 56px -16px rgba(15,23,42,.32),0 0 0 1px rgba(15,23,42,.06)}
-  .shot-frame img{display:block;width:100%;border-radius:32px;background:var(--region)}
-  .shot-notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:104px;height:24px;background:#0b0d12;border-radius:0 0 15px 15px;z-index:2}
-  /* 히어로 폰은 화면 일부만 잘라서 배경으로 페이드아웃하던 걸 없앴다 — 실제 폰 화면 비율과
-     안 맞아서 아래쪽이 뭉개진 것처럼 보였다. 대신 폰 자체를 조금 작게 잡아서(다른 .shot보다
-     좁은 최대폭) 전체 화면을 다 보여주면서도 헤드라인/CTA를 밀어내지 않게 한다. */
-  .shot--hero{max-width:250px}
-  @media(min-width:900px){.shot--hero{max-width:270px}}
-  @media(max-width:640px){ .shot--hero{max-width:190px} }
+  .pod-card{background:var(--surface);border-radius:var(--radius-card);padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow-card)}
+  .pod-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .pod-card-top strong{font-size:16px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pod-card-leader{flex-shrink:0;display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:4px 10px;border-radius:var(--radius-pill);background:var(--orange-soft);color:var(--orange);white-space:nowrap}
+  .pod-meta{font-size:12.5px;color:var(--muted)}
+  .pod-savings{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--green);background:var(--green-soft);padding:8px 12px;border-radius:var(--radius-input)}
+  .pod-savings svg{flex-shrink:0}
+  .pod-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-top:10px;border-top:1px solid var(--line)}
+  .pod-stats div{display:flex;flex-direction:column;gap:2px}
+  .pod-stats strong{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+  .pod-stats span{font-size:11px;color:var(--muted)}
+
+  /* steps */
+  .steps{display:grid;gap:16px;margin-top:32px}
+  @media(min-width:760px){.steps{grid-template-columns:repeat(4,1fr)}}
+  .step{background:var(--region);border:1px solid var(--line);border-radius:var(--radius-card);padding:20px}
+  .step-n{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .step h3{margin-top:12px;font-size:16px;font-weight:600}
+  .step p{margin-top:6px;font-size:14px;color:var(--ink-soft)}
 
   /* features */
   .feats{display:grid;gap:16px;margin-top:32px}
@@ -193,9 +199,35 @@
       </div>
     </div>
 
-    <div class="shot shot--hero">
+    <div class="phone-mock">
       <span class="proto-badge">실제 앱 화면</span>
-      <div class="shot-frame"><div class="shot-notch"></div><img src="/landing/shots/04-pod-detail.png" alt="탄만큼 팟 상세 화면 — 카카오맵 실제 도로 경로 위에 출발지와 내 하차 지점이 표시된 화면" width="390" height="844" fetchpriority="high"></div>
+      <div class="phone-frame">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="phone-statusbar"><span>9:41</span><span class="icons">•••• LTE</span></div>
+          <div class="phone-body">
+            <div class="status-card" aria-label="내 팟 상태 예시">
+              <span class="status-tag"><span class="status-dot"></span>매칭 대기 중</span>
+              <strong>포항역 → 한동대학교</strong>
+              <p>19:00 출발 · 1/4명 · <span class="status-leader-note">팟원이 모일 때까지는 내가 팟장이에요</span></p>
+            </div>
+            <div class="pod-card" style="margin-top:12px" aria-label="추천 팟 예시">
+              <div class="pod-card-top">
+                <strong>포항역 → 한동대학교</strong>
+                <span class="pod-card-leader">동근 팟장</span>
+              </div>
+              <p class="pod-meta">19:00 출발 · 현재 2/4명 · 한동대학교 정문 하차 후 도보 2분</p>
+              <div class="pod-savings"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 혼자 탈 때보다 8,500원 절약</div>
+              <div class="pod-stats">
+                <div><strong>3,500원</strong><span>예상 1인 요금</span></div>
+                <div><strong>2/4</strong><span>현재 인원</span></div>
+                <div><strong>약 18분</strong><span>예상 소요</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-home"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -204,55 +236,12 @@
   <div class="wrap">
     <div class="eyebrow">이용 방법</div>
     <h2>네 단계면 끝납니다</h2>
-    <p class="sec-sub">가입하고 팟에 타기까지, 화면 네 개. 아래는 전부 실제 앱 화면입니다.</p>
-    <div class="how-list">
-      <div class="how-item">
-        <div class="how-text">
-          <div class="how-num">STEP 01</div>
-          <h3>이동 정보만 넣으면 끝</h3>
-          <p>출발지, 목적지, 출발 시간, 원하는 인원. 한동대 앞 정류장이나 오석관처럼 학교 안 장소도 그대로 고를 수 있습니다.</p>
-          <span class="how-tag">회원가입 없이 닉네임만</span>
-        </div>
-        <div class="shot">
-          <div class="shot-frame"><div class="shot-notch"></div><img src="/landing/shots/02-route-input.png" alt="이동 정보 입력 화면 — 한동대학교에서 영일대해수욕장까지, 출발 시간과 인원을 고르는 화면" loading="lazy" width="390" height="844"></div>
-        </div>
-      </div>
-
-      <div class="how-item">
-        <div class="how-text">
-          <div class="how-num">STEP 02</div>
-          <h3>내 경로와 겹치는 팟만<br>모아서 보여드려요</h3>
-          <p>목적지가 같은 사람을 직접 찾을 필요가 없습니다. 방향이 맞지 않는 팟은 목록에 아예 뜨지 않고, 카드마다 1인 요금과 절약액이 먼저 보입니다.</p>
-          <span class="how-tag how-tag--green">혼자 탈 때보다 6,050원 절약</span>
-        </div>
-        <div class="shot">
-          <div class="shot-frame"><div class="shot-notch"></div><img src="/landing/shots/03-home-list.png" alt="추천 팟 목록 화면 — 한동대학교 출발 팟들이 1인 요금, 현재 인원, 예상 소요 시간과 함께 카드로 나열된 화면" loading="lazy" width="390" height="844"></div>
-        </div>
-      </div>
-
-      <div class="how-item">
-        <div class="how-text">
-          <div class="how-num">STEP 03</div>
-          <h3>어디서 내려서 얼마나 걷는지<br>타기 전에 지도로</h3>
-          <p>카카오맵 실제 도로 경로 위에 내 하차 지점을 찍어서 보여드립니다. 도보 거리와 예상 시간, 1인 요금까지 확인하고 참가를 결정하세요.</p>
-          <span class="how-tag how-tag--orange">실제 도로 경로 기준</span>
-        </div>
-        <div class="shot">
-          <div class="shot-frame"><div class="shot-notch"></div><img src="/landing/shots/04-pod-detail.png" alt="팟 상세 화면 — 카카오맵 위에 출발지와 내 하차 지점이 표시되고, 도보 시간과 예상 택시 시간이 함께 보이는 화면" loading="lazy" width="390" height="844"></div>
-        </div>
-      </div>
-
-      <div class="how-item">
-        <div class="how-text">
-          <div class="how-num">STEP 04</div>
-          <h3>같이 타는 사람과<br>미리 맞춰보고 출발</h3>
-          <p>누가 어디서 내리고 얼마를 내는지 한 화면에 정리됩니다. 만날 장소는 채팅으로 맞추고, 팟장이 확정하면 최종 경로와 1인 요금이 계산됩니다.</p>
-          <span class="how-tag">거리만큼 나눠 낸 1인 요금</span>
-        </div>
-        <div class="shot">
-          <div class="shot-frame"><div class="shot-notch"></div><img src="/landing/shots/05-chat.png" alt="팟 채팅방 화면 — 참여자 아바타, 팟 정보 요약, 채팅이 보이는 화면" loading="lazy" width="390" height="844"></div>
-        </div>
-      </div>
+    <p class="sec-sub">가입하고 팟에 타기까지, 화면 네 개.</p>
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><h3>이동 정보 입력</h3><p>출발지, 목적지, 출발 시간, 원하는 인원을 넣습니다. 인원이 적을수록 매칭될 가능성이 높습니다.</p></div>
+      <div class="step"><div class="step-n">2</div><h3>추천 팟 확인</h3><p>내 경로와 겹치는 팟을 매칭 점수 순으로 보여드립니다. 요금순·시간순 정렬도 됩니다.</p></div>
+      <div class="step"><div class="step-n">3</div><h3>내 하차 지점 확인 후 참가</h3><p>지도에서 택시 구간과 도보 구간, 예상 요금까지 보고 참가를 결정합니다.</p></div>
+      <div class="step"><div class="step-n">4</div><h3>팟 채팅방에서 만나기</h3><p>팟장이 확정하면 최종 경로·시간·1인 요금이 계산됩니다. 만나서 타고, 각자 하차합니다.</p></div>
     </div>
   </div>
 </section>
@@ -378,7 +367,6 @@
     });
   });
 })();
-
 </script>
 </body>
 </html>
