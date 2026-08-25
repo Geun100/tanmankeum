@@ -196,6 +196,14 @@ drop policy if exists participants_insert on public.pod_participants;
 create policy participants_insert on public.pod_participants
   for insert to anon with check (true);
 
+-- UPDATE 정책이 없으면(예전 상태) RLS가 기본으로 모든 행을 막아서, UPDATE 자체는 에러 없이
+-- 그냥 0행 갱신으로 조용히 끝난다. "경로 변경"에서 목적지를 바꿔도 pods.leader_dest는
+-- 바뀌는데 pod_participants.dest_name(팟장 자신의 참가자 행)은 안 바뀌는 버그가 이래서 났다 —
+-- 클라이언트는 trunk를 참가자들의 dest로 다시 계산하므로(applyTrunk), 결국 화면엔 옛 목적지가 남았다.
+drop policy if exists participants_update on public.pod_participants;
+create policy participants_update on public.pod_participants
+  for update to anon using (true) with check (true);
+
 drop policy if exists participants_delete on public.pod_participants;
 create policy participants_delete on public.pod_participants
   for delete to anon using (true);
