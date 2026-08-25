@@ -55,7 +55,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   @keyframes screen-in{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:translateY(0); } }
   @media (prefers-reduced-motion:reduce){ .screen.active{ animation:none; } }
 
-  .topbar{ display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--line); flex-shrink:0; background:var(--surface); }
+  .topbar{ display:flex; align-items:center; gap:12px; padding:calc(16px + env(safe-area-inset-top)) 20px 16px; border-bottom:1px solid var(--line); flex-shrink:0; background:var(--surface); }
   .topbar--brand{ border-bottom:none; background:transparent; padding-bottom:4px; }
   .brand-mark{ font-size:20px; font-weight:800; cursor:pointer; }
   .brand-mark--icon{ display:inline-flex; align-items:center; gap:8px; }
@@ -291,7 +291,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chat-status{ padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid var(--line); }
   .chat-status-line{ display:flex; align-items:center; gap:7px; font-size:13px; font-weight:700; color:var(--ink); margin:0 0 14px; }
   .chat-status-line .muted{ font-weight:500; color:var(--muted); }
-  .avatar-strip{ display:flex; gap:14px; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+  .avatar-strip{ display:flex; gap:14px; justify-content:center; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
   .avatar-strip::-webkit-scrollbar{ display:none; }
   .avatar-slot{ display:flex; flex-direction:column; align-items:center; gap:6px; flex-shrink:0; width:52px; }
   .avatar-slot .avatar{ width:44px; height:44px; font-size:15px; box-shadow:0 0 0 2px var(--paper); }
@@ -882,6 +882,7 @@ function clockFromNow(minutes){
   return { date: localDateStr(d), time: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` };
 }
 function timeToMin(t){ const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+function minToTime(min){ const wrapped = ((Math.round(min) % 1440) + 1440) % 1440; const h = Math.floor(wrapped / 60), m = wrapped % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
 // 원점(originName)→목표(destName) 경로에 실좌표 기준으로 놓인 고정 정류장 후보만 골라낸다.
 function buildRouteStops(originName, destName){
   return STOP_NAMES.filter(n => isRouteEligible(n, { originName, leaderDest: destName }));
@@ -2514,6 +2515,44 @@ async function renderPodDetail(podId){
 }
 
 /* ============ 11. 화면 4: 팟 채팅방 ============ */
+// "🤖 팟 정보"를 한 번 열어보면, 채팅을 보내서 renderPodChat이 다시 그려져도 계속 보이게
+// 기억해둔다(podId -> 인사말 텍스트, 못 받았으면 ''). DB에는 안 저장한다 — 이 화면을 나가서
+// 다시 들어오면 사라지는 건 원래 의도대로 유지한다.
+const podSummaryIntro = {};
+
+// bot-route-row/bot-person-list/bot-total-row 마크업. 클릭했을 때와, 이미 열어둔 상태로
+// 화면이 다시 그려질 때 둘 다 이 함수 하나로 만든다 — 갈라지면 둘이 슬금슬금 달라진다.
+function buildBotSummaryHtml(pod, result, intro){
+  const leaderId = pod.leaderId;
+  const settlementMap = {};
+  (pod.settlement || []).forEach(s => { settlementMap[s.nickname] = s.amount; });
+  const arrival = minToTime(timeToMin(pod.departTime) + result.totalMins);
+  return `
+    <span class="chat-name">🤖 택시팟 매니저</span>
+    ${intro ? `<p class="bot-intro">${intro}</p>` : ''}
+    <div class="bot-route-row">${pod.originName} → ${pod.leaderDest} · ${pod.departTime} 출발 · 약 ${result.totalMins}분 · 도착 약 ${arrival}</div>
+    <div class="bot-person-list">
+      ${result.perPerson.map(p => {
+        const routeText = p.dropPoint === p.dest
+          ? `${p.dropPoint} 하차 · 바로 도착`
+          : `${p.dropPoint} 하차 → ${p.dest}${p.walkTime > 0 ? ` (도보 ${p.walkTime}분)` : ''}`;
+        const isLeader = p.id === leaderId;
+        const settled = settlementMap[p.nickname];
+        return `
+          <div class="bot-person">
+            <div class="bot-person-top">
+              <span class="bot-person-name">${p.nickname}${isLeader ? ' <span class="badge badge--leader">팟장</span>' : ''}</span>
+              <span class="bot-person-fare">${won(p.fare)}</span>
+            </div>
+            <p class="bot-person-route">${routeText}</p>
+            ${settled != null ? `<p class="bot-person-route">정산금 ${won(settled)}</p>` : ''}
+          </div>`;
+      }).join('')}
+    </div>
+    <div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div>
+  `;
+}
+
 async function renderPodChat(podId){
   const u = STATE.user;
   if (SUPA_ENABLED) {
@@ -2570,7 +2609,6 @@ async function renderPodChat(podId){
       <span class="section-label">채팅</span>
       <div class="chat-section-head-btns">
         <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-summary">🤖 팟 정보</button>
-        <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-suggest">✨ 문구 추천</button>
       </div>
     </div>
     <div class="chat-box" id="chat-messages"></div>`;
@@ -2671,6 +2709,13 @@ async function renderPodChat(podId){
       msgWrap.appendChild(div);
     });
   }
+  // "팟 정보"를 이미 열어둔 상태였으면, 채팅을 보내서 이 화면이 다시 그려져도 그대로 복원한다.
+  if (podSummaryIntro[podId] !== undefined) {
+    const botDiv = document.createElement('div');
+    botDiv.className = 'chat-msg bot';
+    botDiv.innerHTML = buildBotSummaryHtml(pod, result, podSummaryIntro[podId]);
+    msgWrap.appendChild(botDiv);
+  }
   msgWrap.scrollTop = msgWrap.scrollHeight;
 
   const chatInput = document.getElementById('chat-input');
@@ -2688,41 +2733,15 @@ async function renderPodChat(podId){
   };
   sendBtn.onclick = sendChat;
 
-  const aiBtn = document.getElementById('btn-ai-suggest');
-  aiBtn.addEventListener('click', async () => {
-    const myInfo = fareMap[u.id] || {};
-    aiBtn.disabled = true;
-    aiBtn.textContent = '생각 중…';
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          originName: pod.originName, trunkDest: pod.leaderDest,
-          myNickname: u.nickname, myDest: u.dest, isLeader,
-          myDropPoint: myInfo.dropPoint, myWalkTime: myInfo.walkTime,
-          departTime: pod.departTime,
-          participants: pod.participants.filter(p => p.id !== u.id).map(p => ({ nickname: p.nickname, dest: p.dest })),
-          recentMessages: messages.map(m => ({ who: m.mine ? u.nickname : m.who, text: m.text })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.suggestion) throw new Error(data.error || '추천 실패');
-      chatInput.value = data.suggestion;
-      chatInput.dispatchEvent(new Event('input'));
-      chatInput.focus();
-    } catch (e) {
-      showError('문구 추천을 못 받아왔어요. 잠시 후 다시 시도해보세요.');
-    } finally {
-      aiBtn.disabled = false;
-      aiBtn.textContent = '✨ 문구 추천';
-    }
-  });
-
   // "🤖 팟 정보" — 경로/하차지점/요금을 봇 말풍선으로 보여준다. 실제 채팅 메시지가 아니라
   // 이 화면에서만 보이는 안내라서 pod_messages에 저장하지 않는다(다시 열면 사라짐, 필요하면 또 누르면 됨).
   const summaryBtn = document.getElementById('btn-ai-summary');
   summaryBtn.addEventListener('click', async () => {
+    // 이미 열어둔 상태면 다시 안 받아온다 — 아래로 스크롤만 해서 보여준다.
+    if (podSummaryIntro[podId] !== undefined) {
+      msgWrap.scrollTop = msgWrap.scrollHeight;
+      return;
+    }
     summaryBtn.disabled = true;
     summaryBtn.textContent = '정리 중…';
     try {
@@ -2734,7 +2753,6 @@ async function renderPodChat(podId){
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            mode: 'summary',
             originName: pod.originName, trunkDest: pod.leaderDest, departTime: pod.departTime,
             peopleCount: pod.participants.length, isSettled: !!(pod.settlement && pod.settlement.length),
           }),
@@ -2743,36 +2761,10 @@ async function renderPodChat(podId){
         if (res.ok && data.summary) intro = data.summary;
       } catch (e) { /* 인사말 없이 표만 보여줘도 괜찮다 */ }
 
-      const leaderId = pod.leaderId;
-      const settlementMap = {};
-      (pod.settlement || []).forEach(s => { settlementMap[s.nickname] = s.amount; });
-
+      podSummaryIntro[podId] = intro;
       const div = document.createElement('div');
       div.className = 'chat-msg bot';
-      div.innerHTML = `
-        <span class="chat-name">🤖 택시팟 매니저</span>
-        ${intro ? `<p class="bot-intro">${intro}</p>` : ''}
-        <div class="bot-route-row">${pod.originName} → ${pod.leaderDest} · ${pod.departTime} 출발 · 약 ${result.totalMins}분</div>
-        <div class="bot-person-list">
-          ${result.perPerson.map(p => {
-            const routeText = p.dropPoint === p.dest
-              ? `${p.dropPoint} 하차 · 바로 도착`
-              : `${p.dropPoint} 하차 → ${p.dest}${p.walkTime > 0 ? ` (도보 ${p.walkTime}분)` : ''}`;
-            const isLeader = p.id === leaderId;
-            const settled = settlementMap[p.nickname];
-            return `
-              <div class="bot-person">
-                <div class="bot-person-top">
-                  <span class="bot-person-name">${p.nickname}${isLeader ? ' <span class="badge badge--leader">팟장</span>' : ''}</span>
-                  <span class="bot-person-fare">${won(p.fare)}</span>
-                </div>
-                <p class="bot-person-route">${routeText}</p>
-                ${settled != null ? `<p class="bot-person-route">정산금 ${won(settled)}</p>` : ''}
-              </div>`;
-          }).join('')}
-        </div>
-        <div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div>
-      `;
+      div.innerHTML = buildBotSummaryHtml(pod, result, intro);
       msgWrap.appendChild(div);
       msgWrap.scrollTop = msgWrap.scrollHeight;
     } catch (e) {

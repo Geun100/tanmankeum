@@ -2,3 +2,4 @@
 .vercel
 .env*
 landing/scripts/demo_ids.json
+.DS_Store
