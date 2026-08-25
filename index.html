@@ -2207,9 +2207,8 @@ function statusLabel(){
 function renderPodList(){
   const u = STATE.user;
   let list = STATE.pods.filter(p => p.id !== STATE.myPodId);
-  // 출발 시각이 지난 팟은 목록에서 뺀다. 사용자마다 자기 팟이 항상 하나씩 생기는 구조라
-  // 이걸 안 걸러내면 지난 팟이 계속 쌓인다.
-  list = list.filter(p => !isPodExpired(p));
+  // 임시: 만료 필터 끔 — 테스트 팟이 다 사라져서 데모용으로 잠시 다 보이게 한 것.
+  // TODO: 나중에 되돌리기 (`list = list.filter(p => !isPodExpired(p));`) 또는 DB 정리.
   // 정원이 찬 팟과 이미 확정/진행/완료된 팟은 참가할 수 없으니 목록에서 뺀다.
   list = list.filter(p => p.participants.length < p.desiredSize && p.status === 'recruiting');
   if (sameDestFilter) list = list.filter(p => p.leaderDest === u.dest);
