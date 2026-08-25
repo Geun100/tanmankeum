@@ -287,8 +287,18 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .chat-msg.other{ align-self:flex-start; background:var(--surface); border:1px solid var(--line); border-bottom-left-radius:4px; }
   .chat-msg.me{ align-self:flex-end; background:var(--primary); color:var(--on-primary); border-bottom-right-radius:4px; }
   .chat-msg .chat-name{ display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:2px; }
-  .chat-msg.bot{ align-self:stretch; max-width:100%; background:var(--primary-soft); border:1px solid var(--primary); border-radius:16px; white-space:pre-line; }
+  .chat-msg.bot{ align-self:stretch; max-width:100%; background:var(--primary-soft); border:1px solid var(--primary); border-radius:16px; display:flex; flex-direction:column; gap:2px; }
   .chat-msg.bot .chat-name{ color:var(--primary-dark); font-size:12px; }
+  .bot-intro{ margin:2px 0 6px; font-size:13.5px; }
+  .bot-route-row{ font-size:12px; font-weight:600; color:var(--ink-soft); padding-bottom:8px; margin-bottom:8px; border-bottom:1px solid var(--line); }
+  .bot-person-list{ display:flex; flex-direction:column; gap:10px; }
+  .bot-person-top{ display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+  .bot-person-name{ font-size:13.5px; font-weight:700; }
+  .bot-person-name .badge{ font-size:10px; padding:1px 6px; margin-left:2px; }
+  .bot-person-fare{ font-size:13.5px; font-weight:700; color:var(--primary-dark); flex-shrink:0; }
+  .bot-person-route{ margin:2px 0 0; font-size:12.5px; color:var(--ink-soft); }
+  .bot-total-row{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:13.5px; font-weight:700; }
+  .bot-total-row strong{ color:var(--primary-dark); font-size:15px; }
   .chat-input-dock{ flex-shrink:0; display:flex; align-items:flex-end; gap:8px; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); }
   .chat-input{ flex:1; max-height:104px; min-height:40px; resize:none; border-radius:20px; border:1px solid var(--line); background:var(--fill); color:var(--ink); padding:9px 16px; font-size:15.5px; line-height:1.4; outline:none; overflow-y:auto; }
   .chat-input:focus{ border-color:var(--primary); background:var(--surface); }
@@ -2615,28 +2625,53 @@ async function renderPodChat(podId){
     summaryBtn.disabled = true;
     summaryBtn.textContent = '정리 중…';
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'summary',
-          originName: pod.originName, trunkDest: pod.leaderDest, departTime: pod.departTime,
-          totalFare: result.totalFare, totalMins: result.totalMins, isRealFare: result.isRealFare,
-          people: result.perPerson.map(p => ({ nickname: p.nickname, dest: p.dest, dropPoint: p.dropPoint, walkTime: p.walkTime, fare: p.fare })),
-          settlement: pod.settlement || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.summary) throw new Error(data.error || '요약 실패');
+      // 인사 한 줄만 AI한테 받는다 — 숫자는 여기서 이미 정확히 계산돼 있으니(result) 표로 직접 그린다.
+      // AI 호출이 실패해도(네트워크 등) 표는 그대로 보여준다 — 인사말은 있으면 좋은 것일 뿐, 핵심은 표.
+      let intro = '';
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'summary',
+            originName: pod.originName, trunkDest: pod.leaderDest, departTime: pod.departTime,
+            peopleCount: pod.participants.length, isSettled: !!(pod.settlement && pod.settlement.length),
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.summary) intro = data.summary;
+      } catch (e) { /* 인사말 없이 표만 보여줘도 괜찮다 */ }
+
+      const leaderId = pod.leaderId;
+      const settlementMap = {};
+      (pod.settlement || []).forEach(s => { settlementMap[s.nickname] = s.amount; });
+
       const div = document.createElement('div');
       div.className = 'chat-msg bot';
-      const nameEl = document.createElement('span');
-      nameEl.className = 'chat-name';
-      nameEl.textContent = '🤖 택시팟 매니저';
-      div.appendChild(nameEl);
-      const textEl = document.createElement('span');
-      textEl.textContent = data.summary;
-      div.appendChild(textEl);
+      div.innerHTML = `
+        <span class="chat-name">🤖 택시팟 매니저</span>
+        ${intro ? `<p class="bot-intro">${intro}</p>` : ''}
+        <div class="bot-route-row">${pod.originName} → ${pod.leaderDest} · ${pod.departTime} 출발 · 약 ${result.totalMins}분</div>
+        <div class="bot-person-list">
+          ${result.perPerson.map(p => {
+            const routeText = p.dropPoint === p.dest
+              ? `${p.dropPoint} 하차 · 바로 도착`
+              : `${p.dropPoint} 하차 → ${p.dest}${p.walkTime > 0 ? ` (도보 ${p.walkTime}분)` : ''}`;
+            const isLeader = p.id === leaderId;
+            const settled = settlementMap[p.nickname];
+            return `
+              <div class="bot-person">
+                <div class="bot-person-top">
+                  <span class="bot-person-name">${p.nickname}${isLeader ? ' <span class="badge badge--leader">팟장</span>' : ''}</span>
+                  <span class="bot-person-fare">${won(p.fare)}</span>
+                </div>
+                <p class="bot-person-route">${routeText}</p>
+                ${settled != null ? `<p class="bot-person-route">정산금 ${won(settled)}</p>` : ''}
+              </div>`;
+          }).join('')}
+        </div>
+        <div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div>
+      `;
       msgWrap.appendChild(div);
       msgWrap.scrollTop = msgWrap.scrollHeight;
     } catch (e) {
