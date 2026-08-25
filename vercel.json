@@ -1,4 +1,5 @@
 {
   "buildCommand": "node scripts/gen-keys.js",
-  "outputDirectory": "."
+  "outputDirectory": ".",
+  "cleanUrls": true
 }

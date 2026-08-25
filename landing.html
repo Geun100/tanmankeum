@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>탄만큼 — 같은 방향이면, 탄 만큼만 내세요</title>
+<meta name="description" content="목적지가 같지 않아도 됩니다. 내 목적지가 상대의 택시 경로 위에 있으면 함께 타고, 탄 만큼만 나눠 냅니다. 포항에서 시작합니다.">
+<meta property="og:title" content="탄만큼 — 같은 방향이면, 탄 만큼만 내세요">
+<meta property="og:description" content="경로 기반 택시 합승 매칭. 포항에서 시작합니다.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<script src="supabase-keys.local.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  :root{
+    --font-sans:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
+    --ink:#354153; --ink-soft:#697383;
+    --paper:#ffffff; --line:#e5e8ef; --fill:#f2f3f8; --region:#f9f9fb; --foot:#f5f5f5;
+    --primary:#0078ff; --primary-dark:#0060cc; --primary-soft:#e6f2ff;
+    --green:#137a52; --green-soft:#e1f5ec;
+    --orange:#9c5008; --orange-soft:#fdecd8;
+    --radius-card:16px; --radius-input:12px; --radius-chip:14px;
+    --shadow-card:0px 4px 8px 0px rgba(0,0,0,0.1);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--font-sans);color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased;line-height:1.6}
+  h1,h2,h3,p{margin:0}
+  ul{list-style:none;margin:0;padding:0}
+  a{color:inherit;text-decoration:none}
+  .wrap{width:100%;max-width:1080px;margin:0 auto;padding:0 20px}
+
+  header.nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .brand{font-size:20px;font-weight:800;letter-spacing:-.01em}
+  .nav-links{display:none;gap:24px;font-size:16px;font-weight:600;color:var(--ink)}
+  @media(min-width:820px){.nav-links{display:flex}}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;cursor:pointer;font-family:inherit;font-weight:600;border-radius:var(--radius-input);transition:background 150ms cubic-bezier(.4,0,.2,1),box-shadow 150ms cubic-bezier(.4,0,.2,1)}
+  .btn--primary{background:var(--primary);color:#fff;font-size:15px;padding:11px 18px}
+  .btn--primary:hover{background:var(--primary-dark)}
+  .btn--ghost{background:var(--fill);color:var(--ink);font-size:15px;padding:11px 18px}
+  .btn--ghost:hover{background:#e8eaf2}
+  .btn--lg{font-size:16px;padding:15px 26px}
+
+  section{padding:64px 0}
+  @media(min-width:820px){section{padding:88px 0}}
+  .eyebrow{font-size:13px;font-weight:700;color:var(--primary);letter-spacing:.02em;margin-bottom:10px}
+  h2{font-size:22px;font-weight:700;line-height:1.36;letter-spacing:-.01em}
+  .sec-sub{margin-top:10px;color:var(--ink-soft);font-size:16px}
+
+  /* hero */
+  .hero{padding-top:48px;background:linear-gradient(180deg,#f7faff 0%,#ffffff 100%)}
+  .hero-grid{display:grid;gap:36px;align-items:center}
+  @media(min-width:900px){.hero-grid{grid-template-columns:1.05fr .95fr;gap:48px}}
+  h1{font-size:26px;font-weight:700;line-height:1.38;letter-spacing:-.015em}
+  @media(min-width:900px){h1{font-size:34px}}
+  .hero p.lead{margin-top:14px;font-size:16px;color:var(--ink-soft)}
+  .hero-cta{margin-top:24px;display:flex;flex-wrap:wrap;gap:10px}
+  .chips{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:var(--radius-chip);padding:7px 12px;font-size:13px;font-weight:600;color:var(--ink-soft)}
+
+  /* route visual */
+  .route-card{background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:20px}
+  .route-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink-soft);font-weight:600}
+  .score{background:var(--primary-soft);color:var(--primary-dark);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+  .route-line{margin:18px 0 4px;position:relative;padding-left:26px}
+  .route-line::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--line)}
+  .stop{position:relative;padding:9px 0;font-size:15px;font-weight:600}
+  .stop small{display:block;font-size:13px;font-weight:500;color:var(--ink-soft)}
+  .stop::before{content:"";position:absolute;left:-26px;top:15px;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid var(--line)}
+  .stop.a::before{border-color:var(--green)}
+  .stop.b::before{border-color:var(--orange)}
+  .stop.c::before{border-color:var(--primary)}
+  .walk{margin-left:-4px;padding:8px 10px;background:var(--orange-soft);color:var(--orange);border-radius:var(--radius-chip);font-size:13px;font-weight:600;display:inline-block}
+  .fare{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:baseline;justify-content:space-between}
+  .fare b{font-size:22px;font-weight:700}
+  .fare s{color:var(--ink-soft);font-size:14px}
+
+  /* steps */
+  .steps{display:grid;gap:16px;margin-top:32px}
+  @media(min-width:760px){.steps{grid-template-columns:repeat(4,1fr)}}
+  .step{background:var(--region);border:1px solid var(--line);border-radius:var(--radius-card);padding:20px}
+  .step-n{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .step h3{margin-top:12px;font-size:16px;font-weight:600}
+  .step p{margin-top:6px;font-size:14px;color:var(--ink-soft)}
+
+  /* features */
+  .feats{display:grid;gap:16px;margin-top:32px}
+  @media(min-width:760px){.feats{grid-template-columns:repeat(3,1fr)}}
+  .feat{background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:24px}
+  .feat h3{font-size:16px;font-weight:600}
+  .feat p{margin-top:8px;font-size:14px;color:var(--ink-soft)}
+  .feat .num{margin-top:14px;font-size:20px;font-weight:700;color:var(--primary)}
+
+  .alt{background:var(--region)}
+  .safety{display:grid;gap:14px;margin-top:28px}
+  @media(min-width:760px){.safety{grid-template-columns:repeat(2,1fr)}}
+  .safe-item{display:flex;gap:12px;background:#fff;border:1px solid var(--line);border-radius:var(--radius-card);padding:18px}
+  .safe-item .dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--green);margin-top:9px}
+  .safe-item h3{font-size:16px;font-weight:600}
+  .safe-item p{margin-top:4px;font-size:14px;color:var(--ink-soft)}
+
+  /* fare panel */
+  .fare-panel{margin-top:28px;background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:24px;max-width:520px}
+  .fare-row{display:flex;justify-content:space-between;padding:11px 0;font-size:15px;border-bottom:1px solid var(--line)}
+  .fare-row:last-of-type{border-bottom:0}
+  .fare-row b{font-weight:700}
+  .fare-note{margin-top:12px;font-size:13px;color:var(--ink-soft)}
+
+  /* faq */
+  details{background:#fff;border:1px solid var(--line);border-radius:var(--radius-card);padding:16px 18px;margin-top:12px}
+  summary{cursor:pointer;font-size:16px;font-weight:600;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"+";float:right;color:var(--ink-soft);font-weight:600}
+  details[open] summary::after{content:"−"}
+  details p{margin-top:10px;font-size:14px;color:var(--ink-soft)}
+
+  .signup{margin-top:24px;max-width:520px}
+  .signup-row{display:flex;flex-wrap:wrap;gap:8px}
+  .signup input{flex:1 1 220px;min-width:0;background:var(--fill);border:1px solid transparent;border-radius:var(--radius-input);padding:13px 14px;font-size:16px;font-family:inherit;color:var(--ink)}
+  .signup input::placeholder{color:var(--placeholder,#b4bbcb)}
+  .signup input:focus{outline:none;border-color:var(--primary);background:#fff}
+  .signup .btn--primary{padding:13px 22px;font-size:16px}
+  .signup .btn--primary[disabled]{background:var(--fill);color:#b4bbcb;cursor:default}
+  .signup-note{margin-top:10px;font-size:13px;color:var(--ink-soft)}
+  .signup-msg{margin-top:10px;font-size:14px;font-weight:600;min-height:20px}
+  .signup-msg.ok{color:var(--green)}
+  .signup-msg.err{color:#c23b3b}
+  .final .signup{margin-left:auto;margin-right:auto;text-align:left}
+  .final{text-align:center;background:linear-gradient(180deg,#ffffff 0%,#f7faff 100%)}
+  .final p{margin-top:10px;color:var(--ink-soft)}
+  .final .hero-cta{justify-content:center}
+
+  footer{background:var(--foot);padding:36px 0;font-size:14px;color:var(--ink-soft)}
+  .foot-in{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top">탄만큼</a>
+    <nav class="nav-links">
+      <a href="#how">이용 방법</a>
+      <a href="#why">왜 탄만큼</a>
+      <a href="#safety">안전</a>
+      <a href="#fare">요금</a>
+    </nav>
+    <a class="btn btn--primary" href="/">택시팟 찾기</a>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <h1>같은 방향이면 같이 타고,<br>탄 만큼만 나눠 냅니다</h1>
+      <p class="lead">목적지가 똑같아야 할 필요 없습니다. 내 목적지가 상대의 택시 경로 위에 있으면 매칭됩니다. 어디서 내리고, 거기서 몇 분 걸어야 하는지까지 타기 전에 보여드립니다.</p>
+<form class="signup" novalidate>
+        <div class="signup-row">
+          <input type="email" name="email" inputmode="email" autocomplete="email" required placeholder="이메일 주소" aria-label="이메일 주소">
+          <button class="btn btn--primary" type="submit">출시 알림 받기</button>
+        </div>
+        <p class="signup-note">내 지역에 열리면 가장 먼저 알려드립니다. 광고 메일은 보내지 않습니다.</p>
+        <p class="signup-msg" role="status" aria-live="polite"></p>
+      </form>
+      <div class="hero-cta">
+        <a class="btn btn--ghost btn--lg" href="/">먼저 둘러보기</a>
+        <a class="btn btn--ghost btn--lg" href="#how">이용 방법 보기</a>
+      </div>
+      <div class="chips">
+        <span class="chip">경로 기반 매칭</span>
+        <span class="chip">한 팟 최대 4명</span>
+        <span class="chip">포항에서 시작</span>
+        <span class="chip">설치 없이 웹에서</span>
+      </div>
+    </div>
+
+    <div class="route-card" aria-label="팟 예시 카드">
+      <div class="route-head"><span>오늘 19:00 · 2/4명</span><span class="score">매칭 92점</span></div>
+      <div class="route-line">
+        <div class="stop a">포항역<small>팟 출발지 · 여기서 함께 탑승</small></div>
+        <div class="stop b">죽도시장<small>내 추천 하차 지점</small></div>
+        <div class="stop c">영일대해수욕장<small>팟장 최종 목적지</small></div>
+      </div>
+      <span class="walk">여기서 내리면 목적지까지 도보 4분 · 280m</span>
+      <div class="fare">
+        <div><s>혼자 12,000원</s><br><b>1인 약 3,500원</b></div>
+        <span class="score">약 71% 절약</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">이용 방법</div>
+    <h2>네 단계면 끝납니다</h2>
+    <p class="sec-sub">가입하고 팟에 타기까지, 화면 네 개.</p>
+    <div class="steps">
+      <div class="step"><div class="step-n">1</div><h3>이동 정보 입력</h3><p>출발지, 목적지, 출발 시간, 원하는 인원을 넣습니다. 인원이 적을수록 매칭될 가능성이 높습니다.</p></div>
+      <div class="step"><div class="step-n">2</div><h3>추천 팟 확인</h3><p>내 경로와 겹치는 팟을 매칭 점수 순으로 보여드립니다. 요금순·시간순 정렬도 됩니다.</p></div>
+      <div class="step"><div class="step-n">3</div><h3>내 하차 지점 확인 후 참가</h3><p>지도에서 택시 구간과 도보 구간, 예상 요금까지 보고 참가를 결정합니다.</p></div>
+      <div class="step"><div class="step-n">4</div><h3>팟 채팅방에서 만나기</h3><p>팟장이 확정하면 최종 경로·시간·1인 요금이 계산됩니다. 만나서 타고, 각자 하차합니다.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="eyebrow">왜 탄만큼</div>
+    <h2>목적지가 같은 사람을 찾는 대신,<br>경로가 겹치는 사람을 찾습니다</h2>
+    <div class="feats">
+      <div class="feat">
+        <h3>탄 만큼만 냅니다</h3>
+        <p>포항역에서 영일대까지 혼자 가면 12,000원. 경로가 겹치는 네 명이 나눠 타면 1인 약 3,500원.</p>
+        <div class="num">최대 71% 절약</div>
+      </div>
+      <div class="feat">
+        <h3>목적지가 달라도 매칭됩니다</h3>
+        <p>내 목적지가 팟장의 택시 경로 위에 있으면 참가할 수 있습니다. 경로에서 벗어나 되돌아가야 하는 팟은 애초에 보이지 않습니다.</p>
+        <div class="num">경로 기반 매칭</div>
+      </div>
+      <div class="feat">
+        <h3>타기 전에 다 보여드립니다</h3>
+        <p>어디서 내리고, 거기서 목적지까지 몇 분 걷는지, 1인 요금은 얼마인지. 참가 버튼을 누르기 전에 지도에서 확인합니다.</p>
+        <div class="num">하차 지점 + 도보 시간</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="safety" class="alt">
+  <div class="wrap">
+    <div class="eyebrow">안전</div>
+    <h2>모르는 사람과 타는 일이니까</h2>
+    <p class="sec-sub">불확실한 부분을 남기지 않는 것이 안전의 시작입니다.</p>
+    <div class="safety">
+      <div class="safe-item"><span class="dot"></span><div><h3>팟장이 직접 확정합니다</h3><p>자동으로 배정되지 않습니다. 팟장이 인원을 보고 직접 확정하며, 확정 전 취소하면 팟은 해체되고 참여자는 재매칭으로 돌아갑니다.</p></div></div>
+      <div class="safe-item"><span class="dot"></span><div><h3>한 팟에 최대 4명</h3><p>택시 정원 그대로. 낯선 사람이 계속 타고 내리는 구조가 아닙니다.</p></div></div>
+      <div class="safe-item"><span class="dot"></span><div><h3>탑승 전 채팅방에서 조율</h3><p>만날 지점과 시간을 팟 채팅방에서 미리 맞춥니다. 프로필에 닉네임과 성별이 표시됩니다.</p></div></div>
+      <div class="safe-item"><span class="dot"></span><div><h3>동시에 한 팟만</h3><p>한 사용자는 한 번에 하나의 팟에만 참여합니다. 중복 참가로 인한 노쇼를 구조적으로 막습니다.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="fare">
+  <div class="wrap">
+    <div class="eyebrow">요금</div>
+    <h2>탄만큼 이용료는 0원입니다</h2>
+    <p class="sec-sub">택시비만 나눠 내면 됩니다. 정산은 팟 채팅방에서 직접 합니다.</p>
+    <div class="fare-panel">
+      <div class="fare-row"><span>혼자 탈 때 (포항역 → 영일대)</span><s>12,000원</s></div>
+      <div class="fare-row"><span>2명이 나눠 탈 때</span><b>1인 약 6,000원</b></div>
+      <div class="fare-row"><span>4명이 나눠 탈 때</span><b>1인 약 3,500원</b></div>
+      <div class="fare-row"><span>탄만큼 이용료</span><b>0원</b></div>
+      <p class="fare-note">예상 요금은 참여자와 최종 경로에 따라 달라질 수 있습니다. 실제 요금은 하차 시점 미터기 기준입니다.</p>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="eyebrow">자주 묻는 질문</div>
+    <h2>궁금한 것들</h2>
+    <details><summary>목적지가 팟장보다 멀면 어떻게 되나요?</summary><p>참가할 수 없습니다. 팟장의 최종 목적지를 지나쳐야 하는 사용자는 매칭에서 제외됩니다. 대신 그 방향으로 가는 다른 팟을 추천해 드립니다.</p></details>
+    <details><summary>택시는 누가 부르나요?</summary><p>현재는 팟에서 직접 호출합니다. 호출·결제·정산 모두 참여자끼리 진행하며, 탄만큼은 매칭과 경로 안내를 담당합니다.</p></details>
+    <details><summary>정산은 어떻게 하나요?</summary><p>팟 채팅방에서 계산된 1인 요금을 확인하고 직접 송금합니다. 앱 내 결제는 아직 없습니다.</p></details>
+    <details><summary>어느 지역에서 쓸 수 있나요?</summary><p>포항에서 먼저 시작합니다. 이용자가 모이는 지역 순으로 넓혀갈 예정입니다.</p></details>
+    <details><summary>앱을 설치해야 하나요?</summary><p>아니요. 웹에서 바로 씁니다. 브라우저로 접속해 이동 정보만 넣으면 됩니다.</p></details>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap">
+    <h2>지금 같은 방향으로 가는 사람이 있습니다</h2>
+    <p>이메일을 남겨두면 내 지역에 팟이 열릴 때 알려드립니다.</p>
+    <form class="signup" novalidate>
+        <div class="signup-row">
+          <input type="email" name="email" inputmode="email" autocomplete="email" required placeholder="이메일 주소" aria-label="이메일 주소">
+          <button class="btn btn--primary" type="submit">출시 알림 받기</button>
+        </div>
+        <p class="signup-note">이메일은 출시·지역 오픈 알림에만 씁니다.</p>
+        <p class="signup-msg" role="status" aria-live="polite"></p>
+      </form>
+    <div class="hero-cta"><a class="btn btn--ghost btn--lg" href="/">먼저 둘러보기</a></div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <div><strong style="color:var(--ink)">탄만큼</strong> · 경로 기반 택시 합승 매칭</div>
+    <div>포항에서 시작합니다 · © 2026 탄만큼</div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var K = window.SUPABASE_KEYS || {};
+  var db = (K.url && K.anonKey && window.supabase) ? window.supabase.createClient(K.url, K.anonKey) : null;
+  var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+  document.addEventListener('submit', function(e){
+    var form = e.target.closest('.signup');
+    if (!form) return;
+    e.preventDefault();
+
+    var input = form.querySelector('input[name=email]');
+    var btn = form.querySelector('button');
+    var msg = form.querySelector('.signup-msg');
+    var email = input.value.trim();
+
+    function say(text, kind){ msg.textContent = text; msg.className = 'signup-msg ' + kind; }
+
+    if (!EMAIL.test(email) || email.length > 254) { say('이메일 주소를 다시 확인해 주세요.', 'err'); input.focus(); return; }
+    if (!db) { say('지금은 등록이 되지 않습니다. 잠시 후 다시 시도해 주세요.', 'err'); return; }
+
+    btn.disabled = true; say('등록 중…', '');
+    db.from('waitlist').insert({ email: email, source: 'landing' }).then(function(res){
+      btn.disabled = false;
+      if (!res.error) { form.reset(); say('등록됐습니다. 지역이 열리면 이 주소로 알려드릴게요.', 'ok'); return; }
+      // 23505 = unique_violation — 이미 등록된 주소는 사용자 입장에서 실패가 아니다.
+      if (res.error.code === '23505') { form.reset(); say('이미 등록된 주소예요. 열리면 알려드릴게요.', 'ok'); return; }
+      say('등록에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'err');
+    });
+  });
+})();
+</script>
+</body>
+</html>
