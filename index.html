@@ -728,7 +728,9 @@ async function enterHome(){
     STATE.userState = '대기';
   }
   if (!STATE.myPodId) await createOwnPod();
-  await Promise.all(STATE.pods.map(warmPodRoutes));
+  // 팟 경로는 여기서 미리 안 받는다 — 팟이 100개 넘어가면 길찾기 호출이 그만큼 한꺼번에 나가고,
+  // 그걸 전부 기다리느라 온보딩이 몇십 초씩 멈췄다. 목록은 renderPodList가 화면에 필요한 만큼만
+  // 나눠서 받아오고 받는 대로 다시 그린다.
   saveOnboardingCache(STATE.user);
 }
 
@@ -1276,9 +1278,16 @@ document.getElementById('modal-confirm').addEventListener('click', () => {
 // 정류장 목록 → 실제 도로 경로/요금/소요시간. 실패하면 null을 캐시해 같은 경로를 반복 호출하지 않는다.
 // 응답을 캐시해두면 calcFinalRouteAndFare()가 동기 함수인 채로 실제 요금을 쓸 수 있다.
 const ROUTE_CACHE = new Map();
+// 목록에서 한 번에 길찾기를 받아올 팟 수. 화면에 처음 보이는 만큼만 덮으면 충분하다.
+const WARM_BATCH = 8;
 
 function routeKey(stops){ return stops.join('>'); }
 function cachedRoute(stops){ return ROUTE_CACHE.get(routeKey(stops)) || null; }
+// cachedRoute()는 "성공한 경로가 없다"를 null로 뭉뚱그린다 — 그래서 실패(null 캐싱)와
+// 아직 시도 안 함을 구분 못 한다. renderPodList의 pending 판정은 이 둘을 구분해야 한다:
+// 구분 못 하면 실패한 경로가 매번 다시 "아직 안 받음"으로 보여서 warmPodRoutes → renderPodList가
+// 서로를 끝없이 불러 화면이 멈춘다(실제로 그랬다).
+function routeAttempted(stops){ return ROUTE_CACHE.has(routeKey(stops)); }
 
 // 출발 시각이 지금보다 나중이면 그 시각 기준 예상 교통정보로 경로를 받는다(미래 운행 정보 길찾기).
 // 카카오 API는 "현재 이후" 시각만 받으므로, 이미 지난 시각이면 null을 돌려주고 fetchRoute가
@@ -2129,7 +2138,6 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
       }
       STATE.user = { ...STATE.user, origin: originName, dest: destName, time, date, partySize };
       saveOnboardingCache(STATE.user);
-      await Promise.all(STATE.pods.map(warmPodRoutes));
     } catch (e) {
       showError(friendlyDbError(e));
       return;
@@ -2179,7 +2187,6 @@ async function renderHome(){
   // 목록 화면은 실시간 구독을 하지 않는다(설계 결정) — 진입할 때마다 새로 받아오는 걸로 충분하다.
   if (SUPA_ENABLED) {
     STATE.pods = await loadOpenPods();
-    await Promise.all(STATE.pods.map(warmPodRoutes));
   }
   const u = STATE.user, myPod = findPod(STATE.myPodId);
   const isLeaderOfOwn = myPod && myPod.leaderId === u.id;
@@ -2220,9 +2227,12 @@ function renderPodList(){
   const withPreview = allPreview.filter(x => x.prev.eligible);
 
   // 아직 경로를 못 받은 팟이 있으면 받아온 뒤 한 번 다시 그린다(그래야 목록 요금이 실제 값이 된다).
-  const pending = allPreview.filter(x => !cachedRoute([x.pod.originName, x.pod.leaderDest]));
+  // 한 번에 WARM_BATCH개씩만 받는다 — 팟이 100개면 길찾기 호출도 100개가 한꺼번에 나가서
+  // 서버가 밀리고 화면이 그만큼 굳는다. 받고 나면 다시 그리는데, 그때 남은 팟이 다음 묶음이 된다
+  // (fetchRoute가 실패한 경로도 캐시에 넣으므로 언젠가는 pending이 비고 멈춘다).
+  const pending = allPreview.filter(x => !routeAttempted([x.pod.originName, x.pod.leaderDest]));
   if (pending.length) {
-    Promise.all(pending.map(x => warmPodRoutes(x.pod))).then(() => renderPodList());
+    Promise.all(pending.slice(0, WARM_BATCH).map(x => warmPodRoutes(x.pod))).then(() => renderPodList());
   }
   const sortMode = document.getElementById('sort-select').value;
   withPreview.sort((a, b) => {
