@@ -1,3 +1,4 @@
 *.local.js
 .vercel
 .env*
+landing/scripts/demo_ids.json
