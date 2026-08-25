@@ -2977,6 +2977,10 @@ function renderSettlement(podId){
           }
           document.getElementById('share-confirm-note').textContent = `채팅방에 계좌(${acc})와 정산 내역이 공유됐어요. 각자 계좌이체로 정산해주세요.`;
           document.getElementById('btn-finish-pod').disabled = false;
+          // 공유가 실제로 채팅에 떴는지 여기서 문구로 설명하는 대신, 채팅방으로 바로 데려가서
+          // 방금 올라간 메시지(계좌번호+영수증 사진)를 직접 눈으로 확인하게 한다.
+          await renderPodChat(podId);
+          showScreen('screen-pod-chat');
         } catch (e) {
           showError(friendlyDbError(e));
         } finally {
