@@ -96,15 +96,58 @@
   .pod-stats strong{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
   .pod-stats span{font-size:11px;color:var(--muted)}
 
-  /* steps */
-  .steps{display:grid;gap:16px;margin-top:32px}
-  @media(min-width:760px){.steps{grid-template-columns:repeat(4,1fr)}}
-  .step{display:block;background:var(--region);border:1px solid var(--line);border-radius:var(--radius-card);padding:20px;color:inherit;text-decoration:none;transition:border-color .15s}
-  .step:hover{border-color:var(--primary)}
-  .step-n{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
-  .step h3{margin-top:12px;font-size:16px;font-weight:600}
-  .step p{margin-top:6px;font-size:14px;color:var(--ink-soft)}
-  .step-go{display:block;margin-top:12px;font-size:13px;font-weight:600;color:var(--primary)}
+  /* 이용 방법: 4단계를 누르면 페이지를 떠나는 대신, 오른쪽(모바일은 아래) 폰 목업이
+     그 단계의 실제 화면으로 바뀐다. 클릭이 곧 미리보기다 — 딴 데로 안 보낸다. */
+  .how-grid{display:grid;gap:12px;margin-top:32px}
+  @media(min-width:900px){.how-grid{grid-template-columns:1fr 1fr;gap:56px;align-items:start}}
+  .how-steps{display:flex;flex-direction:column;gap:4px}
+  .how-step{display:flex;align-items:flex-start;gap:14px;text-align:left;background:none;border:0;border-radius:var(--radius-card);padding:16px;cursor:pointer;font:inherit;color:inherit;width:100%}
+  .how-step:hover{background:var(--fill)}
+  .how-step.is-active{background:var(--primary-soft)}
+  .how-step-n{flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--line);color:var(--ink-soft);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+  .how-step.is-active .how-step-n{background:var(--primary);color:#fff}
+  .how-step-body strong{display:block;font-size:16px;font-weight:600;margin-bottom:4px}
+  .how-step-body p{font-size:14px;color:var(--ink-soft)}
+  .how-preview{position:relative;margin-top:8px}
+  @media(min-width:900px){.how-preview{position:sticky;top:88px;margin-top:0}}
+  .how-preview-note{text-align:center;font-size:12px;color:var(--muted);margin-top:12px}
+
+  /* 아래 클래스들은 실제 서비스(index.html)의 마크업/CSS를 그대로 옮긴 것 — 목업이 아니다.
+     실제 서비스 쪽이 바뀌면 여기도 같이 옮겨야 한다. */
+  .route-row{display:flex;align-items:center;gap:8px}
+  .route-cell{flex:1;min-width:0}
+  .route-cell input{width:100%;height:44px;border-radius:var(--radius-input);border:1px solid var(--line);background:var(--surface);padding:0 12px;font:inherit;font-size:14px;color:var(--ink)}
+  .info-box{background:var(--surface);border-radius:var(--radius-card);padding:16px;box-shadow:var(--shadow-card)}
+  .info-box h3{font-size:13px;font-weight:700;color:var(--ink-soft);margin:0 0 10px}
+  .callout{font-size:15px;font-weight:700;line-height:1.5;margin:0 0 6px}
+  .fine-note{font-size:12px;color:var(--muted);line-height:1.5;margin:0}
+  .route-diagram{display:flex;align-items:center;gap:0;margin:18px 0 8px}
+  .rd-dot{width:10px;height:10px;border-radius:50%;background:var(--primary);flex-shrink:0}
+  .rd-dot--mid{background:var(--orange)}
+  .rd-dot--end{background:var(--green)}
+  .rd-line{flex:1;height:2px;background:var(--line)}
+  .route-diagram-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-soft);font-weight:600}
+  .route-diagram-labels span:nth-child(2){color:var(--orange)}
+  .route-diagram-labels span:last-child{text-align:right}
+
+  .chat-status-line{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:var(--ink);margin:0 0 12px}
+  .avatar-strip{display:flex;gap:12px}
+  .avatar-slot{display:flex;flex-direction:column;align-items:center;gap:5px;width:46px}
+  .avatar{width:36px;height:36px;border-radius:50%;background:var(--primary-soft);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0}
+  .avatar-slot .avatar--me{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--primary)}
+  .avatar-slot .avatar--leader{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--orange)}
+  .avatar-slot .avatar--empty{background:transparent;border:1.5px dashed var(--line);color:var(--muted);font-size:16px}
+  .avatar-slot-label{font-size:10.5px;color:var(--ink-soft)}
+  .avatar-slot-role{font-size:9px;font-weight:700;color:var(--orange);margin-top:-2px}
+  .people-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card);overflow:hidden;margin-top:14px}
+  .participant-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-top:1px solid var(--line)}
+  .participant-row:first-child{border-top:none}
+  .participant-row .p-name{font-size:13px;font-weight:700}
+  .participant-row p{margin:2px 0 0;font-size:11px;color:var(--muted)}
+  .participant-fare{flex-shrink:0;font-size:13px;font-weight:800}
+  .badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:var(--radius-pill);margin-left:4px}
+  .badge--leader{background:var(--orange-soft);color:var(--orange)}
+  .badge--me{background:var(--primary-soft);color:var(--primary-dark)}
 
   /* features */
   .feats{display:grid;gap:16px;margin-top:32px}
@@ -238,15 +281,41 @@
   <div class="wrap">
     <div class="eyebrow">이용 방법</div>
     <h2>네 단계면 끝납니다</h2>
-    <p class="sec-sub">가입하고 팟에 타기까지, 화면 네 개.</p>
-    <div class="steps">
-      <a class="step" href="/"><div class="step-n">1</div><h3>이동 정보 입력</h3><p>출발지, 목적지, 출발 시간, 원하는 인원을 넣습니다. 인원이 적을수록 매칭될 가능성이 높습니다.</p><span class="step-go">탄만큼에서 해보기 →</span></a>
-      <a class="step" href="/"><div class="step-n">2</div><h3>추천 팟 확인</h3><p>내 경로와 겹치는 팟을 매칭 점수 순으로 보여드립니다. 요금순·시간순 정렬도 됩니다.</p><span class="step-go">탄만큼에서 해보기 →</span></a>
-      <a class="step" href="/"><div class="step-n">3</div><h3>내 하차 지점 확인 후 참가</h3><p>지도에서 택시 구간과 도보 구간, 예상 요금까지 보고 참가를 결정합니다.</p><span class="step-go">탄만큼에서 해보기 →</span></a>
-      <a class="step" href="/"><div class="step-n">4</div><h3>팟 채팅방에서 만나기</h3><p>팟장이 확정하면 최종 경로·시간·1인 요금이 계산됩니다. 만나서 타고, 각자 하차합니다.</p><span class="step-go">탄만큼에서 해보기 →</span></a>
+    <p class="sec-sub">가입하고 팟에 타기까지, 화면 네 개. 눌러서 실제 화면을 바로 확인해보세요.</p>
+    <div class="how-grid">
+      <div class="how-steps" role="tablist" aria-label="이용 방법 단계">
+        <button type="button" class="how-step is-active" data-step="1" role="tab" aria-selected="true">
+          <span class="how-step-n">1</span>
+          <span class="how-step-body"><strong>이동 정보 입력</strong><p>출발지, 목적지, 출발 시간, 원하는 인원을 넣습니다. 인원이 적을수록 매칭될 가능성이 높습니다.</p></span>
+        </button>
+        <button type="button" class="how-step" data-step="2" role="tab" aria-selected="false">
+          <span class="how-step-n">2</span>
+          <span class="how-step-body"><strong>추천 팟 확인</strong><p>내 경로와 겹치는 팟을 매칭 점수 순으로 보여드립니다. 요금순·시간순 정렬도 됩니다.</p></span>
+        </button>
+        <button type="button" class="how-step" data-step="3" role="tab" aria-selected="false">
+          <span class="how-step-n">3</span>
+          <span class="how-step-body"><strong>내 하차 지점 확인 후 참가</strong><p>어디서 내려서 얼마나 걷는지, 예상 요금까지 보고 참가를 결정합니다.</p></span>
+        </button>
+        <button type="button" class="how-step" data-step="4" role="tab" aria-selected="false">
+          <span class="how-step-n">4</span>
+          <span class="how-step-body"><strong>팟 채팅방에서 만나기</strong><p>팟장이 확정하면 최종 경로·시간·1인 요금이 계산됩니다. 만나서 타고, 각자 하차합니다.</p></span>
+        </button>
+      </div>
+      <div class="how-preview">
+        <div class="phone-mock">
+          <span class="proto-badge">실제 앱 화면</span>
+          <div class="phone-frame">
+            <div class="phone-notch"></div>
+            <div class="phone-screen">
+              <div class="phone-statusbar"><span>9:41</span><span class="icons">•••• LTE</span></div>
+              <div class="phone-body" id="how-preview-body"></div>
+            </div>
+            <div class="phone-home"></div>
+          </div>
+        </div>
+        <p class="how-preview-note" id="how-preview-note"></p>
+      </div>
     </div>
-    <!-- 2~4단계는 1단계(이동 정보 입력)에서 출발해야 나오는 화면이라(실제 팟 데이터 필요),
-         URL로 그 화면에 바로 못 연결한다 — 네 카드 다 실제 서비스 시작점(이동 정보 입력)으로 보낸다. -->
   </div>
 </section>
 
@@ -370,6 +439,81 @@
       say('등록에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'err');
     });
   });
+})();
+
+// 이용 방법 4단계 미리보기 — 클릭하면 페이지 이동 없이 폰 목업 내용만 바뀐다.
+(function(){
+  var PANELS = {
+    1: {
+      note: '',
+      html: '\
+        <div class="route-row">\
+          <div class="route-cell"><input value="포항역" readonly></div>\
+          <span style="flex-shrink:0;color:var(--ink-soft);font-weight:700">→</span>\
+          <div class="route-cell"><input value="한동대학교" readonly></div>\
+        </div>\
+        <div class="chips" style="margin-top:12px">\
+          <span class="chip">18:25 출발</span>\
+          <span class="chip">최대 탑승자 2명</span>\
+        </div>',
+    },
+    2: {
+      note: '',
+      html: '\
+        <div class="pod-card">\
+          <div class="pod-card-top"><strong>포항역 → 한동대학교</strong><span class="pod-card-leader">동근 팟장</span></div>\
+          <p class="pod-meta">18:25 출발 · 현재 2/4명 · 한동대학교 정문 하차</p>\
+          <div class="pod-savings"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 혼자 탈 때보다 8,100원 절약</div>\
+          <div class="pod-stats"><div><strong>3,900원</strong><span>예상 1인 요금</span></div><div><strong>2/4</strong><span>현재 인원</span></div><div><strong>약 15분</strong><span>예상 소요</span></div></div>\
+        </div>',
+    },
+    3: {
+      note: '실제 서비스에서는 이 구간을 카카오맵 실도로 경로로 보여줘요.',
+      html: '\
+        <div class="info-box">\
+          <h3>내 하차 지점</h3>\
+          <p class="callout">한동대학교 정문 하차</p>\
+          <p class="fine-note">도보 2분 · 예상 1인 요금 3,900원</p>\
+          <div class="route-diagram"><span class="rd-dot"></span><span class="rd-line"></span><span class="rd-dot rd-dot--mid"></span><span class="rd-line"></span><span class="rd-dot rd-dot--end"></span></div>\
+          <div class="route-diagram-labels"><span>포항역</span><span>정문 하차</span><span>한동대학교</span></div>\
+        </div>',
+    },
+    4: {
+      note: '',
+      html: '\
+        <p class="chat-status-line"><span class="status-dot"></span>2/3명 · 모집 중</p>\
+        <div class="avatar-strip">\
+          <div class="avatar-slot"><span class="avatar avatar--me avatar--leader">동</span><span class="avatar-slot-role">팟장</span><span class="avatar-slot-label">나</span></div>\
+          <div class="avatar-slot"><span class="avatar">지</span><span class="avatar-slot-label">지훈</span></div>\
+          <div class="avatar-slot"><span class="avatar avatar--empty">+</span><span class="avatar-slot-label">빈자리</span></div>\
+        </div>\
+        <div class="people-card">\
+          <div class="participant-row"><div><span class="p-name">동근<span class="badge badge--leader">팟장</span><span class="badge badge--me">나</span></span><p>남성 · 한동대학교 하차</p></div><div class="participant-fare">3,900원</div></div>\
+          <div class="participant-row"><div><span class="p-name">지훈</span><p>남성 · 한동대학교 하차</p></div><div class="participant-fare">3,900원</div></div>\
+        </div>',
+    },
+  };
+
+  var body = document.getElementById('how-preview-body');
+  var note = document.getElementById('how-preview-note');
+  var steps = document.querySelectorAll('.how-step');
+
+  function show(n){
+    var p = PANELS[n];
+    if (!p || !body) return;
+    body.innerHTML = p.html;
+    if (note) note.textContent = p.note;
+    steps.forEach(function(s){
+      var active = s.dataset.step === String(n);
+      s.classList.toggle('is-active', active);
+      s.setAttribute('aria-selected', String(active));
+    });
+  }
+
+  steps.forEach(function(s){
+    s.addEventListener('click', function(){ show(s.dataset.step); });
+  });
+  show(1);
 })();
 </script>
 </body>
