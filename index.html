@@ -138,6 +138,13 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .choice:hover{ border-color:var(--primary); }
   .choice.is-on{ background:var(--primary-soft); border-color:var(--primary); color:var(--primary); }
 
+  /* 성별 잠금 표시 — 이성 간 매칭 방지를 위해 최초 선택 후 다시 못 바꾼다 */
+  .gender-locked{ display:flex; align-items:center; justify-content:space-between; height:52px;
+    padding:0 4px; font-size:15px; }
+  .gender-locked strong{ font-size:16px; }
+  .gender-locked .info-ico{ color:var(--ink-soft); font-size:13px; margin-left:6px; }
+  .gender-lock-note{ display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px; color:var(--ink-soft); }
+
   /* 경로: 출발지 → 목적지 나란히 */
   .route-row{ display:flex; align-items:center; gap:8px; }
   .route-cell{ position:relative; flex:1; min-width:0; }
@@ -379,7 +386,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           <label for="ob-nickname">닉네임</label>
           <input type="text" id="ob-nickname" placeholder="닉네임" maxlength="12" autocomplete="off">
         </div>
-        <div class="field">
+        <div class="field" id="ob-gender-field">
           <span class="field-label">성별</span>
           <div class="choice-row" id="ob-gender-row" role="radiogroup" aria-label="성별">
             <button type="button" class="choice" data-gender="여성" role="radio" aria-checked="false">여성</button>
@@ -614,6 +621,16 @@ const PLACE_COORDS = {
   '환호공원':           { lat: 36.066006868098675, lng: 129.39333111942932, isStop: true },
   '포항북부경찰서':       { lat: 36.094026784098496, lng: 129.37811529376106, isStop: true },
   '한동대학교':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
+  // 한동대 학생 실사용 스팟. 카카오맵 실검색 좌표(주소: 흥해읍 한동로 558=캠퍼스 대표주소,
+  // 장성동/양덕동은 각 업체 실주소 지오코딩) 그대로 옮김. 오석/현동/그레이스더테이블/버스
+  // 정류장 전부 캠퍼스 대표주소(한동로 558) 소속이라 좌표는 캠퍼스 대표좌표를 그대로 씀
+  // (건물 단위 오차는 있음).
+  'CU 장성그랜드점':      { lat: 36.0791188,         lng: 129.3943544,        isStop: true },
+  '커피 유야':           { lat: 36.0805468,         lng: 129.3996132,        isStop: true },
+  '한동대 오석':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
+  '한동대 현동':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
+  '그레이스더테이블':      { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
+  '한동대 버스 정류장':     { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   '육거리':             { lat: 36.0406908061984,   lng: 129.366669497903,   isStop: true },
   '북포항우체국':        { lat: 36.03876536335639,  lng: 129.3643887261654,  isStop: true },
   '환호아주종합시장':     { lat: 36.0702569588253,   lng: 129.398953346644,   isStop: true },
@@ -1043,7 +1060,11 @@ function calcMatchScore(user, pod){
   // 이 조합이 성립하려면: 참가자 전원(나 포함)이 각자 하차지점에서 도보 10분 안에 목적지에 닿아야 한다.
   // 내가 trunk를 더 멀리 밀어내는 쪽이면, 원래 있던 사람들 하차가 그만큼 멀어질 수도 있으므로
   // 그 사람들까지 같이 재검증한다 — 나 혼자 걸을 만하다고 매칭이 성립하는 게 아니다.
-  const eligible = nearOrigin && allWalkable(hypoPod);
+  // 동성끼리만 매칭한다. 성별은 최초 등록 후 잠겨서 안 바뀌므로(허위 입력 방지),
+  // 팟 안 참가자 전원과 내 성별이 같아야만 합류할 수 있다.
+  const sameGender = pod.participants.every(p => p.gender === user.gender);
+
+  const eligible = nearOrigin && sameGender && allWalkable(hypoPod);
   const routeScore = eligible ? 25 : 0;
 
   const diffMin = Math.abs(timeToMin(user.time) - timeToMin(pod.departTime));
@@ -1700,8 +1721,8 @@ document.getElementById('ob-dest').value = '영일대해수욕장';
 const SAVE_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 const ICON_PIN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
 const ICON_WALK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.6" fill="currentColor" stroke="none"/><path d="M14 8 10 9l-1 5 2 6M10 9l3 3-1 5M6 22l3-4 2-2"/></svg>';
-const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교'];
-const POPULAR_DESTS = ['영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널'];
+const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교', '한동대 버스 정류장', '한동대 현동'];
+const POPULAR_DESTS = ['영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블'];
 
 function setupPlaceChips(chipsId, inputId, names){
   const wrap = document.getElementById(chipsId);
@@ -1876,13 +1897,7 @@ if (cachedOnboarding) {
   // 초기화된다(TDZ). 여기서 바로 참조하면 "Cannot access before initialization".
   Promise.resolve().then(() => {
     document.getElementById('ob-nickname').value = cachedOnboarding.nickname;
-    obGender = cachedOnboarding.gender;
-    genderRow.querySelectorAll('.choice').forEach(c => {
-      const on = c.dataset.gender === obGender;
-      c.classList.toggle('is-on', on);
-      c.setAttribute('aria-checked', String(on));
-    });
-    syncNextBtn();
+    lockGenderUI(cachedOnboarding.gender);
     document.getElementById('ob-origin').value = cachedOnboarding.origin;
     document.getElementById('ob-dest').value = cachedOnboarding.dest;
     partySize = cachedOnboarding.partySize;
@@ -1903,8 +1918,10 @@ if (cachedOnboarding) {
 // --- 1단계: 닉네임 + 성별 ---
 let obMode = 'onboarding'; // 'onboarding' | 'settings' — screen-ob-route를 두 용도로 재사용
 let obGender = null; // 사용자가 명시적으로 고르기 전엔 미선택 — 아무 성별도 임의로 가정하지 않는다
+let genderLocked = false;
 const genderRow = document.getElementById('ob-gender-row');
 genderRow.addEventListener('click', (e) => {
+  if (genderLocked) return;
   const btn = e.target.closest('.choice');
   if (!btn) return;
   obGender = btn.dataset.gender;
@@ -1915,6 +1932,24 @@ genderRow.addEventListener('click', (e) => {
   });
   syncNextBtn();
 });
+
+// 이성 간 매칭을 막으려면 성별이 나중에 바뀌면 안 된다(허위 입력 방지) — 한 번 정해지면
+// 버튼 선택 UI 자체를 없애고 잠금 표시로 바꾼다. 로컬 캐시가 지워져도(uid는 남아있는 채로)
+// 서버 profiles 테이블에 이미 성별이 저장돼 있으면 그 값을 그대로 쓰고 다시 못 고르게 한다.
+function lockGenderUI(gender){
+  obGender = gender;
+  genderLocked = true;
+  document.getElementById('ob-gender-field').innerHTML = `
+    <span class="field-label">성별</span>
+    <div class="gender-locked"><span><strong>${gender}</strong> <span class="info-ico" title="가입 시 등록한 성별은 변경할 수 없어요">ⓘ</span></span></div>
+    <div class="gender-lock-note">🔒 법률상 이성끼리 매칭되지 않습니다</div>
+  `;
+  syncNextBtn();
+}
+if (SUPA_ENABLED) {
+  supa.from('profiles').select('gender').eq('id', getOrCreateUserId()).maybeSingle()
+    .then(({ data }) => { if (data && data.gender && !genderLocked) lockGenderUI(data.gender); });
+}
 
 const nicknameInput = document.getElementById('ob-nickname');
 const nextBtn = document.getElementById('btn-ob-next');
