@@ -74,8 +74,7 @@
 
   /* route visual */
   .route-card{background:#fff;border-radius:14px;box-shadow:0 2px 6px rgba(15,23,42,.06);padding:16px}
-  .route-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink-soft);font-weight:600}
-  .score{background:var(--primary-soft);color:var(--primary-dark);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
+  .route-head{font-size:13px;color:var(--ink-soft);font-weight:600}
   .route-line{margin:18px 0 4px;position:relative;padding-left:26px}
   .route-line::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--line)}
   .stop{position:relative;padding:9px 0;font-size:15px;font-weight:600}
@@ -88,7 +87,7 @@
   .fare{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:baseline;justify-content:space-between}
   .fare b{font-size:20px;font-weight:700;white-space:nowrap}
   .fare s{color:var(--ink-soft);font-size:14px}
-  .fare .score{white-space:nowrap}
+  .save-badge{background:var(--green-soft);color:var(--green);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;white-space:nowrap}
 
   /* steps */
   .steps{display:grid;gap:16px;margin-top:32px}
@@ -200,16 +199,16 @@
           <div class="phone-statusbar"><span>9:41</span><span class="icons">•••• LTE</span></div>
           <div class="phone-body">
             <div class="route-card" aria-label="팟 예시 카드">
-              <div class="route-head"><span>오늘 19:00 · 2/4명</span><span class="score">매칭 92점</span></div>
+              <div class="route-head">오늘 19:00 출발 · 2/4명</div>
               <div class="route-line">
                 <div class="stop a">포항역<small>팟 출발지 · 여기서 함께 탑승</small></div>
                 <div class="stop b">죽도시장<small>내 추천 하차 지점</small></div>
-                <div class="stop c">영일대해수욕장<small>팟장 최종 목적지</small></div>
+                <div class="stop c">영일대해수욕장<small>최종 목적지</small></div>
               </div>
               <span class="walk">여기서 내리면 목적지까지 도보 4분 · 280m</span>
               <div class="fare">
                 <div><s>혼자 12,000원</s><br><b>1인 약 3,500원</b></div>
-                <span class="score">약 71% 절약</span>
+                <span class="save-badge">8,500원 절약</span>
               </div>
             </div>
           </div>
@@ -291,7 +290,7 @@
   <div class="wrap">
     <div class="eyebrow">자주 묻는 질문</div>
     <h2>궁금한 것들</h2>
-    <details><summary>목적지가 팟장보다 멀면 어떻게 되나요?</summary><p>참가할 수 없습니다. 팟장의 최종 목적지를 지나쳐야 하는 사용자는 매칭에서 제외됩니다. 대신 그 방향으로 가는 다른 팟을 추천해 드립니다.</p></details>
+    <details><summary>목적지가 팟장보다 멀면 어떻게 되나요?</summary><p>방향만 같으면 참가할 수 있습니다. 이때는 택시가 당신 목적지까지 가는 걸로 최종 경로가 다시 계산되고, 먼저 있던 참여자들은 그 경로 위 도보 10분 이내 지점에서 내립니다. 다만 방향 자체가 다르면(경로를 벗어나면) 매칭에서 제외됩니다.</p></details>
     <details><summary>택시는 누가 부르나요?</summary><p>현재는 팟에서 직접 호출합니다. 호출·결제·정산 모두 참여자끼리 진행하며, 탄만큼은 매칭과 경로 안내를 담당합니다.</p></details>
     <details><summary>정산은 어떻게 하나요?</summary><p>팟 채팅방에서 계산된 1인 요금을 확인하고 직접 송금합니다. 앱 내 결제는 아직 없습니다.</p></details>
     <details><summary>어느 지역에서 쓸 수 있나요?</summary><p>포항에서 먼저 시작합니다. 이용자가 모이는 지역 순으로 넓혀갈 예정입니다.</p></details>
