@@ -60,8 +60,20 @@
   .chips{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px}
   .chip{background:#fff;border:1px solid var(--line);border-radius:var(--radius-chip);padding:7px 12px;font-size:13px;font-weight:600;color:var(--ink-soft)}
 
+  /* phone mockup */
+  .phone-mock{position:relative;margin:0 auto;width:100%;max-width:340px}
+  .phone-frame{position:relative;background:#0b0d12;border-radius:40px;padding:12px;box-shadow:0 24px 48px -12px rgba(15,23,42,.28),0 0 0 1px rgba(15,23,42,.06)}
+  .phone-notch{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:104px;height:22px;background:#0b0d12;border-radius:0 0 14px 14px;z-index:2}
+  .phone-screen{position:relative;background:var(--region);border-radius:30px;overflow:hidden;min-height:420px;display:flex;flex-direction:column}
+  .phone-statusbar{display:flex;align-items:center;justify-content:space-between;padding:14px 22px 4px;font-size:13px;font-weight:600;color:var(--ink)}
+  .phone-statusbar .icons{display:flex;align-items:center;gap:4px}
+  .phone-body{padding:6px 14px 20px;flex:1}
+  .phone-home{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);width:110px;height:4px;border-radius:999px;background:#0b0d12;opacity:.8}
+  .proto-badge{position:absolute;top:-14px;right:8px;background:var(--ink);color:#fff;font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;box-shadow:var(--shadow-card);z-index:3}
+  @media(min-width:900px){.phone-mock{transform:translateY(-6px)}}
+
   /* route visual */
-  .route-card{background:#fff;border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:20px}
+  .route-card{background:#fff;border-radius:14px;box-shadow:0 2px 6px rgba(15,23,42,.06);padding:16px}
   .route-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--ink-soft);font-weight:600}
   .score{background:var(--primary-soft);color:var(--primary-dark);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700}
   .route-line{margin:18px 0 4px;position:relative;padding-left:26px}
@@ -74,8 +86,9 @@
   .stop.c::before{border-color:var(--primary)}
   .walk{margin-left:-4px;padding:8px 10px;background:var(--orange-soft);color:var(--orange);border-radius:var(--radius-chip);font-size:13px;font-weight:600;display:inline-block}
   .fare{margin-top:16px;padding-top:16px;border-top:1px solid var(--line);display:flex;align-items:baseline;justify-content:space-between}
-  .fare b{font-size:22px;font-weight:700}
+  .fare b{font-size:20px;font-weight:700;white-space:nowrap}
   .fare s{color:var(--ink-soft);font-size:14px}
+  .fare .score{white-space:nowrap}
 
   /* steps */
   .steps{display:grid;gap:16px;margin-top:32px}
@@ -179,17 +192,29 @@
       </div>
     </div>
 
-    <div class="route-card" aria-label="팟 예시 카드">
-      <div class="route-head"><span>오늘 19:00 · 2/4명</span><span class="score">매칭 92점</span></div>
-      <div class="route-line">
-        <div class="stop a">포항역<small>팟 출발지 · 여기서 함께 탑승</small></div>
-        <div class="stop b">죽도시장<small>내 추천 하차 지점</small></div>
-        <div class="stop c">영일대해수욕장<small>팟장 최종 목적지</small></div>
-      </div>
-      <span class="walk">여기서 내리면 목적지까지 도보 4분 · 280m</span>
-      <div class="fare">
-        <div><s>혼자 12,000원</s><br><b>1인 약 3,500원</b></div>
-        <span class="score">약 71% 절약</span>
+    <div class="phone-mock">
+      <span class="proto-badge">실제 앱 화면</span>
+      <div class="phone-frame">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="phone-statusbar"><span>9:41</span><span class="icons">•••• LTE</span></div>
+          <div class="phone-body">
+            <div class="route-card" aria-label="팟 예시 카드">
+              <div class="route-head"><span>오늘 19:00 · 2/4명</span><span class="score">매칭 92점</span></div>
+              <div class="route-line">
+                <div class="stop a">포항역<small>팟 출발지 · 여기서 함께 탑승</small></div>
+                <div class="stop b">죽도시장<small>내 추천 하차 지점</small></div>
+                <div class="stop c">영일대해수욕장<small>팟장 최종 목적지</small></div>
+              </div>
+              <span class="walk">여기서 내리면 목적지까지 도보 4분 · 280m</span>
+              <div class="fare">
+                <div><s>혼자 12,000원</s><br><b>1인 약 3,500원</b></div>
+                <span class="score">약 71% 절약</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-home"></div>
       </div>
     </div>
   </div>
