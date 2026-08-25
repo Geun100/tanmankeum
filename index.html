@@ -80,6 +80,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   .form{ display:flex; flex-direction:column; gap:16px; }
   .field{ display:flex; flex-direction:column; gap:6px; }
+  .field[hidden]{ display:none; }
   .field label{ font-size:13px; font-weight:600; color:var(--ink-soft); }
   .field select, .field input{
     height:48px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); color:var(--ink);
@@ -205,6 +206,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .autocomplete-item:hover, .autocomplete-item:active{ background:var(--primary-soft); }
 
   .btn{ appearance:none; border:none; cursor:pointer; font-weight:600; font-size:15px; border-radius:var(--radius-input); padding:0 18px; height:48px; display:inline-flex; align-items:center; justify-content:center; gap:6px; transition:transform 160ms cubic-bezier(0.23,1,0.32,1), opacity 160ms ease; }
+  .btn[hidden]{ display:none; }
   .btn:active{ transform:scale(.98); }
   .btn--primary{ background:var(--primary); color:var(--on-primary); }
   .btn--primary:disabled{ background:var(--fill); color:var(--placeholder); cursor:not-allowed; transform:none; }
@@ -2858,9 +2860,13 @@ function renderSettlement(podId){
   const pod = findPod(podId);
   const result = pod.finalResult;
   let html = `
-    <p class="info-row" style="border-top:none; padding:0 0 20px;"><span>예상 총액 (참고)</span><strong>${won(result.totalFare)}</strong></p>
+    <div class="info-box">
+      <h3>참여자별 예상 정산 요약</h3>
+      ${result.perPerson.map(p => `<p class="info-row"><span>${p.nickname}</span><strong>${won(p.fare)}</strong></p>`).join('')}
+      <p class="info-row info-row--highlight" style="border-top:1px solid var(--line); margin-top:8px; padding-top:8px;"><span>예상 총액 (참고)</span><strong>${won(result.totalFare)}</strong></p>
+    </div>
     <div class="field">
-      <label for="actual-fare">실제 택시비 (원)</label>
+      <label for="actual-fare">실제 택시비(원)</label>
       <input type="number" id="actual-fare" min="0" step="100" placeholder="예: ${result.totalFare}">
     </div>
     <button class="btn btn--ghost btn--block" id="btn-calc-settlement" style="margin:12px 0 18px;">정산금액 계산하기</button>
@@ -2873,12 +2879,13 @@ function renderSettlement(podId){
       <input type="text" id="account-number" placeholder="은행명 계좌번호 (예: 탄만은행 123-4567)">
     </div>
     <div class="field" id="receipt-field" hidden>
-      <label for="receipt-photo">택시 영수증 사진 (선택, 요금 확인용)</label>
+      <label for="receipt-photo">택시 영수증 사진 (필수, 실제 결제 확인용)</label>
       <label class="file-picker" for="receipt-photo">
         <span class="file-picker-btn">사진 선택</span>
         <span class="file-picker-name" id="receipt-photo-name">선택된 사진 없음</span>
       </label>
       <input type="file" id="receipt-photo" accept="image/*" class="file-picker-input">
+      <p class="fine-note" id="receipt-required-note" style="color:var(--danger); display:none;">영수증 사진을 올려야 계좌번호를 공유할 수 있어요.</p>
     </div>
     <button class="btn btn--ghost btn--block" id="btn-share-account" hidden>계좌번호 공유하기</button>
     <p class="fine-note" id="share-confirm-note" style="margin-top:10px;"></p>
@@ -2891,6 +2898,7 @@ function renderSettlement(podId){
     const f = e.target.files[0];
     nameEl.textContent = f ? f.name : '선택된 사진 없음';
     nameEl.classList.toggle('is-set', !!f);
+    if (f) document.getElementById('receipt-required-note').style.display = 'none';
   });
 
   document.getElementById('btn-calc-settlement').addEventListener('click', () => {
@@ -2916,9 +2924,14 @@ function renderSettlement(podId){
     const acc = document.getElementById('account-number').value.trim();
     if (!acc) { document.getElementById('account-number').focus(); return; }
     const file = document.getElementById('receipt-photo').files[0] || null;
+    if (!file) {
+      document.getElementById('receipt-required-note').style.display = 'block';
+      document.getElementById('receipt-photo').focus();
+      return;
+    }
     openModal({
       title: '계좌번호를 공유할까요?',
-      body: `채팅방에 "${acc}" 계좌로 각자 정산금을 입금해달라고 안내해요.${file ? ' 영수증 사진도 같이 올라가요.' : ''}`,
+      body: `채팅방에 "${acc}" 계좌로 각자 정산금을 입금해달라고 안내해요. 영수증 사진도 같이 올라가요.`,
       confirmLabel: '공유하기',
       onConfirm: async () => {
         const btn = document.getElementById('btn-share-account');
