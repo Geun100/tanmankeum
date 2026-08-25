@@ -88,11 +88,11 @@
   .shot-frame{position:relative;background:#0b0d12;border-radius:42px;padding:11px;box-shadow:0 28px 56px -16px rgba(15,23,42,.32),0 0 0 1px rgba(15,23,42,.06)}
   .shot-frame img{display:block;width:100%;border-radius:32px;background:var(--region)}
   .shot-notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:104px;height:24px;background:#0b0d12;border-radius:0 0 15px 15px;z-index:2}
-  /* 히어로 폰은 화면을 다 보여줄 필요 없다 — 위쪽만 잘라 보여주고 아래는 배경으로 페이드아웃한다.
-     안 그러면 폰 하나가 첫 화면 세로를 다 잡아먹어서 헤드라인과 CTA가 밀린다. */
-  .shot--hero .shot-frame{max-height:520px;overflow:hidden;border-bottom-left-radius:0;border-bottom-right-radius:0;padding-bottom:0}
-  .shot--hero .shot-frame img{border-bottom-left-radius:0;border-bottom-right-radius:0}
-  .shot--hero .shot-frame::after{content:'';position:absolute;left:0;right:0;bottom:0;height:96px;background:linear-gradient(180deg,rgba(247,250,255,0) 0%,#f9fbff 88%);pointer-events:none}
+  /* 히어로 폰은 화면 일부만 잘라서 배경으로 페이드아웃하던 걸 없앴다 — 실제 폰 화면 비율과
+     안 맞아서 아래쪽이 뭉개진 것처럼 보였다. 대신 폰 자체를 조금 작게 잡아서(다른 .shot보다
+     좁은 최대폭) 전체 화면을 다 보여주면서도 헤드라인/CTA를 밀어내지 않게 한다. */
+  .shot--hero{max-width:250px}
+  @media(min-width:900px){.shot--hero{max-width:270px}}
 
   /* features */
   .feats{display:grid;gap:16px;margin-top:32px}
