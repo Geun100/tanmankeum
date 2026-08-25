@@ -1090,7 +1090,11 @@ function calcMatchScore(user, pod){
   // 팟 안 참가자 전원과 내 성별이 같아야만 합류할 수 있다.
   const sameGender = pod.participants.every(p => p.gender === user.gender);
 
-  const eligible = nearOrigin && sameGender && allWalkable(hypoPod);
+  // 내가 고른 시간보다 1시간 넘게 일찍 출발한 팟은 이미 놓친 팟이라 안 보여준다.
+  // 내 시간보다 늦게 출발하는 팟은 얼마나 늦든 상관없다 — 기다렸다 타면 되니까.
+  const timeOk = timeToMin(pod.departTime) >= timeToMin(user.time) - 60;
+
+  const eligible = nearOrigin && sameGender && timeOk && allWalkable(hypoPod);
   const routeScore = eligible ? 25 : 0;
 
   const diffMin = Math.abs(timeToMin(user.time) - timeToMin(pod.departTime));
