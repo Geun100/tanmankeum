@@ -105,8 +105,12 @@ module.exports = async (req, res) => {
     });
 
     if (!r.ok) {
+      // OpenAI 에러 본문을 그대로 클라이언트에 돌려주지 않는다 — 키가 잘못됐을 때 그 응답 안에
+      // "sk-...뒤4자리"처럼 부분 키가 섞여 나올 수 있다. 서버 로그(Vercel)에만 남기고, 클라이언트엔
+      // 일반 메시지만 준다.
       const errText = await r.text().catch(() => '');
-      res.status(502).json({ error: 'OpenAI 응답 실패', detail: errText.slice(0, 300) });
+      console.error('OpenAI API error', r.status, errText.slice(0, 500));
+      res.status(502).json({ error: 'OpenAI 응답 실패' });
       return;
     }
 
