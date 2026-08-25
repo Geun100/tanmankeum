@@ -1877,7 +1877,7 @@ if (cachedOnboarding) {
     document.getElementById('ob-origin').value = cachedOnboarding.origin;
     document.getElementById('ob-dest').value = cachedOnboarding.dest;
     partySize = cachedOnboarding.partySize;
-    sizeValueEl.textContent = String(partySize);
+    syncSize();
     document.getElementById('btn-find-pod').textContent = '그대로 등록하기';
     showScreen('screen-ob-route');
     setWheelTime(cachedOnboarding.time);
@@ -2066,7 +2066,7 @@ function openSettings(){
   document.getElementById('ob-dest').value = u.dest;
   setWheelTime(u.time);
   partySize = u.partySize;
-  sizeValueEl.textContent = String(partySize);
+  syncSize();
   document.getElementById('btn-find-pod').disabled = false;
   document.getElementById('btn-find-pod').textContent = '저장하기';
   showScreen('screen-ob-route');
