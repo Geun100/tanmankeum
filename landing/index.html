@@ -99,10 +99,12 @@
   /* steps */
   .steps{display:grid;gap:16px;margin-top:32px}
   @media(min-width:760px){.steps{grid-template-columns:repeat(4,1fr)}}
-  .step{background:var(--region);border:1px solid var(--line);border-radius:var(--radius-card);padding:20px}
+  .step{display:block;background:var(--region);border:1px solid var(--line);border-radius:var(--radius-card);padding:20px;color:inherit;text-decoration:none;transition:border-color .15s}
+  .step:hover{border-color:var(--primary)}
   .step-n{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
   .step h3{margin-top:12px;font-size:16px;font-weight:600}
   .step p{margin-top:6px;font-size:14px;color:var(--ink-soft)}
+  .step-go{display:block;margin-top:12px;font-size:13px;font-weight:600;color:var(--primary)}
 
   /* features */
   .feats{display:grid;gap:16px;margin-top:32px}
@@ -238,11 +240,13 @@
     <h2>네 단계면 끝납니다</h2>
     <p class="sec-sub">가입하고 팟에 타기까지, 화면 네 개.</p>
     <div class="steps">
-      <div class="step"><div class="step-n">1</div><h3>이동 정보 입력</h3><p>출발지, 목적지, 출발 시간, 원하는 인원을 넣습니다. 인원이 적을수록 매칭될 가능성이 높습니다.</p></div>
-      <div class="step"><div class="step-n">2</div><h3>추천 팟 확인</h3><p>내 경로와 겹치는 팟을 매칭 점수 순으로 보여드립니다. 요금순·시간순 정렬도 됩니다.</p></div>
-      <div class="step"><div class="step-n">3</div><h3>내 하차 지점 확인 후 참가</h3><p>지도에서 택시 구간과 도보 구간, 예상 요금까지 보고 참가를 결정합니다.</p></div>
-      <div class="step"><div class="step-n">4</div><h3>팟 채팅방에서 만나기</h3><p>팟장이 확정하면 최종 경로·시간·1인 요금이 계산됩니다. 만나서 타고, 각자 하차합니다.</p></div>
+      <a class="step" href="/"><div class="step-n">1</div><h3>이동 정보 입력</h3><p>출발지, 목적지, 출발 시간, 원하는 인원을 넣습니다. 인원이 적을수록 매칭될 가능성이 높습니다.</p><span class="step-go">탄만큼에서 해보기 →</span></a>
+      <a class="step" href="/"><div class="step-n">2</div><h3>추천 팟 확인</h3><p>내 경로와 겹치는 팟을 매칭 점수 순으로 보여드립니다. 요금순·시간순 정렬도 됩니다.</p><span class="step-go">탄만큼에서 해보기 →</span></a>
+      <a class="step" href="/"><div class="step-n">3</div><h3>내 하차 지점 확인 후 참가</h3><p>지도에서 택시 구간과 도보 구간, 예상 요금까지 보고 참가를 결정합니다.</p><span class="step-go">탄만큼에서 해보기 →</span></a>
+      <a class="step" href="/"><div class="step-n">4</div><h3>팟 채팅방에서 만나기</h3><p>팟장이 확정하면 최종 경로·시간·1인 요금이 계산됩니다. 만나서 타고, 각자 하차합니다.</p><span class="step-go">탄만큼에서 해보기 →</span></a>
     </div>
+    <!-- 2~4단계는 1단계(이동 정보 입력)에서 출발해야 나오는 화면이라(실제 팟 데이터 필요),
+         URL로 그 화면에 바로 못 연결한다 — 네 카드 다 실제 서비스 시작점(이동 정보 입력)으로 보낸다. -->
   </div>
 </section>
 
