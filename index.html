@@ -556,7 +556,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <div class="topbar-title"><strong>팟 확정 · 최종 경로</strong></div>
       </header>
       <div class="screen-body" id="final-body"></div>
-      <div class="cta-dock">
+      <div class="cta-dock" id="final-cta">
         <button class="btn btn--primary btn--block" id="btn-start-ride">택시 이용 후 정산하기</button>
       </div>
     </section>
@@ -2287,7 +2287,13 @@ function renderPodList(){
     const msg = blockedCount
       ? `내 목적지(${u.dest})가 지금 모집 중인 팟 ${blockedCount}개의 경로 안에 없어요. 내 팟에 다른 사람이 들어올 때까지 기다려 보세요.`
       : '아직 추천 팟이 없어요. 다른 사람이 팟을 만들면 여기에 보여요.';
-    ul.innerHTML = `<li class="empty-hero"><p class="page-sub">${msg}</p></li>`;
+    ul.innerHTML = `<li class="empty-hero"><p class="page-sub">${msg}</p><button class="btn btn--ghost" id="btn-refresh-pods">새로고침</button></li>`;
+    const refreshBtn = document.getElementById('btn-refresh-pods');
+    if (refreshBtn) refreshBtn.addEventListener('click', async () => {
+      refreshBtn.disabled = true; refreshBtn.textContent = '불러오는 중…';
+      if (SUPA_ENABLED) STATE.pods = await loadOpenPods();
+      renderPodList();
+    });
     return;
   }
   withPreview.forEach(({ pod, prev }, idx) => {
@@ -2760,6 +2766,9 @@ async function renderPodChat(podId){
   } else if (!isLeader && pod.status === 'recruiting') {
     ctaHtml += `<p class="cta-hint">팟장이 확정하면 최종 경로와 요금을 볼 수 있어요. 그때까지 채팅으로 탑승 장소를 맞춰보세요.</p>`;
     ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">참가 취소하기</button>`;
+  } else if (isLeader && pod.status === 'in_progress') {
+    // 계좌 공유 후 채팅방으로 돌아온 팟장이 정산 화면으로 되돌아가 팟을 종료할 수 있어야 한다.
+    ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하고 팟 종료하기</button>`;
   } else if (pod.status !== 'recruiting') {
     ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
@@ -2808,6 +2817,8 @@ async function renderPodChat(podId){
   });
   const viewFinalBtn = document.getElementById('btn-view-final');
   if (viewFinalBtn) viewFinalBtn.addEventListener('click', () => { renderFinal(pod.id); showScreen('screen-final'); });
+  const goSettlementBtn = document.getElementById('btn-go-settlement');
+  if (goSettlementBtn) goSettlementBtn.addEventListener('click', () => { renderSettlement(pod.id); showScreen('screen-settlement'); });
   const leaveBtn = document.getElementById('btn-leave-pod');
   if (leaveBtn) leaveBtn.addEventListener('click', () => {
     openModal({
@@ -2886,15 +2897,30 @@ function renderFinal(podId){
     dropPoint: myFinalDrop, myDest: STATE.user.dest, riders: ridersAt3, stopCoords: stopCoords3,
     onRoute: needsRefresh ? (route => { if (route) { pod.finalResult = null; renderFinal(podId); } }) : null,
   });
-}
 
-document.getElementById('btn-start-ride').addEventListener('click', () => {
-  const pod = findPod(STATE.myPodId);
-  pod.status = 'in_progress';
-  STATE.userState = '탑승';
-  renderSettlement(pod.id);
-  showScreen('screen-settlement');
-});
+  // 정산은 팟장만 시작한다 — 참여자가 각자 눌러버리면 정산 화면이 여러 명 것으로 갈라진다.
+  const isLeaderFinal = pod.leaderId === STATE.user.id;
+  document.getElementById('final-cta').innerHTML = isLeaderFinal
+    ? '<button class="btn btn--primary btn--block" id="btn-start-ride">택시 이용 후 정산하기</button>'
+    : '<p class="cta-hint">팟장이 정산을 시작하면 여기서 확인할 수 있어요.</p>';
+  const startRideBtn = document.getElementById('btn-start-ride');
+  if (startRideBtn) startRideBtn.addEventListener('click', async () => {
+    // 이전엔 이 상태 변화를 로컬에서만 바꾸고 DB엔 안 썼다 — 채팅방 갔다가 돌아오면
+    // loadPod가 DB의 'confirmed'로 되돌려놔서, 팟장한테 정산 재진입 버튼이 안 보이던 원인이었다.
+    try {
+      if (SUPA_ENABLED) {
+        const { error } = await supa.from('pods').update({ status: 'in_progress' }).eq('id', pod.id);
+        if (error) throw error;
+      }
+      pod.status = 'in_progress';
+      STATE.userState = '탑승';
+      renderSettlement(pod.id);
+      showScreen('screen-settlement');
+    } catch (e) {
+      showError(friendlyDbError(e));
+    }
+  });
+}
 
 /* ============ 13. 화면 6: 정산 ============ */
 function renderSettlement(podId){
@@ -2932,7 +2958,9 @@ function renderSettlement(podId){
     <p class="fine-note" id="share-confirm-note" style="margin-top:10px;"></p>
   `;
   document.getElementById('settlement-body').innerHTML = html;
-  document.getElementById('btn-finish-pod').disabled = true;
+  // 이미 한 번 계산해서 계좌를 공유한 뒤 채팅방 갔다가 다시 돌아온 경우엔 다시 입력 안 시키고
+  // 바로 종료할 수 있게 둔다. 아직 한 번도 계산 안 했으면 그 전엔 종료 못 누르게 막는다.
+  document.getElementById('btn-finish-pod').disabled = !pod.settlement;
 
   document.getElementById('receipt-photo').addEventListener('change', (e) => {
     const nameEl = document.getElementById('receipt-photo-name');
@@ -2959,6 +2987,7 @@ function renderSettlement(podId){
     document.getElementById('account-field').hidden = false;
     document.getElementById('receipt-field').hidden = false;
     document.getElementById('btn-share-account').hidden = false;
+    document.getElementById('btn-finish-pod').disabled = false;
   });
 
   document.getElementById('btn-share-account').addEventListener('click', () => {
@@ -3020,15 +3049,19 @@ document.getElementById('btn-finish-pod').addEventListener('click', () => {
   const pod = findPod(STATE.myPodId);
   openModal({
     title: '정산을 완료하고 팟을 종료할까요?',
-    body: '팟이 완료 상태로 바뀌고, 다시 참가할 수 없어요.',
+    body: '이 팟과 채팅 내용이 전부 삭제돼요. 되돌릴 수 없어요.',
     confirmLabel: '팟 종료하기',
+    danger: true,
     onConfirm: async () => {
       try {
         if (SUPA_ENABLED) {
-          const { error } = await supa.from('pods').update({ status: 'done' }).eq('id', pod.id);
+          // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
+          // pods 행 하나만 지우면 참가자·채팅(계좌번호·영수증 사진 포함)까지 DB가 같이 지워준다.
+          const { error } = await supa.from('pods').delete().eq('id', pod.id);
           if (error) throw error;
         }
-        pod.status = 'done';
+        STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
+        delete STATE.chatMessages[pod.id];
         STATE.userState = '완료';
         showScreen('screen-done');
       } catch (e) {
