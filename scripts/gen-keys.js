@@ -32,7 +32,7 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
 // waitlist는 앱 본체와 별개인 supabase 프로젝트다 — 랜딩 이메일 수집용이라
 // pods/profiles 스키마가 있는 프로젝트에 얹지 않고 따로 뗐다.
 if (WAITLIST_SUPABASE_URL && WAITLIST_SUPABASE_ANON_KEY) {
-  writeIfMissing('waitlist-keys.local.js', `window.WAITLIST_KEYS = {\n  url: '${WAITLIST_SUPABASE_URL}',\n  anonKey: '${WAITLIST_SUPABASE_ANON_KEY}',\n};\n`);
+  writeIfMissing('landing/waitlist-keys.local.js', `window.WAITLIST_KEYS = {\n  url: '${WAITLIST_SUPABASE_URL}',\n  anonKey: '${WAITLIST_SUPABASE_ANON_KEY}',\n};\n`);
 } else {
   console.warn('WAITLIST_SUPABASE_URL/WAITLIST_SUPABASE_ANON_KEY 환경변수 없음 — waitlist-keys.local.js 생성 건너뜀');
 }
