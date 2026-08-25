@@ -11,7 +11,7 @@ function writeIfMissing(file, content) {
   console.log(`wrote ${file}`);
 }
 
-const { KAKAO_JS_KEY, SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+const { KAKAO_JS_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, WAITLIST_SUPABASE_URL, WAITLIST_SUPABASE_ANON_KEY } = process.env;
 
 // KAKAO_REST_API_KEY는 여기서 파일로 안 쓴다 — 이 파일은 브라우저가 그대로 다운받는 정적 파일이라,
 // 여기 적으면 REST 키가 누구나 볼 수 있게 노출된다(실제로 그랬음). REST 키는 api/kakao-route.js가
@@ -27,4 +27,12 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
   writeIfMissing('supabase-keys.local.js', `window.SUPABASE_KEYS = {\n  url: '${SUPABASE_URL}',\n  anonKey: '${SUPABASE_ANON_KEY}',\n};\n`);
 } else {
   console.warn('SUPABASE_URL/SUPABASE_ANON_KEY 환경변수 없음 — supabase-keys.local.js 생성 건너뜀');
+}
+
+// waitlist는 앱 본체와 별개인 supabase 프로젝트다 — 랜딩 이메일 수집용이라
+// pods/profiles 스키마가 있는 프로젝트에 얹지 않고 따로 뗐다.
+if (WAITLIST_SUPABASE_URL && WAITLIST_SUPABASE_ANON_KEY) {
+  writeIfMissing('waitlist-keys.local.js', `window.WAITLIST_KEYS = {\n  url: '${WAITLIST_SUPABASE_URL}',\n  anonKey: '${WAITLIST_SUPABASE_ANON_KEY}',\n};\n`);
+} else {
+  console.warn('WAITLIST_SUPABASE_URL/WAITLIST_SUPABASE_ANON_KEY 환경변수 없음 — waitlist-keys.local.js 생성 건너뜀');
 }

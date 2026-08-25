@@ -9,7 +9,7 @@
 <meta property="og:description" content="경로 기반 택시 합승 매칭. 포항에서 시작합니다.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<script src="supabase-keys.local.js"></script>
+<script src="waitlist-keys.local.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <style>
@@ -326,7 +326,7 @@
 
 <script>
 (function(){
-  var K = window.SUPABASE_KEYS || {};
+  var K = window.WAITLIST_KEYS || {};
   var db = (K.url && K.anonKey && window.supabase) ? window.supabase.createClient(K.url, K.anonKey) : null;
   var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
