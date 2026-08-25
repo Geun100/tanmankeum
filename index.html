@@ -2958,7 +2958,12 @@ function renderSettlement(podId){
           const text = lines.join('\n');
           let imageUrl = null;
           if (file && SUPA_ENABLED) {
-            const path = `${podId}/${Date.now()}-${file.name}`;
+            // Supabase Storage 키는 비-ASCII 문자(한글 등)를 거부한다("InvalidKey") — 원본 파일명을
+            // 그대로 쓰면 한글로 저장된 사진(스크린샷 등)이 업로드부터 막힌다. 확장자만 남기고 나머지는
+            // 버린다 — 어차피 화면에 표시할 땐 파일명이 아니라 사진 자체만 보여준다.
+            const extMatch = /\.[a-zA-Z0-9]+$/.exec(file.name);
+            const ext = extMatch ? extMatch[0] : '';
+            const path = `${podId}/${Date.now()}${ext}`;
             const { error: upErr } = await supa.storage.from('settlement-photos').upload(path, file);
             if (upErr) throw upErr;
             imageUrl = supa.storage.from('settlement-photos').getPublicUrl(path).data.publicUrl;
