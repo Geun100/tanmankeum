@@ -26,7 +26,9 @@ def shot(page, name):
 
 with sync_playwright() as p:
     b = p.chromium.launch()
-    ctx = b.new_context(viewport={"width": 430, "height": 880}, device_scale_factor=3,
+    # iPhone 14 논리 해상도(390x844). 랜딩의 폰 목업이 실제 기기 비율로 보이려면 이 값이어야 한다 —
+    # 430x880으로 찍으면 목업 프레임보다 화면이 세로로 짧아 비율이 어긋난다.
+    ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2,
                         locale="ko-KR", timezone_id="Asia/Seoul")
     page = ctx.new_page()
     page.goto(BASE, wait_until="networkidle")
