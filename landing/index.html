@@ -85,6 +85,9 @@
 
   .shot{position:relative;margin:0 auto;width:100%;max-width:300px}
   @media(min-width:900px){.shot{max-width:330px}}
+  /* 휴대폰에서 보면 폭이 이 최대치를 그대로 채워서 화면 전체를 잡아먹었다 — 실제 폰으로 보면
+     화면에 폰 목업 하나가 꽉 차는 크기라 과했다. 좁은 화면에서는 한 번 더 좁힌다. */
+  @media(max-width:640px){ .shot{max-width:220px} }
   .shot-frame{position:relative;background:#0b0d12;border-radius:42px;padding:11px;box-shadow:0 28px 56px -16px rgba(15,23,42,.32),0 0 0 1px rgba(15,23,42,.06)}
   .shot-frame img{display:block;width:100%;border-radius:32px;background:var(--region)}
   .shot-notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:104px;height:24px;background:#0b0d12;border-radius:0 0 15px 15px;z-index:2}
@@ -93,6 +96,7 @@
      좁은 최대폭) 전체 화면을 다 보여주면서도 헤드라인/CTA를 밀어내지 않게 한다. */
   .shot--hero{max-width:250px}
   @media(min-width:900px){.shot--hero{max-width:270px}}
+  @media(max-width:640px){ .shot--hero{max-width:190px} }
 
   /* features */
   .feats{display:grid;gap:16px;margin-top:32px}
@@ -246,7 +250,7 @@
           <span class="how-tag">거리만큼 나눠 낸 1인 요금</span>
         </div>
         <div class="shot">
-          <div class="shot-frame"><div class="shot-notch"></div><img src="/landing/shots/05-chat.png" alt="팟 채팅방 화면 — 참여자 아바타와 각자의 하차 지점, 1인 요금이 정리되어 보이는 화면" loading="lazy" width="430" height="880"></div>
+          <div class="shot-frame"><div class="shot-notch"></div><img src="/landing/shots/05-chat.png" alt="팟 채팅방 화면 — 참여자 아바타, 팟 정보 요약, 채팅이 보이는 화면" loading="lazy" width="430" height="1123"></div>
         </div>
       </div>
     </div>
