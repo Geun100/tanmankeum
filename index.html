@@ -133,6 +133,8 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .step-dots span{ width:22px; height:4px; border-radius:999px; background:var(--line); }
   .step-dots span.on{ background:var(--primary); }
   .field-label{ display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:8px; }
+  /* 온보딩 1단계 성별 라벨: .field의 flex gap과 겹쳐 닉네임 라벨보다 간격이 더 벌어지므로 상쇄 */
+  #ob-gender-field .field-label{ margin-bottom:0; }
 
   /* 성별처럼 둘 중 하나를 고르는 버튼 쌍 */
   .choice-row{ display:flex; gap:10px; }
