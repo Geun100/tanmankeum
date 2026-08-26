@@ -402,9 +402,6 @@ window.__kakaoReady = new Promise((resolve, reject) => {
      삭제/나가기 같은 단순 확인창은 기존 스타일 그대로 유지한다. */
   .modal-icon-badge{ position:relative; width:44px; height:44px; border-radius:50%; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center; margin:0 auto 10px; }
   .modal-icon-badge[hidden]{ display:none; }
-  .modal-icon-badge::before{ content:''; position:absolute; background:var(--orange);
-    clip-path:polygon(50% 0%, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0% 50%, 39% 39%);
-    width:9px; height:9px; top:-2px; right:-1px; }
   .modal-card--rich h2{ text-align:center; font-size:18px; font-weight:800; }
   .modal-body-rich[hidden]{ display:none; }
   .modal-route-card{ background:var(--fill); border-radius:var(--radius-card); padding:12px 12px 12px 10px; margin-top:4px; }
