@@ -268,7 +268,8 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .pod-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:10px; border-top:1px solid var(--line); }
   .pod-stats div{ display:flex; flex-direction:column; gap:2px; }
   .pod-stats strong{ font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
-  .pod-stats span{ font-size:11px; color:var(--muted); }
+  .pod-stats span{ font-size:11px; color:var(--muted); display:inline-flex; align-items:center; gap:3px; }
+  .pod-stats span svg{ flex-shrink:0; }
 
   .badge{ display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--radius-pill); white-space:nowrap; }
   .badge--leader{ background:var(--orange-soft); color:#9c5008; }
@@ -2378,9 +2379,9 @@ function renderPodList(){
       <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}</p>
       ${savingsHtml}
       <div class="pod-stats">
-        <div><strong>${won(prev.mine.fare)}</strong><span>예상 1인 요금</span></div>
-        <div><strong>${pod.participants.length}/${pod.desiredSize}</strong><span>현재 인원</span></div>
-        <div><strong>약 ${prev.myTaxiMins}분</strong><span>예상 소요</span></div>
+        <div><strong>${won(prev.mine.fare)}</strong><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>예상 1인 요금</span></div>
+        <div><strong>${pod.participants.length}/${pod.desiredSize}</strong><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>현재 인원</span></div>
+        <div><strong>약 ${prev.myTaxiMins}분</strong><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>예상 소요</span></div>
       </div>
     `;
     li.addEventListener('click', () => { renderPodDetail(pod.id); showScreen('screen-pod-detail'); });
