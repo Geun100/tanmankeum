@@ -73,7 +73,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .page-title{ font-size:26px; line-height:1.38; font-weight:700; margin:4px 0 10px; }
   .page-sub{ font-size:14.5px; line-height:1.65; font-weight:400; color:var(--ink-soft); margin:0 0 20px; }
   .section-label{ font-size:12.5px; font-weight:700; color:var(--ink-soft); margin:0 0 8px; display:block; }
-  .chat-section-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+  .chat-section-head{ display:flex; align-items:center; justify-content:flex-start; gap:12px; margin-bottom:8px; }
   .chat-section-head .section-label{ margin-bottom:0; flex-shrink:0; color:var(--ink); }
   .chat-section-head-btns{ display:flex; gap:6px; min-width:0; }
   .chat-section-head .btn{ height:30px; padding:0 10px; font-size:12px; white-space:nowrap; flex-shrink:0; }
@@ -190,7 +190,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   /* 포항 주요 장소 빠른 선택. 직접 입력이 기본이고 이건 보조 수단이다. */
   .kakao-link-row{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
-  .kakao-link-row .btn--sm{ flex:1 1 auto; min-width:150px; padding:10px 12px; font-size:13px; }
+  .btn--sm{ flex:1 1 auto; min-width:150px; padding:10px 12px; font-size:13px; }
   .chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
   /* 온보딩에서는 해당 입력칸을 만질 때만 펼쳐서 화면을 덜 차지하게 한다.
      .chip-row 뒤에 와야 그 display:flex를 덮어쓴다(같은 명시도라 선언 순서가 이긴다). */
