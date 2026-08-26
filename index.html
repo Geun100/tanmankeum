@@ -326,18 +326,19 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     background:var(--orange); color:#fff; display:flex; align-items:center; justify-content:center; }
   .avatar-crown svg{ width:9px; height:9px; }
 
-  .route-summary{ margin-bottom:16px; }
+  .route-summary{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card);
+    padding:14px 14px 2px; margin-bottom:16px; overflow:hidden; }
   .route-summary .fine-note{ margin-top:6px; }
-  .map-toggle{ display:flex; align-items:center; gap:6px; margin-top:10px; font:inherit; font-size:13px; font-weight:600;
+  .map-toggle{ display:flex; align-items:center; gap:6px; margin-top:10px; margin-bottom:12px; font:inherit; font-size:13px; font-weight:600;
     color:var(--primary-dark); background:var(--primary-soft); border:none; border-radius:var(--radius-pill);
     padding:8px 14px; cursor:pointer; }
   .map-toggle-arrow{ font-size:9px; }
-  .route-summary .map-card{ margin-top:12px; margin-bottom:0; }
+  .route-summary .map-card{ margin:0 0 12px; }
   .route-flow{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
   .route-flow strong{ font-size:15px; font-weight:700; }
   .route-flow span{ font-size:12.5px; color:var(--muted); flex-shrink:0; }
 
-  .people-card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); margin-bottom:16px; overflow:hidden; }
+  .people-card{ margin:0 -14px; border-top:1px solid var(--line); }
   .participant-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-top:1px solid var(--line); }
   .participant-row:first-child{ border-top:none; }
   .participant-info{ flex:1; min-width:0; }
@@ -2684,8 +2685,8 @@ async function renderPodChat(podId){
           <span id="${chatMap.id}_legend">실선: 경로 조회 중… / 점선: 도보 경로</span>
         </div>
       </div>
+      <div class="people-card" id="chat-participants"></div>
     </div>
-    <div class="people-card" id="chat-participants"></div>
   `;
   html += `
     <div class="chat-section-head">
