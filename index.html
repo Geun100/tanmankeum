@@ -404,11 +404,11 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .modal-body-rich[hidden]{ display:none; }
   .modal-route-card{ background:var(--fill); border-radius:var(--radius-card); padding:12px; margin-top:4px; }
   .modal-route-row{ display:flex; align-items:center; flex-wrap:nowrap; gap:8px; padding-bottom:10px; margin-bottom:10px; border-bottom:1px dashed var(--line); font-size:12.5px; font-weight:600; color:var(--ink); }
-  .modal-route-row .modal-icon-circle{ width:24px; height:24px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:15px; line-height:1; }
+  .modal-route-row .modal-icon-circle{ width:24px; height:24px; border-radius:50%; background:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .modal-route-row .modal-route-text{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
   .modal-route-row .modal-note-inline{ flex-shrink:0; white-space:nowrap; font-weight:400; color:var(--ink-soft); font-size:11px; margin-left:auto; padding-left:6px; }
   .modal-fare-row{ display:flex; align-items:center; gap:8px; }
-  .modal-fare-row .modal-icon-circle--outline{ width:24px; height:24px; border-radius:50%; border:1.5px solid var(--primary); color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:12px; font-weight:700; }
+  .modal-fare-row .modal-icon-circle--outline{ width:24px; height:24px; color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:14px; font-weight:700; }
   .modal-fare-row .modal-fare-label{ font-size:12.5px; font-weight:600; color:var(--ink); }
   .modal-fare-row .modal-fare-amount{ margin-left:auto; font-size:16px; font-weight:800; color:var(--primary); }
   .modal-card--rich .modal-note{ text-align:center; font-size:12.5px; color:var(--ink-soft); margin:5px 0 0; }
@@ -1839,6 +1839,7 @@ const ICON_PIN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" st
 const ICON_WALK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.6" fill="currentColor" stroke="none"/><path d="M14 8 10 9l-1 5 2 6M10 9l3 3-1 5M6 22l3-4 2-2"/></svg>';
 const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
 const ICON_CHEVRON_R = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
+const ICON_CAR = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l1.5-5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="2"/><circle cx="7.5" cy="17" r="1.4" fill="white" stroke="none"/><circle cx="16.5" cy="17" r="1.4" fill="white" stroke="none"/></svg>';
 const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교', '한동대 버스 정류장', '한동대 현동', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블'];
 const POPULAR_DESTS = ['영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블', '한동대 버스 정류장', '한동대 현동'];
 
@@ -2605,7 +2606,7 @@ async function renderPodDetail(podId){
         bodyHtml: `
           <div class="modal-route-card">
             <div class="modal-route-row">
-              <span class="modal-icon-circle">🚕</span>
+              <span class="modal-icon-circle">${ICON_CAR}</span>
               <span class="modal-route-text">${pod.originName} → ${prev.dropOff.point}</span>
               <span class="modal-note-inline">도보 ${prev.dropOff.walkTime}분</span>
             </div>
