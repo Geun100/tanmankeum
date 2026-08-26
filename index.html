@@ -2302,7 +2302,7 @@ async function renderHome(){
 }
 
 function statusLabel(){
-  const map = { '대기': '내 팟원 모집 중', '채팅방': '팟 채팅방', '팟확정': '팟 확정됨', '탑승': '이동 중', '완료': '완료' };
+  const map = { '대기': '내 팟원 모집 중', '채팅방': '팟 매칭 중', '팟확정': '팟 확정됨', '탑승': '이동 중', '완료': '완료' };
   return map[STATE.userState] || STATE.userState;
 }
 
