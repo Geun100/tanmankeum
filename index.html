@@ -1540,6 +1540,19 @@ function kakaoMapRouteUrl(name, fromName, fromCoord){
   return `https://map.kakao.com/link/to/${encodeURIComponent(name)},${c.lat},${c.lng}`;
 }
 
+// 출발지→경유지(하차지점들)→최종 목적지를 한 번에 자동차 길찾기로 연다. /link/by/car/에 지점을
+// 이름,위도,경도 세 개씩 슬래시로 이어붙이면 카카오맵이 그 순서 그대로 경유지로 잡아준다(직접 확인함).
+// 좌표 없는 지점은 건너뛴다 — 하나라도 좌표가 없으면 카카오맵이 그 지점 근처 검색결과로 튀어서
+// 엉뚱한 경로가 될 수 있다.
+function kakaoMapMultiRouteUrl(stops){
+  const parts = stops
+    .map(name => ({ name, c: placeCoord(name) }))
+    .filter(s => s.c)
+    .map(s => `${encodeURIComponent(s.name)},${s.c.lat},${s.c.lng}`);
+  if (parts.length < 2) return null;
+  return `https://map.kakao.com/link/by/car/${parts.join('/')}`;
+}
+
 // 범례 문구를 실제 경로 여부에 맞게 바꾼다. 범례가 없는 화면이면 아무것도 하지 않는다.
 function setMapLegend(containerId, isRealRoute){
   const el = document.getElementById(containerId + '_legend');
@@ -2648,6 +2661,7 @@ async function renderPodChat(podId){
 
   const statusText = seatsLeft > 0 ? `${pod.participants.length}/${pod.desiredSize}명 · 모집 중` : '정원이 다 찼어요';
   const chatMap = mapContainerHTML();
+  const kakaoRouteHref = kakaoMapMultiRouteUrl(result.stops);
   let html = `
     <div class="chat-status">
       <p class="chat-status-line"><span class="status-dot"></span>${statusText}<span class="muted">· ${pod.departTime} 출발</span></p>
@@ -2676,6 +2690,7 @@ async function renderPodChat(podId){
     <div class="chat-section-head">
       <span class="section-label">채팅</span>
       <div class="chat-section-head-btns">
+        ${kakaoRouteHref ? `<a class="btn btn--ghost btn--sm" target="_blank" rel="noopener" href="${kakaoRouteHref}">${ICON_PIN} 카카오맵</a>` : ''}
         <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-summary">🤖 팟 정보</button>
       </div>
     </div>
