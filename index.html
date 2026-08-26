@@ -2286,7 +2286,7 @@ async function renderHome(){
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${myPod.originName} → ${myPod.leaderDest}</strong>
     <p>${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명${isLeaderOfOwn ? ' · <span class="status-leader-note">팟원이 모일 때까지는 내가 팟장이에요</span>' : ''}</p>
-    <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary);">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark);">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
     renderPodChat(STATE.myPodId);
