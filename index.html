@@ -1234,11 +1234,13 @@ function previewJoin(pod, user){
   const myDropSegIdx = result.stops.indexOf(mineExact.dropPoint) - 1;
   const myTaxiMins = result.segments.slice(0, myDropSegIdx + 1).reduce((s, x) => s + x.mins, 0);
 
-  // 1인 요금은 거리 기반 정밀 배분(calcFinalRouteAndFare) 대신 단순 1/n으로 보여준다 — 확정
-  // 전엔 최종 인원도 하차 순서도 안 정해져서 정밀 배분값은 자릿수만 그럴듯하고 계속 바뀐다.
-  // 정확한 개인별 배분은 팟장이 확정한 뒤 채팅방/최종화면에서 calcFinalRouteAndFare 그대로 보여준다.
-  const n = hypoPod.participants.length;
-  const mine = Object.assign({}, mineExact, { fare: Math.round(result.totalFare / n / 10) * 10 });
+  // 예전엔 여기서 mineExact.fare(거리 기반 정밀 배분)를 버리고 단순 1/n으로 보여줬다 — "확정 전엔
+  // 계속 바뀌니 정밀값은 의미 없다"는 이유였는데, 실제로는 트렁크를 밀어내는 사람(목적지가 남보다
+  // 먼 사람)이 참가 전 "n분의 1"만 보고 들어왔다가 확정 후 실제 배분에서 몇 배 더 내는 상황이
+  // 났다 — 미리보기가 실제보다 훨씬 싸 보이게 속인 셈이다. 참가 전에도 "지금 이 인원 기준" 정확한
+  // 값을 그대로 보여준다. 나중에 사람이 더 들어오면 바뀔 수 있는 건 맞지만, 최소한 지금 이 순간엔
+  // 거짓말은 아니다.
+  const mine = mineExact;
 
   // 혼자 탔으면 얼마였을지 — 내 출발지→내 목적지 직행 요금(prefetchBaseRoutes가 이미 캐싱해둠).
   // 아직 인원이 안 찼을 수 있어 "지금 기준" 절감액이지 확정값이 아니다.
