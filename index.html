@@ -320,6 +320,11 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   .route-summary{ margin-bottom:16px; }
   .route-summary .fine-note{ margin-top:6px; }
+  .map-toggle{ display:flex; align-items:center; gap:6px; margin-top:10px; font:inherit; font-size:13px; font-weight:600;
+    color:var(--primary-dark); background:var(--primary-soft); border:none; border-radius:var(--radius-pill);
+    padding:8px 14px; cursor:pointer; }
+  .map-toggle-arrow{ font-size:9px; }
+  .route-summary .map-card{ margin-top:12px; margin-bottom:0; }
   .route-flow{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
   .route-flow strong{ font-size:15px; font-weight:700; }
   .route-flow span{ font-size:12.5px; color:var(--muted); flex-shrink:0; }
@@ -2581,6 +2586,9 @@ function buildBotSummaryHtml(pod, result, intro){
   `;
 }
 
+// 채팅방 지도는 기본 접힘 — 화면 다시 그릴 때마다(realtime 업데이트 등) 펼침 상태를 기억한다.
+let chatMapExpanded = false;
+
 async function renderPodChat(podId){
   const u = STATE.user;
   if (SUPA_ENABLED) {
@@ -2621,6 +2629,7 @@ async function renderPodChat(podId){
   }
 
   const statusText = seatsLeft > 0 ? `${pod.participants.length}/${pod.desiredSize}명 · 모집 중` : '정원이 다 찼어요';
+  const chatMap = mapContainerHTML();
   let html = `
     <div class="chat-status">
       <p class="chat-status-line"><span class="status-dot"></span>${statusText}<span class="muted">· ${pod.departTime} 출발</span></p>
@@ -2629,6 +2638,19 @@ async function renderPodChat(podId){
     <div class="route-summary">
       <div class="route-flow"><strong>${pod.originName} → ${pod.leaderDest}</strong><span>약 ${result.totalMins}분</span></div>
       ${futureNoteHtml(pod)}
+      <button type="button" class="map-toggle" id="chat-map-toggle" aria-expanded="${chatMapExpanded}">
+        ${chatMapExpanded ? '지도 접기' : '경유지·목적지 지도로 보기'} <span class="map-toggle-arrow">${chatMapExpanded ? '▲' : '▼'}</span>
+      </button>
+      <div class="map-card" id="chat-map-wrap" ${chatMapExpanded ? '' : 'hidden'}>
+        ${chatMap.html}
+        <div class="map-legend">
+          <span><span class="legend-dot" style="background:var(--green);"></span>출발지</span>
+          <span><span class="legend-dot" style="background:var(--orange);"></span>내 하차지점</span>
+          <span><span class="legend-dot" style="background:#5b6478;"></span>다른 사람 하차</span>
+          <span><span class="legend-dot" style="background:var(--blue);"></span>종점(최종 목적지)</span>
+          <span id="${chatMap.id}_legend">실선: 경로 조회 중… / 점선: 도보 경로</span>
+        </div>
+      </div>
     </div>
     <div class="people-card" id="chat-participants"></div>
   `;
@@ -2685,6 +2707,26 @@ async function renderPodChat(podId){
     `;
     pWrap.appendChild(row);
   });
+
+  // 지도는 접어둔 기본 상태에선 안 그린다 — 카카오 길찾기 API를 매번 부르는 건 비용이고,
+  // 채팅방은 realtime으로 자주 다시 그려지는 화면이라 펼쳐져 있을 때만 그린다.
+  const mapToggleBtn = document.getElementById('chat-map-toggle');
+  mapToggleBtn.addEventListener('click', () => {
+    chatMapExpanded = !chatMapExpanded;
+    renderPodChat(podId);
+  });
+  if (chatMapExpanded) {
+    const myDrop = fareMap[u.id];
+    const ridersAtChat = {}, stopCoordsChat = {};
+    result.perPerson.forEach(p => {
+      (ridersAtChat[p.dropPoint] = ridersAtChat[p.dropPoint] || []).push(p.nickname);
+      if (p.dropCoord) stopCoordsChat[p.dropPoint] = p.dropCoord;
+    });
+    paintRouteMap(chatMap.id, {
+      stops: result.stops, originName: pod.originName, leaderDest: pod.leaderDest,
+      dropPoint: myDrop.dropPoint, myDest: u.dest, riders: ridersAtChat, stopCoords: stopCoordsChat,
+    });
+  }
 
   // 채팅 메시지 렌더. Supabase 연결 시 DB에서 읽고, 아니면 인메모리 폴백을 쓴다.
   let messages;
