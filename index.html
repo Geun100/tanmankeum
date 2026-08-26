@@ -322,8 +322,8 @@ window.__kakaoReady = new Promise((resolve, reject) => {
      아바타 위에 얹기만 하면 되니 그 문제 자체가 없다. */
   .avatar-wrap{ position:relative; display:inline-flex; }
   .avatar-crown{ position:absolute; right:-3px; bottom:-3px; width:18px; height:18px; border-radius:50%;
-    background:var(--orange); color:#fff; font-size:10px; display:flex; align-items:center; justify-content:center;
-    box-shadow:0 0 0 2px var(--paper); }
+    background:var(--orange); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .avatar-crown svg{ width:11px; height:11px; }
 
   .route-summary{ margin-bottom:16px; }
   .route-summary .fine-note{ margin-top:6px; }
@@ -2709,7 +2709,7 @@ async function renderPodChat(podId){
     slot.innerHTML = `
       <span class="avatar-wrap">
         <span class="avatar${isMe ? ' avatar--me' : ''}${isLeader ? ' avatar--leader' : ''}">${p.nickname.slice(0, 1)}</span>
-        ${isLeader ? '<span class="avatar-crown" aria-label="팟장" title="팟장">👑</span>' : ''}
+        ${isLeader ? '<span class="avatar-crown" aria-label="팟장" title="팟장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 18h20M4 18l-1-9 5 4 4-7 4 7 5-4-1 9"/></svg></span>' : ''}
       </span>
       <span class="avatar-slot-label">${isMe ? '나' : p.nickname}</span>
     `;
