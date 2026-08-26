@@ -265,11 +265,12 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .pod-savings{ display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--green);
     background:var(--green-soft); padding:8px 12px; border-radius:var(--radius-input); }
   .pod-savings svg{ flex-shrink:0; }
-  .pod-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:10px; border-top:1px solid var(--line); }
-  .pod-stats div{ display:flex; flex-direction:column; gap:2px; }
-  .pod-stats strong{ font-size:17px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; }
-  .pod-stats span{ font-size:11px; color:var(--muted); display:inline-flex; align-items:center; gap:3px; }
-  .pod-stats span svg{ flex-shrink:0; }
+  .pod-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding-top:12px; border-top:1px solid var(--line); }
+  .pod-stat{ display:flex; align-items:center; gap:7px; min-width:0; }
+  .pod-stat-icon{ flex-shrink:0; width:26px; height:26px; border-radius:50%; background:var(--primary-soft); color:var(--primary); display:flex; align-items:center; justify-content:center; }
+  .pod-stat-body{ display:flex; flex-direction:column; gap:1px; min-width:0; }
+  .pod-stats strong{ font-size:14.5px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-0.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pod-stats .pod-stat-body span{ font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
   .badge{ display:inline-flex; align-items:center; font-size:11px; font-weight:700; padding:4px 10px; border-radius:var(--radius-pill); white-space:nowrap; }
   .badge--leader{ background:var(--orange-soft); color:#9c5008; }
@@ -2379,9 +2380,18 @@ function renderPodList(){
       <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}</p>
       ${savingsHtml}
       <div class="pod-stats">
-        <div><strong>${won(prev.mine.fare)}</strong><span><svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="18" text-anchor="middle" font-size="18" font-weight="700" stroke="none" fill="currentColor">₩</text></svg>예상 1인 요금</span></div>
-        <div><strong>${pod.participants.length}/${pod.desiredSize}</strong><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>현재 인원</span></div>
-        <div><strong>약 ${prev.myTaxiMins}분</strong><span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>예상 소요</span></div>
+        <div class="pod-stat">
+          <span class="pod-stat-icon"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17.5" text-anchor="middle" font-size="16" font-weight="700" stroke="none" fill="currentColor">₩</text></svg></span>
+          <span class="pod-stat-body"><strong>${won(prev.mine.fare)}</strong><span>예상 1인 요금</span></span>
+        </div>
+        <div class="pod-stat">
+          <span class="pod-stat-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg></span>
+          <span class="pod-stat-body"><strong>${pod.participants.length}/${pod.desiredSize}</strong><span>현재 인원</span></span>
+        </div>
+        <div class="pod-stat">
+          <span class="pod-stat-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+          <span class="pod-stat-body"><strong>약 ${prev.myTaxiMins}분</strong><span>예상 소요</span></span>
+        </div>
       </div>
     `;
     li.addEventListener('click', () => { renderPodDetail(pod.id); showScreen('screen-pod-detail'); });
