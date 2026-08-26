@@ -1179,18 +1179,24 @@ function calcFinalRouteAndFare(pod){
 
   const segments = [];
   for (let i = 0; i < stops.length - 1; i++){
+    const a = stops[i], b = stops[i + 1];
+    // weight는 요금을 나눌 때만 쓰는 값이라 항상 baseRoute(출발지→trunk 목적지 2점 경로) 위
+    // 진행거리 차이로 잡는다 — 안정적이다. meters(화면 표시용 실거리)는 정밀 모드일 때 카카오가
+    // 경유지 포함 다구간으로 다시 계산해준 값을 쓰는데, 경유지가 원래 경로에서 살짝 벗어난
+    // 위치면 호출마다 도로를 다르게 골라서 "그 구간이 전체 중 몇 %"가 크게 출렁였다(한 사람은
+    // 정상 요금, 다른 사람은 몇 백 원만 뜨는 식). 총액은 정밀 요금 그대로 쓰고 나누는 비율만
+    // 안정적인 값으로 고정한다.
+    const weight = hasPath
+      ? Math.max(1, progressOf(b) - progressOf(a))
+      : Math.max(1, dist(placeCoord(a), placeCoord(b)));
     if (hasPrecise) {
       segments.push({
-        from: stops[i], to: stops[i + 1],
+        from: a, to: b, weight,
         meters: Math.max(1, preciseRoute.sections[i].distance),
         fare: 0, mins: Math.round(preciseRoute.sections[i].duration / 60),
       });
     } else {
-      const a = stops[i], b = stops[i + 1];
-      const meters = hasPath
-        ? Math.max(1, progressOf(b) - progressOf(a))
-        : Math.max(1, dist(placeCoord(a), placeCoord(b)));
-      segments.push({ from: a, to: b, meters, fare: 0, mins: 0 });
+      segments.push({ from: a, to: b, weight, meters: weight, fare: 0, mins: 0 });
     }
   }
 
@@ -1198,7 +1204,7 @@ function calcFinalRouteAndFare(pod){
   if (isRealFare) {
     // 총액은 경로 하나의 실제 택시요금이다. 구간별로 나눌 때는 주행거리 비율을 쓴다
     // (구간마다 기본요금을 따로 매기면 택시 요금 체계와 어긋난다).
-    const weights = segments.map(s => s.meters);
+    const weights = segments.map(s => s.weight);
     const fareShares = splitProportional(fareRoute.fare, weights);
     segments.forEach((s, i) => { s.fare = fareShares[i]; });
     if (!hasPrecise) {
@@ -1208,10 +1214,10 @@ function calcFinalRouteAndFare(pod){
     }
   } else {
     // 경로를 아직 못 받았을 때만 쓰는 근사치.
-    const totalM = segments.reduce((a, x) => a + x.meters, 0);
+    const totalM = segments.reduce((a, x) => a + x.weight, 0);
     const { fare: estimate, mins: estMins } = estimateFareMins(totalM);
-    const fareShares = splitProportional(estimate, segments.map(s => s.meters));
-    const minShares = splitProportional(estMins, segments.map(s => s.meters));
+    const fareShares = splitProportional(estimate, segments.map(s => s.weight));
+    const minShares = splitProportional(estMins, segments.map(s => s.weight));
     segments.forEach((s, i) => { s.fare = fareShares[i]; s.mins = minShares[i]; });
   }
 
