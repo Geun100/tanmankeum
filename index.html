@@ -265,7 +265,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .pod-savings{ display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--green);
     background:var(--green-soft); padding:8px 12px; border-radius:var(--radius-input); }
   .pod-savings svg{ flex-shrink:0; }
-  .pod-stats{ display:flex; justify-content:space-between; align-items:center; padding-top:12px; border-top:1px solid var(--line); }
+  .pod-stats{ display:grid; grid-template-columns:repeat(3,1fr); align-items:center; padding-top:12px; border-top:1px solid var(--line); }
   .pod-stat{ display:flex; align-items:center; gap:7px; min-width:0; }
   .pod-stat-icon{ flex-shrink:0; width:26px; height:26px; color:var(--ink); display:flex; align-items:center; justify-content:center; }
   .pod-stat-icon svg{ width:18px; height:18px; }
