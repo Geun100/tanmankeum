@@ -88,6 +88,9 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   }
   .field select:focus, .field input:focus{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
   .field input::placeholder, .chat-input::placeholder{ color:var(--placeholder); opacity:1; }
+  .input-with-icon{ position:relative; }
+  .input-with-icon input{ padding-right:40px; }
+  .input-with-icon .input-icon{ position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; display:flex; }
   .field-row{ display:flex; gap:10px; }
   .file-picker{ display:flex; align-items:center; gap:10px; height:48px; border-radius:var(--radius-input); border:1px solid var(--line);
     background:var(--surface); padding:0 6px 0 6px; cursor:pointer; }
@@ -417,7 +420,10 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <p class="page-sub">닉네임과 성별을 알려주세요</p>
         <div class="field">
           <label for="ob-nickname">닉네임</label>
-          <input type="text" id="ob-nickname" placeholder="닉네임" maxlength="12" autocomplete="off">
+          <div class="input-with-icon">
+            <input type="text" id="ob-nickname" placeholder="닉네임" maxlength="12" autocomplete="off">
+            <span class="input-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7 21l-4 1 1-4L17 3z"/></svg></span>
+          </div>
         </div>
         <div class="field" id="ob-gender-field" style="margin-top:18px;">
           <span class="field-label">성별</span>
@@ -1986,7 +1992,7 @@ function lockGenderUI(gender){
       </span>
     </div>
     <div class="gender-lock-note">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
       법률상 이성끼리 매칭되지 않습니다
     </div>
   `;
