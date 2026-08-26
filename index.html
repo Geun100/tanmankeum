@@ -2289,7 +2289,7 @@ async function renderHome(){
   // 남의 팟에 참가 중일 땐 내가 입력했던 값(STATE.user)이 아니라 실제 참가 중인 팟(myPod)의
   // 경로/시간을 보여준다 — 둘이 다를 수 있다(재등록 시도 등으로 STATE.user만 바뀐 경우).
   card.innerHTML = `
-    <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>${isLeaderOfOwn ? ' <span class="badge badge--leader">팟장</span>' : ''}
+    <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${myPod.originName} → ${myPod.leaderDest}</strong>
     <p>${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명</p>
     <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
@@ -2302,7 +2302,7 @@ async function renderHome(){
 }
 
 function statusLabel(){
-  const map = { '대기': '매칭 대기 중', '채팅방': '팟 채팅방', '팟확정': '팟 확정됨', '탑승': '이동 중', '완료': '완료' };
+  const map = { '대기': '내 팟원 모집 중', '채팅방': '팟 채팅방', '팟확정': '팟 확정됨', '탑승': '이동 중', '완료': '완료' };
   return map[STATE.userState] || STATE.userState;
 }
 
