@@ -301,7 +301,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   /* 채팅방 상단: 인원 현황을 아바타 한 줄로 즉시 훑을 수 있게 하고, 사람별 상세(하차지·요금)는
      그 아래 카드 하나에 몰아서 흰 박스가 반복 적층되는 느낌을 없앤다. */
-  .chat-status{ background:#eef2fa; border-radius:var(--radius-card); padding:16px 18px; margin-bottom:18px; }
+  .chat-status{ background:#f4f8ff; border-radius:var(--radius-card); padding:16px 18px; margin-bottom:18px; }
   .chat-status-line{ display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:700; color:var(--ink); margin:0 0 14px; }
   .chat-status-left{ display:flex; align-items:center; gap:7px; }
   .chat-status-line .muted{ font-weight:500; color:var(--muted); }
@@ -322,7 +322,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
      텍스트 줄은 링 두께에 따라 위쪽 여유가 달라져서 계속 잘리는 문제가 났는데, 배지는
      아바타 위에 얹기만 하면 되니 그 문제 자체가 없다. */
   .avatar-wrap{ position:relative; display:inline-flex; }
-  .avatar-crown{ position:absolute; right:2px; top:2px; width:15px; height:15px; border-radius:50%;
+  .avatar-crown{ position:absolute; right:2px; top:-4px; width:15px; height:15px; border-radius:50%;
     background:var(--orange); color:#fff; display:flex; align-items:center; justify-content:center; }
   .avatar-crown svg{ width:9px; height:9px; }
 
