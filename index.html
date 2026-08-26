@@ -2709,7 +2709,7 @@ async function renderPodChat(podId){
     slot.innerHTML = `
       <span class="avatar-wrap">
         <span class="avatar${isMe ? ' avatar--me' : ''}${isLeader ? ' avatar--leader' : ''}">${p.nickname.slice(0, 1)}</span>
-        ${isLeader ? '<span class="avatar-crown" aria-label="팟장" title="팟장"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 18h20M4 18l-1-9 5 4 4-7 4 7 5-4-1 9"/></svg></span>' : ''}
+        ${isLeader ? '<span class="avatar-crown" aria-label="팟장" title="팟장"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.8 18h16.4l1.8-10-5.6 4L12 4l-4.4 8-5.6-4 1.8 10zM3.5 20h17v2h-17z"/></svg></span>' : ''}
       </span>
       <span class="avatar-slot-label">${isMe ? '나' : p.nickname}</span>
     `;
