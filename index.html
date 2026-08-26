@@ -140,10 +140,11 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
   /* 성별 잠금 표시 — 이성 간 매칭 방지를 위해 최초 선택 후 다시 못 바꾼다 */
   .gender-locked{ display:flex; align-items:center; justify-content:space-between; height:52px;
-    padding:0 4px; font-size:15px; }
-  .gender-locked strong{ font-size:16px; }
-  .gender-locked .info-ico{ color:var(--ink-soft); font-size:13px; margin-left:6px; }
+    padding:0 14px; font-size:15px; border:1px solid var(--line); border-radius:var(--radius-input); background:var(--surface); }
+  .gender-locked strong{ font-size:16px; font-weight:700; }
+  .gender-locked .lock-ico{ display:inline-flex; color:var(--muted); flex-shrink:0; }
   .gender-lock-note{ display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px; color:var(--ink-soft); }
+  .gender-lock-note svg{ flex-shrink:0; color:var(--muted); }
 
   /* 경로: 출발지 → 목적지 나란히 */
   .route-row{ display:flex; align-items:center; gap:8px; }
@@ -1978,8 +1979,16 @@ function lockGenderUI(gender){
   genderLocked = true;
   document.getElementById('ob-gender-field').innerHTML = `
     <span class="field-label">성별</span>
-    <div class="gender-locked"><span><strong>${gender}</strong> <span class="info-ico" title="가입 시 등록한 성별은 변경할 수 없어요">ⓘ</span></span></div>
-    <div class="gender-lock-note">🔒 법률상 이성끼리 매칭되지 않습니다</div>
+    <div class="gender-locked">
+      <strong>${gender}</strong>
+      <span class="lock-ico" title="가입 시 등록한 성별은 변경할 수 없어요">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </span>
+    </div>
+    <div class="gender-lock-note">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      법률상 이성끼리 매칭되지 않습니다
+    </div>
   `;
   syncNextBtn();
 }
