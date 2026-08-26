@@ -398,6 +398,22 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .modal-actions{ display:flex; gap:10px; margin-top:20px; }
   .modal-actions .btn{ flex:1; height:44px; font-size:14px; }
 
+  /* 팟 참가 확인 등 정보량이 많은 모달용 리치 레이아웃 — 일반 텍스트 모달과 분리해서
+     삭제/나가기 같은 단순 확인창은 기존 스타일 그대로 유지한다. */
+  .modal-card--rich h2{ text-align:center; font-size:19px; }
+  .modal-body-rich[hidden]{ display:none; }
+  .modal-route-card{ background:var(--fill); border-radius:var(--radius-card); padding:16px; margin-top:4px; }
+  .modal-route-row{ display:flex; align-items:flex-start; flex-wrap:wrap; gap:4px 10px; padding-bottom:14px; margin-bottom:14px; border-bottom:1px dashed var(--line); font-size:14px; font-weight:600; color:var(--ink); word-break:keep-all; }
+  .modal-route-row .modal-icon-circle{ width:32px; height:32px; border-radius:50%; background:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .modal-route-row > span:not(.modal-icon-circle){ padding-top:7px; }
+  .modal-route-row .modal-note-inline{ font-weight:400; color:var(--ink-soft); font-size:12.5px; }
+  .modal-fare-row{ display:flex; align-items:center; gap:10px; }
+  .modal-fare-row .modal-icon-circle--outline{ width:32px; height:32px; border-radius:50%; border:1.5px solid var(--primary); color:var(--primary); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:15px; font-weight:700; }
+  .modal-fare-row .modal-fare-label{ font-size:14px; font-weight:600; color:var(--ink); }
+  .modal-fare-row .modal-fare-amount{ margin-left:auto; font-size:19px; font-weight:800; color:var(--primary); }
+  .modal-note{ text-align:center; font-size:13px; color:var(--ink-soft); margin:16px 0 0; }
+  .modal-card--rich .modal-actions .btn{ border-radius:var(--radius-pill); height:52px; font-size:15.5px; }
+
   .empty-hero{ text-align:center; padding:24px 8px; }
   .empty-hero .emoji{ font-size:40px; display:block; margin-bottom:14px; }
 
@@ -653,9 +669,10 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
 <!-- 공용 확인 모달 -->
 <div class="modal-overlay" id="modal-overlay" hidden>
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-card" id="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <h2 id="modal-title"></h2>
     <p id="modal-body"></p>
+    <div class="modal-body-rich" id="modal-body-rich" hidden></div>
     <div class="modal-actions">
       <button class="btn btn--ghost" id="modal-cancel">돌아가기</button>
       <button class="btn btn--primary" id="modal-confirm">확인</button>
@@ -1344,11 +1361,23 @@ document.getElementById('home-logo').addEventListener('click', async () => {
 });
 
 let modalConfirmHandler = null;
-function openModal({ title, body, confirmLabel = '확인', onConfirm, danger = false }){
+function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon = false, onConfirm, danger = false, cardClass = '' }){
   document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-body').textContent = body;
+  const bodyEl = document.getElementById('modal-body');
+  const richEl = document.getElementById('modal-body-rich');
+  if (bodyHtml) {
+    bodyEl.hidden = true;
+    richEl.hidden = false;
+    richEl.innerHTML = bodyHtml;
+  } else {
+    bodyEl.hidden = false;
+    bodyEl.textContent = body;
+    richEl.hidden = true;
+    richEl.innerHTML = '';
+  }
+  document.getElementById('modal-card').className = 'modal-card' + (cardClass ? ' ' + cardClass : '');
   const confirmBtn = document.getElementById('modal-confirm');
-  confirmBtn.textContent = confirmLabel;
+  confirmBtn.innerHTML = confirmIcon ? `${confirmLabel}${ICON_CHEVRON_R}` : confirmLabel;
   confirmBtn.className = 'btn ' + (danger ? 'btn--danger' : 'btn--primary');
   modalConfirmHandler = onConfirm || null;
   document.getElementById('modal-overlay').hidden = false;
@@ -1808,6 +1837,8 @@ const SAVE_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" s
 const ICON_PIN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
 const ICON_WALK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.6" fill="currentColor" stroke="none"/><path d="M14 8 10 9l-1 5 2 6M10 9l3 3-1 5M6 22l3-4 2-2"/></svg>';
 const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+const ICON_BUS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="13" rx="2"/><path d="M4 11h16"/><circle cx="8" cy="20" r="1.3" fill="white" stroke="none"/><circle cx="16" cy="20" r="1.3" fill="white" stroke="none"/></svg>';
+const ICON_CHEVRON_R = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
 const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교', '한동대 버스 정류장', '한동대 현동', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블'];
 const POPULAR_DESTS = ['영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블', '한동대 버스 정류장', '한동대 현동'];
 
@@ -2571,7 +2602,24 @@ async function renderPodDetail(podId){
       openModal({
         title: '이 팟에 참가할까요?',
         body: `${pod.originName} → ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분, 예상 부담금 ${won(prev.mine.fare)}. 참가하면 바로 채팅방으로 이동해요.`,
+        bodyHtml: `
+          <div class="modal-route-card">
+            <div class="modal-route-row">
+              <span class="modal-icon-circle">${ICON_BUS}</span>
+              <span>${pod.originName} → ${prev.dropOff.point}</span>
+              <span class="modal-note-inline">하차 후 도보 ${prev.dropOff.walkTime}분</span>
+            </div>
+            <div class="modal-fare-row">
+              <span class="modal-icon-circle--outline">₩</span>
+              <span class="modal-fare-label">예상 부담금</span>
+              <span class="modal-fare-amount">${won(prev.mine.fare)}</span>
+            </div>
+          </div>
+          <p class="modal-note">참가하면 바로 채팅방으로 이동해요.</p>
+        `,
+        cardClass: 'modal-card--rich',
         confirmLabel: '참가하기',
+        confirmIcon: true,
         onConfirm: async () => {
           try {
             await joinPod(pod);
