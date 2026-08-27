@@ -2589,8 +2589,10 @@ async function renderPodDetail(podId){
     if (p.dropCoord) stopCoords2[p.dropPoint] = p.dropCoord;
   });
   paintRouteMap(map2.id, {
+    // u.dest(지금 설정값)가 아니라 prev.mine.dest — 이미 참가한 팟이면 그 팟에 기록된 목적지를 쓴다.
+    // u.dest를 쓰면 "경로 변경"으로 다음 팟용 목적지를 바꿨을 때 이미 참가한 팟의 핀이 틀어진다.
     stops: prev.result.stops, originName: pod.originName, leaderDest: displayDest,
-    dropPoint: prev.dropOff.point, myDest: u.dest, riders: ridersAt, stopCoords: stopCoords2,
+    dropPoint: prev.dropOff.point, myDest: prev.mine.dest, riders: ridersAt, stopCoords: stopCoords2,
     onRoute: needsRefresh ? (route => { if (route) renderPodDetail(podId); }) : null,
   });
 
@@ -2827,8 +2829,10 @@ async function renderPodChat(podId){
       if (p.dropCoord) stopCoordsChat[p.dropPoint] = p.dropCoord;
     });
     paintRouteMap(chatMap.id, {
+      // u.dest가 아니라 myDrop.dest — 참가 후 "경로 변경"으로 목적지를 바꿔도 이 팟에서의
+      // 실제 목적지(참여자 목록에 뜨는 값)와 지도 핀이 어긋나지 않게 한다.
       stops: result.stops, originName: pod.originName, leaderDest: pod.leaderDest,
-      dropPoint: myDrop.dropPoint, myDest: u.dest, riders: ridersAtChat, stopCoords: stopCoordsChat,
+      dropPoint: myDrop.dropPoint, myDest: myDrop.dest, riders: ridersAtChat, stopCoords: stopCoordsChat,
     });
   }
 
@@ -3106,8 +3110,10 @@ function renderFinal(podId){
     if (p.dropCoord) stopCoords3[p.dropPoint] = p.dropCoord;
   });
   paintRouteMap(map3.id, {
+    // STATE.user.dest가 아니라 mine.dest — 확정된 이 팟의 기록값을 쓴다(경로 변경으로
+    // 다음 팟용 목적지를 바꿔도 이미 확정된 팟의 목적지 핀은 그대로여야 한다).
     stops: result.stops, originName: pod.originName, leaderDest: pod.leaderDest,
-    dropPoint: myFinalDrop, myDest: STATE.user.dest, riders: ridersAt3, stopCoords: stopCoords3,
+    dropPoint: myFinalDrop, myDest: mine ? mine.dest : STATE.user.dest, riders: ridersAt3, stopCoords: stopCoords3,
     onRoute: needsRefresh ? (route => { if (route) { pod.finalResult = null; renderFinal(podId); } }) : null,
   });
 
