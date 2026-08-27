@@ -14,7 +14,10 @@ create table if not exists public.profiles (
   id         uuid primary key,
   nickname   text not null,
   gender     text not null check (gender in ('여성', '남성')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- 시드/더미 계정 표시. 기본 false(실제 사용자). 홈 목록 정렬에서 실제 사용자를 항상 앞에 두는 데 쓴다
+  -- (add-seed-flag.sql 참고 — 기존 DB에 컬럼만 추가할 때 쓰는 패치 파일).
+  is_seed    boolean not null default false
 );
 
 -- ============ 2. 팟 ============

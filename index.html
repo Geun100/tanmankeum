@@ -135,6 +135,8 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .field-label{ display:block; font-size:13px; font-weight:600; color:var(--ink-soft); margin-bottom:8px; }
   /* 온보딩 1단계 성별 라벨: .field의 flex gap과 겹쳐 닉네임 라벨보다 간격이 더 벌어지므로 상쇄 */
   #ob-gender-field .field-label{ margin-bottom:0; }
+  .gender-note{ display:flex; align-items:center; gap:6px; margin:8px 0 0; font-size:12.5px; color:var(--ink-soft); }
+  .gender-note svg{ flex-shrink:0; color:var(--muted); }
 
   /* 성별처럼 둘 중 하나를 고르는 버튼 쌍 */
   .choice-row{ display:flex; gap:10px; }
@@ -469,6 +471,10 @@ window.__kakaoReady = new Promise((resolve, reject) => {
             <button type="button" class="choice" data-gender="여성" role="radio" aria-checked="false">여성</button>
             <button type="button" class="choice" data-gender="남성" role="radio" aria-checked="false">남성</button>
           </div>
+          <p class="gender-note">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            법률상 이성끼리는 매칭되지 않습니다
+          </p>
         </div>
       </div>
       <div class="cta-dock">
@@ -868,6 +874,22 @@ function podFromRow(podRow){
 }
 
 const POD_SELECT = '*, pod_participants(*, profiles(nickname, gender))';
+
+// 팟장이 시드/더미 계정인지. supabase/add-seed-flag.sql을 아직 안 돌렸으면 profiles.is_seed
+// 컬럼 자체가 없어서 이 조회가 통째로 실패할 수 있다 — 그러면 그냥 "구분 안 함"으로 넘어간다.
+// 이 값은 정렬 우선순위에만 쓰고 목록에서 아예 빼진 않는다(데모로 남겨두되 실제 사용자를 앞에 둔다).
+let seedLeaderIds = null;
+async function loadSeedProfileIds(){
+  if (seedLeaderIds) return seedLeaderIds;
+  try {
+    const { data, error } = await supa.from('profiles').select('id').eq('is_seed', true);
+    if (error) throw error;
+    seedLeaderIds = new Set(data.map(d => d.id));
+  } catch (e) {
+    seedLeaderIds = new Set(); // 컬럼이 아직 없거나 조회 실패 — 우선순위 없이 그냥 기본 정렬로 넘어간다
+  }
+  return seedLeaderIds;
+}
 
 async function loadOpenPods(){
   const { data, error } = await supa.from('pods').select(POD_SELECT).neq('status', 'dissolved');
@@ -2452,8 +2474,16 @@ function renderPodList(){
       ...hypoTrunkPending.slice(0, WARM_BATCH).map(pair => fetchRoute(pair)),
     ]).then(() => renderPodList());
   }
+  // 실제 사용자를 시드/더미 계정보다 항상 앞에 둔다(정렬 기준이 뭐든 1순위로 적용).
+  // seedLeaderIds가 아직 안 채워졌으면(첫 렌더) 이번 패스는 구분 없이 그리고, 로드되는 대로
+  // 다시 그려서 순서를 바로잡는다 — 위의 경로 warm-up과 같은 패턴이다.
+  if (!seedLeaderIds) loadSeedProfileIds().then(() => renderPodList());
+  const isSeedPod = pod => !!(seedLeaderIds && seedLeaderIds.has(pod.leaderId));
+
   const sortMode = document.getElementById('sort-select').value;
   withPreview.sort((a, b) => {
+    const seedDiff = Number(isSeedPod(a.pod)) - Number(isSeedPod(b.pod));
+    if (seedDiff !== 0) return seedDiff;
     if (sortMode === 'fare') {
       const fa = a.prev.eligible ? a.prev.mine.fare : Infinity, fb = b.prev.eligible ? b.prev.mine.fare : Infinity;
       return fa - fb;
