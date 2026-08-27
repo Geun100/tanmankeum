@@ -20,19 +20,20 @@
     --font-sans:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif;
     --font-display:"Black Han Sans","Pretendard Variable",sans-serif;
     --font-accent:"Song Myung",serif;
-    /* 시네마틱 다크 팔레트 — 검정 배경 + 웜크림 텍스트/포인트. 택시가 다니는 밤 도로 느낌을 노린다.
-       주의: 이 토큰은 랜딩 크롬(배경/제목/카드)에만 쓴다. 폰 목업 안쪽(.phone-screen)은 실제
-       서비스가 라이트+블루 테마라서 별도로 그 값을 되돌려놓는다 — 안 그러면 "실제 앱 화면"이 거짓말이 된다. */
-    --ink:#E7E4CE; --ink-soft:#9b9782; --muted:#9b9782;
-    --paper:#060605; --surface:#121210; --line:rgba(231,228,206,.14); --fill:#1a1a17; --region:#0b0b0a; --foot:#040403;
-    --primary:#E7E4CE; --primary-dark:#c7c3a4; --primary-soft:rgba(231,228,206,.10); --on-primary:#141310;
-    --green:#3ecf98; --green-soft:rgba(62,207,152,.14);
-    --orange:#e3a35c; --orange-soft:rgba(227,163,92,.16);
+    /* SOCAR 레퍼런스 디자인 시스템 색감 — 흰 배경 + 쿨그레이 텍스트, 액션 블루 하나만 브랜드
+       포인트로 씀. 애니메이션(단어 pull-up, 스크롤 reveal)과 폰트(Black Han Sans/Song Myung)는
+       색감 교체와 무관하게 그대로 유지한다. */
+    --ink:#354153; --ink-soft:#697383; --muted:#697383;
+    --paper:#ffffff; --surface:#ffffff; --line:#e5e8ef; --fill:#f2f3f8; --region:#f9f9fb; --foot:#f5f5f5;
+    --primary:#0078ff; --primary-dark:#0060cc; --primary-soft:#e6f2ff; --on-primary:#ffffff;
+    --green:#137a52; --green-soft:#e1f5ec;
+    --orange:#9c5008; --orange-soft:#fdecd8;
     --radius-card:16px; --radius-input:12px; --radius-chip:14px; --radius-pill:999px;
-    --shadow-card:0 24px 48px -28px rgba(0,0,0,.7), 0 0 0 1px var(--line);
+    --shadow-card:0px 4px 8px 0px rgba(0,0,0,0.1);
   }
-  /* 폰 목업 안쪽은 실제 서비스(index.html)와 똑같은 라이트+블루 토큰으로 되돌린다 — 이 안에서는
-     아래 전역 다크 스타일이 전혀 적용되지 않는다. */
+  /* 폰 목업 안쪽은 실제 서비스(index.html)와 같은 토큰이라 랜딩이 이미 같은 라이트+블루 팔레트를
+     쓰는 지금은 이 블록이 사실상 no-op이다 — 나중에 랜딩 쪽 색만 다시 바뀌어도 폰 안쪽은 항상
+     실제 앱과 같은 값으로 고정되도록 그대로 남겨둔다. */
   .phone-screen{
     --ink:#354153; --ink-soft:#697383; --muted:#697383;
     --paper:#ffffff; --surface:#ffffff; --line:#e5e8ef; --fill:#f2f3f8; --region:#f9f9fb;
@@ -53,9 +54,9 @@
   /* 헤더를 화면 폭 꽉 찬 바가 아니라 위에 뜬 검은 알약 모양으로 바꿨다 — 시네마틱한 느낌은
      크롬(내비/버튼)이 배경에서 분리돼 떠 있을 때 산다. */
   header.nav{position:sticky;top:14px;z-index:20;display:flex;justify-content:center;pointer-events:none}
-  .nav-in{pointer-events:auto;display:flex;align-items:center;gap:14px;background:rgba(10,10,9,.82);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:var(--radius-pill);padding:9px 10px 9px 20px;box-shadow:0 20px 40px -20px rgba(0,0,0,.7)}
-  .brand{font-family:var(--font-display);font-size:16px;letter-spacing:.01em}
-  .nav-links{display:none;gap:20px;font-size:13px;font-weight:600;color:rgba(231,228,206,.72)}
+  .nav-in{pointer-events:auto;display:flex;align-items:center;gap:14px;background:rgba(255,255,255,.92);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:var(--radius-pill);padding:9px 10px 9px 20px;box-shadow:var(--shadow-card)}
+  .brand{font-family:var(--font-display);font-size:16px;letter-spacing:.01em;color:var(--ink)}
+  .nav-links{display:none;gap:20px;font-size:13px;font-weight:600;color:var(--ink-soft)}
   .nav-links a:hover{color:var(--ink)}
   @media(min-width:820px){.nav-links{display:flex}}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;cursor:pointer;font-family:inherit;font-weight:600;border-radius:var(--radius-input);transition:background 150ms cubic-bezier(.4,0,.2,1),box-shadow 150ms cubic-bezier(.4,0,.2,1),gap 150ms cubic-bezier(.4,0,.2,1)}
@@ -75,12 +76,7 @@
   .sec-sub{margin-top:10px;color:var(--ink-soft);font-size:16px}
 
   /* hero */
-  .hero{position:relative;padding-top:120px;padding-bottom:40px;background:radial-gradient(120% 100% at 50% 0%,#141210 0%,#060605 62%);overflow:hidden}
-  .hero::before{
-    /* 필름 그레인 — 순수 CSS/SVG, 이미지 없이 시네마틱한 질감만 준다 */
-    content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:overlay;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  }
+  .hero{position:relative;padding-top:120px;padding-bottom:40px;background:linear-gradient(180deg,#f7faff 0%,#ffffff 100%);overflow:hidden}
   .hero-grid{position:relative;display:grid;gap:36px;align-items:center}
   @media(min-width:900px){.hero-grid{grid-template-columns:1.05fr .95fr;gap:48px}}
   h1{font-family:var(--font-display);font-size:15vw;font-weight:400;line-height:.92;letter-spacing:-.02em;color:var(--ink)}
@@ -111,7 +107,7 @@
   .phone-statusbar .icons{display:flex;align-items:center;gap:4px}
   .phone-body{padding:6px 14px 20px;flex:1}
   .phone-home{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);width:110px;height:4px;border-radius:999px;background:#0b0d12;opacity:.8}
-  .proto-badge{position:absolute;top:-14px;right:8px;background:#0a0a09;color:#E7E4CE;font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;box-shadow:0 8px 20px -8px rgba(0,0,0,.6);z-index:3}
+  .proto-badge{position:absolute;top:-14px;right:8px;background:var(--ink);color:#fff;font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;box-shadow:var(--shadow-card);z-index:3}
   @media(min-width:900px){.phone-mock{transform:translateY(-6px)}}
   .splash{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
   .splash-logo{display:flex;flex-direction:column;align-items:center}
@@ -295,7 +291,7 @@
   .signup-msg.ok{color:var(--green)}
   .signup-msg.err{color:#c23b3b}
   .final .signup{margin-left:auto;margin-right:auto;text-align:left}
-  .final{text-align:center;background:radial-gradient(120% 140% at 50% 100%,#141210 0%,#060605 60%)}
+  .final{text-align:center;background:linear-gradient(180deg,#ffffff 0%,#f7faff 100%)}
   .final h2{font-size:30px}
   @media(min-width:820px){.final h2{font-size:40px}}
   .final p{margin-top:10px;color:var(--ink-soft)}
