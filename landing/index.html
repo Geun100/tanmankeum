@@ -275,6 +275,9 @@
   .safe-item h3{font-size:16px;font-weight:600}
   .safe-item p{margin-top:4px;font-size:14px;color:var(--ink-soft)}
 
+  .demo-video{margin:32px auto 0;max-width:340px}
+  .demo-video video{display:block;width:100%;border-radius:28px;background:#fff;box-shadow:var(--shadow-card)}
+
   /* fare panel */
   .fare-panel{margin-top:28px;background:var(--surface);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:24px;max-width:520px}
   .fare-row{display:flex;justify-content:space-between;padding:11px 0;font-size:15px;border-bottom:1px solid var(--line)}
@@ -321,7 +324,7 @@
     <nav class="nav-links">
       <a href="#how">이용 방법</a>
       <a href="#why">왜 탄만큼</a>
-      <a href="#safety">안전</a>
+      <a href="#demo">미리보기</a>
       <a href="#fare">요금</a>
     </nav>
     <a class="btn btn--primary" href="/">내 팟 찾기</a>
@@ -414,37 +417,34 @@
 <section id="why">
   <div class="wrap">
     <div class="eyebrow">왜 탄만큼</div>
-    <h2>기존 같이카가 안 됐던 이유,<br>그래서 다르게 만들었습니다</h2>
+    <h2>지금까지 합승이 잘 안 됐던 이유,<br>그래서 다르게 만들었습니다</h2>
     <div class="feats">
       <div class="feat">
-        <h3>동승자를 직접 찾을 필요 없습니다</h3>
-        <p><s style="opacity:.55">기존: 출발지·목적지·시간이 맞는 사람을 직접 찾아야 했습니다.</s><br>내 경로와 겹치는 팟을 매칭 점수 순으로 자동으로 보여드립니다.</p>
-        <div class="num">자동 매칭</div>
+        <h3>탈 팟을 찾아 헤맬 필요 없어요</h3>
+        <p><s style="opacity:.55">기존: 출발지·목적지·시간이 맞는 사람을 일일이 찾아야 했어요.</s><br>이동 정보만 넣으면, 내가 가는 길과 겹치는 팟을 추려서 보여줍니다.</p>
+        <div class="num">경로로 추천</div>
       </div>
       <div class="feat">
-        <h3>목적지가 달라도 매칭됩니다</h3>
-        <p><s style="opacity:.55">기존: 목적지가 같지 않으면 함께 타기 어려웠습니다.</s><br>내 목적지가 팟장의 택시 경로 위에 있으면 참가할 수 있습니다. 경로에서 벗어나는 팟은 애초에 보이지 않습니다.</p>
-        <div class="num">경로 기반 매칭</div>
+        <h3>목적지가 달라도 같이 타요</h3>
+        <p><s style="opacity:.55">기존: 목적지가 똑같아야만 합승이 됐어요.</s><br>내 목적지가 그 택시가 지나는 길 위에 있으면 참가할 수 있어요. 길에서 벗어나는 팟은 아예 안 보입니다.</p>
+        <div class="num">가는 길이 겹치면 OK</div>
       </div>
       <div class="feat">
-        <h3>탄 만큼만 냅니다</h3>
-        <p><s style="opacity:.55">기존: 탑승 거리가 달라도 요금을 그냥 1/N로 나눴습니다.</s><br>각자 실제로 이동한 구간 거리만큼 요금을 나눠 계산합니다.</p>
+        <h3>탄 만큼만 내요</h3>
+        <p><s style="opacity:.55">기존: 먼저 내려도 요금을 똑같이 1/N로 나눴어요.</s><br>각자 실제로 탄 구간 거리만큼 나눠서 계산합니다.</p>
         <div class="num">거리 비례 정산</div>
       </div>
     </div>
   </div>
 </section>
 
-<section id="safety" class="alt">
+<section id="demo" class="alt">
   <div class="wrap">
-    <div class="eyebrow">안전</div>
-    <h2>모르는 사람과 타는 일이니까</h2>
-    <p class="sec-sub">불확실한 부분을 남기지 않는 것이 안전의 시작입니다.</p>
-    <div class="safety">
-      <div class="safe-item"><span class="dot"></span><div><h3>팟장이 직접 확정합니다</h3><p>자동으로 배정되지 않습니다. 팟장이 인원을 보고 직접 확정하며, 확정 전 취소하면 팟은 해체되고 참여자는 재매칭으로 돌아갑니다.</p></div></div>
-      <div class="safe-item"><span class="dot"></span><div><h3>한 팟에 최대 4명</h3><p>택시 정원 그대로. 낯선 사람이 계속 타고 내리는 구조가 아닙니다.</p></div></div>
-      <div class="safe-item"><span class="dot"></span><div><h3>탑승 전 채팅방에서 조율</h3><p>만날 지점과 시간을 팟 채팅방에서 미리 맞춥니다. 프로필에 닉네임과 성별이 표시됩니다.</p></div></div>
-      <div class="safe-item"><span class="dot"></span><div><h3>동시에 한 팟만</h3><p>한 사용자는 한 번에 하나의 팟에만 참여합니다. 중복 참가로 인한 노쇼를 구조적으로 막습니다.</p></div></div>
+    <div class="eyebrow">미리보기</div>
+    <h2>이렇게 씁니다</h2>
+    <p class="sec-sub">이동 정보 입력부터 팟 채팅방까지, 실제 화면 그대로.</p>
+    <div class="demo-video" data-reveal>
+      <video src="/landing/img/demo.mp4" poster="/landing/img/how-2.png" autoplay muted loop playsinline preload="metadata"></video>
     </div>
   </div>
 </section>
@@ -504,6 +504,8 @@
   <div class="wrap">
     <div class="eyebrow">자주 묻는 질문</div>
     <h2>궁금한 것들</h2>
+    <details><summary>모르는 사람과 타는데 안전한가요?</summary><p>팟장이 인원을 직접 확정합니다(자동 배정 없음). 한 팟은 택시 정원인 최대 4명이고, 프로필에 닉네임·성별이 표시됩니다. 만날 장소와 시간은 채팅방에서 미리 맞추며, 공공장소에서 만나기를 권장합니다. 탄만큼은 매칭과 경로 안내만 담당하고 동승자의 신원·행동까지 보장하지는 않습니다.</p></details>
+    <details><summary>한 번에 여러 팟에 들어갈 수 있나요?</summary><p>아니요. 한 사람은 한 번에 하나의 팟에만 참여합니다. 중복 참가로 인한 노쇼를 막기 위해서입니다.</p></details>
     <details><summary>목적지가 팟장보다 멀면 어떻게 되나요?</summary><p>방향만 같으면 참가할 수 있습니다. 이때는 택시가 당신 목적지까지 가는 걸로 최종 경로가 다시 계산되고, 먼저 있던 참여자들은 그 경로 위 도보 10분 이내 지점에서 내립니다. 다만 방향 자체가 다르면(경로를 벗어나면) 매칭에서 제외됩니다.</p></details>
     <details><summary>택시는 누가 부르나요?</summary><p>현재는 팟에서 직접 호출합니다. 호출·결제·정산 모두 참여자끼리 진행하며, 탄만큼은 매칭과 경로 안내를 담당합니다.</p></details>
     <details><summary>정산은 어떻게 하나요?</summary><p>팟 채팅방에서 계산된 1인 요금을 확인하고 직접 송금합니다. 앱 내 결제는 아직 없습니다.</p></details>
