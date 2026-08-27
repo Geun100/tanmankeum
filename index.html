@@ -889,6 +889,7 @@ function podFromRow(podRow){
         gender: (row.profiles && row.profiles.gender) || '여성',
         dest: row.dest_name, isLeader: row.user_id === podRow.leader_id,
         paid: !!row.paid,
+        accepted: !!row.accepted,
       };
     });
   const pod = {
@@ -2627,8 +2628,12 @@ async function renderPodDetail(podId){
     // disabled가 되고, 이미 낸 정산금액도 화면에서 사라졌다(실제로 그랬다). 갱신 전 값이 있으면
     // 새 pod 객체로 옮겨 살려둔다.
     if (idx >= 0) {
-      fresh.finalResult = STATE.pods[idx].finalResult;
-      fresh.settlement = STATE.pods[idx].settlement;
+      // 참가자가 수락 게이트에서 거절하고 빠지면 인원이 줄어든다 — 그 전에 계산해둔 finalResult는
+      // 낡은 인원 기준이라 버리고 다시 계산하게 둔다. 정산까지 간(in_progress) 뒤엔 인원이 고정이라 유지.
+      const prev = STATE.pods[idx];
+      const sameHeadcount = prev.finalResult && prev.finalResult.perPerson.length === fresh.participants.length;
+      if (sameHeadcount || fresh.status === 'in_progress') fresh.finalResult = prev.finalResult;
+      fresh.settlement = prev.settlement;
       STATE.pods[idx] = fresh;
     } else {
       STATE.pods.push(fresh);
@@ -2865,8 +2870,12 @@ async function renderPodChat(podId){
     // disabled가 되고, 이미 낸 정산금액도 화면에서 사라졌다(실제로 그랬다). 갱신 전 값이 있으면
     // 새 pod 객체로 옮겨 살려둔다.
     if (idx >= 0) {
-      fresh.finalResult = STATE.pods[idx].finalResult;
-      fresh.settlement = STATE.pods[idx].settlement;
+      // 참가자가 수락 게이트에서 거절하고 빠지면 인원이 줄어든다 — 그 전에 계산해둔 finalResult는
+      // 낡은 인원 기준이라 버리고 다시 계산하게 둔다. 정산까지 간(in_progress) 뒤엔 인원이 고정이라 유지.
+      const prev = STATE.pods[idx];
+      const sameHeadcount = prev.finalResult && prev.finalResult.perPerson.length === fresh.participants.length;
+      if (sameHeadcount || fresh.status === 'in_progress') fresh.finalResult = prev.finalResult;
+      fresh.settlement = prev.settlement;
       STATE.pods[idx] = fresh;
     } else {
       STATE.pods.push(fresh);
@@ -3189,16 +3198,28 @@ async function renderPodChat(podId){
       ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하러 가기</button>`;
     }
   } else if (!isLeader && pod.status !== 'recruiting') {
-    // 확정 후에는 원래 나갈 방법이 없었다 — 팟장이 정산 화면에서 내 입금을 체크해줘야만
-    // 여기서 나갈 수 있다. 아직 안 됐으면 왜 안 되는지 문구로 설명한다.
     const me = pod.participants.find(p => p.id === u.id);
-    if (me && me.paid) {
+    if (me && !me.accepted) {
+      // 팟장이 확정한 뒤, 참가자는 수락해야 최종 경로·요금을 볼 수 있다. 거절하면 팟에서 빠진다.
+      ctaHtml += `<p class="cta-hint">팟장이 팟을 확정했어요. 이 팟으로 함께 타시겠어요? 수락하면 최종 경로·요금을 볼 수 있어요.</p>`;
+      ctaHtml += `<button class="btn btn--primary btn--block" id="btn-accept-pod">수락하기</button>`;
+      ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-decline-pod">거절하기</button>`;
+    } else if (me && me.paid) {
+      // 확정 후 이탈은 팟장이 정산 화면에서 내 입금을 체크해줘야만 가능하다.
       ctaHtml += `<p class="cta-hint">팟장이 입금을 확인했어요. 이제 나가도 돼요.</p>`;
       ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">팟 나가기</button>`;
     } else {
       ctaHtml += `<p class="cta-hint">팟장이 채팅방에서 정산 안내를 보내면 입금해주세요. 팟장이 입금 확인하면 여기서 나갈 수 있어요.</p>`;
+      ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
     }
   } else if (isLeader && pod.status !== 'recruiting') {
+    const others = pod.participants.filter(p => !p.isLeader);
+    const pending = others.filter(p => !p.accepted);
+    if (others.length) {
+      ctaHtml += pending.length
+        ? `<p class="cta-hint">수락 ${others.length - pending.length}/${others.length} · 대기: ${pending.map(p => escapeHtml(p.nickname)).join(', ')}. 전원 수락을 기다리지 않고 정산을 시작해도 돼요.</p>`
+        : `<p class="cta-hint">참가자 전원이 수락했어요.</p>`;
+    }
     ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
   ctaEl.innerHTML = ctaHtml;
@@ -3254,6 +3275,42 @@ async function renderPodChat(podId){
   });
   const finishFromChatBtn = document.getElementById('btn-finish-from-chat');
   if (finishFromChatBtn) finishFromChatBtn.addEventListener('click', () => confirmFinishPod(pod));
+
+  const acceptBtn = document.getElementById('btn-accept-pod');
+  if (acceptBtn) acceptBtn.addEventListener('click', async () => {
+    acceptBtn.disabled = true;
+    try {
+      if (SUPA_ENABLED) {
+        const { error } = await supa.from('pod_participants').update({ accepted: true }).eq('pod_id', pod.id).eq('user_id', u.id);
+        if (error) throw error;
+      } else {
+        const me = pod.participants.find(p => p.id === u.id); if (me) me.accepted = true;
+      }
+      renderPodChat(pod.id);
+    } catch (e) {
+      acceptBtn.disabled = false;
+      showError(friendlyDbError(e));
+    }
+  });
+  const declineBtn = document.getElementById('btn-decline-pod');
+  if (declineBtn) declineBtn.addEventListener('click', () => {
+    openModal({
+      title: '이 팟을 거절할까요?',
+      body: '팟에서 나가고 다시 매칭 대기 화면으로 돌아가요. 남은 인원의 요금은 다시 계산돼요.',
+      confirmLabel: '거절하기',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await leavePod(pod);
+          renderHome();
+          showScreen('screen-home');
+        } catch (e) {
+          showError(friendlyDbError(e));
+        }
+      },
+    });
+  });
+
   const leaveBtn = document.getElementById('btn-leave-pod');
   if (leaveBtn) leaveBtn.addEventListener('click', () => {
     const isPostConfirm = pod.status !== 'recruiting';

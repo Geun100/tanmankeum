@@ -265,3 +265,9 @@ create policy settlement_photos_insert on storage.objects
 -- 팟장이 참여자별로 입금 여부를 체크한다. 체크된 사람만 확정 후에도 채팅방에서 팟을 나갈 수 있다
 -- (기존엔 확정 후 이탈 정책 자체가 없었다 — 일부만 정산 끝난 사람이 나머지를 기다리며 못 나가던 문제).
 alter table public.pod_participants add column if not exists paid boolean not null default false;
+
+-- ============ 10. 참가자 수락 게이트 (마이그레이션, 재실행 안전) ============
+-- 팟장이 팟을 확정하면 참가자는 채팅방에서 "수락 / 거절"을 눌러야 한다. 수락해야 최종 경로·요금을
+-- 볼 수 있고, 거절하면 팟에서 빠진다(남은 인원으로 요금 재계산). 팟장은 전원 수락을 기다리지 않고
+-- 정산을 시작할 수 있다 — 게이트는 참가자 각자의 것이다. 팟장 본인은 확정 = 수락으로 본다.
+alter table public.pod_participants add column if not exists accepted boolean not null default false;
