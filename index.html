@@ -60,6 +60,8 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .brand-mark{ font-size:20px; font-weight:800; cursor:pointer; }
   .brand-mark--icon{ display:inline-flex; align-items:center; gap:8px; }
   .brand-mark-icon{ width:46px; height:16px; flex-shrink:0; }
+  .beta-badge{ display:inline-flex; align-items:center; margin-left:6px; padding:3px 8px; border-radius:var(--radius-pill);
+    background:var(--orange-soft); color:var(--orange); font-size:10.5px; font-weight:700; letter-spacing:.01em; white-space:nowrap; }
   .brand-word b{ color:var(--primary); font-weight:inherit; }
   .topbar-title{ display:flex; flex-direction:column; line-height:1.25; min-width:0; }
   .topbar-title strong{ font-size:15px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -466,7 +468,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <button class="icon-btn" id="ob-profile-back-btn" data-back="screen-home" aria-label="뒤로가기" hidden>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
-        <span class="brand-mark">탄만큼</span>
+        <span class="brand-mark">탄만큼</span><span class="beta-badge">한동대 베타 테스트</span>
       </header>
       <div class="screen-body">
         <div class="step-dots" aria-hidden="true"><span class="on"></span><span></span></div>
@@ -592,6 +594,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           </svg>
           <span class="brand-word">탄<b>만</b>큼</span>
         </span>
+        <span class="beta-badge">한동대 베타</span>
         <button class="filter-chip" id="btn-open-settings" aria-label="프로필 변경" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px;">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           프로필 변경
@@ -1219,11 +1222,26 @@ function calcMatchScore(user, pod){
   return { total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, hypoPod, myId };
 }
 
+// 23:00~04:00 심야할증 20%(포항시 공고 그대로, 변동 없는 항목). 자정을 넘나드는 구간이라
+// "23시 이상이거나 4시 미만"으로 판정한다.
+function isLateNightDeparture(departTime){
+  if (!departTime) return false;
+  const mins = timeToMin(departTime);
+  return mins >= 23 * 60 || mins < 4 * 60;
+}
+
 // 실제 경로 API 응답이 아직 없을 때만 쓰는 근사치: 포항시 택시요금 공고 기준
-// (기본 4,500원/1.7km + 이후 128m당 100원, 2026-01-20 시행). 예전엔 4,800원/1.6km+131m를
-// 썼는데 이건 어느 지역 요금도 아닌 값이었다 — 실제 포항 택시를 타본 사람은 바로 알아챈다.
-function estimateFareMins(totalMeters){
-  const fare = Math.round((4500 + Math.ceil(Math.max(0, totalMeters - 1700) / 128) * 100) / 100) * 100;
+// (기본 4,500원/1.7km + 이후 128m당 100원 + 23~04시 20% 할증, 2026-01-20 시행).
+// 예전엔 4,800원/1.6km+131m를 썼는데 이건 어느 지역 요금도 아닌 값이었다 — 실제 포항
+// 택시를 타본 사람은 바로 알아챈다.
+// ponytail: 시간운임(15km/h 이하 주행 시 30초당 100원)은 안 넣는다 — 이건 실시간 정체
+// 상황이 있어야 계산되는데, 이 함수 자체가 "카카오 길찾기가 아직 실제 요금을 안 줬을 때"
+// 쓰는 순수 거리 기반 추정치라 정체 여부를 알 방법이 없다. 실제 요금은 API 응답이 오는
+// 대로 그쪽 값(isRealFare)으로 바로 대체된다 — 이 함수는 그 전 몇 초간만 보여주는 값이다.
+function estimateFareMins(totalMeters, departTime){
+  const distanceFare = 4500 + Math.ceil(Math.max(0, totalMeters - 1700) / 128) * 100;
+  const withSurcharge = isLateNightDeparture(departTime) ? distanceFare * 1.2 : distanceFare;
+  const fare = Math.round(withSurcharge / 100) * 100;
   const mins = Math.max(3, Math.round(totalMeters / 1000 * 2.2 + 3));
   return { fare, mins };
 }
@@ -1294,7 +1312,7 @@ function calcFinalRouteAndFare(pod){
   } else {
     // 경로를 아직 못 받았을 때만 쓰는 근사치.
     const totalM = segments.reduce((a, x) => a + x.weight, 0);
-    const { fare: estimate, mins: estMins } = estimateFareMins(totalM);
+    const { fare: estimate, mins: estMins } = estimateFareMins(totalM, pod.departTime);
     const fareShares = splitProportional(estimate, segments.map(s => s.weight));
     const minShares = splitProportional(estMins, segments.map(s => s.weight));
     segments.forEach((s, i) => { s.fare = fareShares[i]; s.mins = minShares[i]; });
