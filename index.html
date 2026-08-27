@@ -3063,7 +3063,7 @@ async function renderPodChat(podId){
   } else if (isLeader && pod.status === 'in_progress') {
     // 계좌 공유 후 채팅방으로 돌아온 팟장이 정산 화면으로 되돌아가 팟을 종료할 수 있어야 한다.
     ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하고 팟 종료하기</button>`;
-  } else if (pod.status !== 'recruiting') {
+  } else if (isLeader && pod.status !== 'recruiting') {
     ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
   ctaEl.innerHTML = ctaHtml;
