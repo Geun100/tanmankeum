@@ -3221,7 +3221,8 @@ function renderFinal(podId){
 /* ============ 13. 화면 6: 정산 ============ */
 function renderSettlement(podId){
   const pod = findPod(podId);
-  const result = pod.finalResult;
+  const result = pod.finalResult || calcFinalRouteAndFare(pod);
+  pod.finalResult = result;
   let html = `
     <div class="info-box">
       <h3>참여자별 예상 정산 요약</h3>
