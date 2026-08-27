@@ -260,3 +260,8 @@ create policy settlement_photos_select on storage.objects
 drop policy if exists settlement_photos_insert on storage.objects;
 create policy settlement_photos_insert on storage.objects
   for insert to anon with check (bucket_id = 'settlement-photos');
+
+-- ============ 9. 정산 입금 확인 (마이그레이션, 재실행 안전) ============
+-- 팟장이 참여자별로 입금 여부를 체크한다. 체크된 사람만 확정 후에도 채팅방에서 팟을 나갈 수 있다
+-- (기존엔 확정 후 이탈 정책 자체가 없었다 — 일부만 정산 끝난 사람이 나머지를 기다리며 못 나가던 문제).
+alter table public.pod_participants add column if not exists paid boolean not null default false;

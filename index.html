@@ -100,6 +100,10 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     background:var(--fill); color:var(--ink); font-size:13px; font-weight:600; }
   .file-picker-name{ font-size:14px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .file-picker:has(.file-picker-name.is-set) .file-picker-name{ color:var(--ink); }
+  .paid-row{ display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--line); cursor:pointer; }
+  .paid-row:first-child{ border-top:none; }
+  .paid-row input[type="checkbox"]{ width:20px; height:20px; accent-color:var(--primary); flex-shrink:0; }
+  .paid-row span{ font-size:14.5px; color:var(--ink); }
   .file-picker-input{ position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; }
   .field-row .field{ flex:1; min-width:0; }
   .hint-box{ background:var(--primary-soft); color:var(--primary-dark); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
@@ -879,6 +883,7 @@ function podFromRow(podRow){
         nickname: (row.profiles && row.profiles.nickname) || '알 수 없음',
         gender: (row.profiles && row.profiles.gender) || '여성',
         dest: row.dest_name, isLeader: row.user_id === podRow.leader_id,
+        paid: !!row.paid,
       };
     });
   const pod = {
@@ -3132,6 +3137,16 @@ async function renderPodChat(podId){
   } else if (isLeader && pod.status === 'in_progress') {
     // 계좌 공유 후 채팅방으로 돌아온 팟장이 정산 화면으로 되돌아가 팟을 종료할 수 있어야 한다.
     ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하고 팟 종료하기</button>`;
+  } else if (!isLeader && pod.status !== 'recruiting') {
+    // 확정 후에는 원래 나갈 방법이 없었다 — 팟장이 정산 화면에서 내 입금을 체크해줘야만
+    // 여기서 나갈 수 있다. 아직 안 됐으면 왜 안 되는지 문구로 설명한다.
+    const me = pod.participants.find(p => p.id === u.id);
+    if (me && me.paid) {
+      ctaHtml += `<p class="cta-hint">팟장이 입금을 확인했어요. 이제 나가도 돼요.</p>`;
+      ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">팟 나가기</button>`;
+    } else {
+      ctaHtml += `<p class="cta-hint">팟장이 채팅방에서 정산 안내를 보내면 입금해주세요. 팟장이 입금 확인하면 여기서 나갈 수 있어요.</p>`;
+    }
   } else if (isLeader && pod.status !== 'recruiting') {
     ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
@@ -3182,18 +3197,18 @@ async function renderPodChat(podId){
   if (viewFinalBtn) viewFinalBtn.addEventListener('click', () => { renderFinal(pod.id); showScreen('screen-final'); });
   const goSettlementBtn = document.getElementById('btn-go-settlement');
   if (goSettlementBtn) goSettlementBtn.addEventListener('click', () => {
-    // 정산금액을 이미 계산해뒀으면(계좌번호 공유까지 하고 채팅방으로 돌아온 경우) 정산 화면을
-    // 다시 보여주는 대신 바로 종료 확인으로 간다 — 어차피 다 끝난 계산을 또 보여줄 필요 없다.
-    if (pod.settlement) { confirmFinishPod(pod); return; }
+    // 정산금액을 이미 계산해뒀어도 다시 정산 화면으로 보낸다 — 입금 확인 체크를
+    // 한 번에 다 못 하고 여러 번 나눠 할 수 있으니, 매번 종료 확인으로 바로 건너뛰면 안 된다.
     renderSettlement(pod.id);
     showScreen('screen-settlement');
   });
   const leaveBtn = document.getElementById('btn-leave-pod');
   if (leaveBtn) leaveBtn.addEventListener('click', () => {
+    const isPostConfirm = pod.status !== 'recruiting';
     openModal({
-      title: '참가를 취소할까요?',
+      title: isPostConfirm ? '팟을 나갈까요?' : '참가를 취소할까요?',
       body: '이 팟에서 나가고, 다시 매칭 대기 화면으로 돌아가요.',
-      confirmLabel: '참가 취소하기',
+      confirmLabel: isPostConfirm ? '나가기' : '참가 취소하기',
       danger: true,
       onConfirm: async () => {
         try {
@@ -3341,6 +3356,43 @@ function renderDoneSummary(pod){
 }
 
 /* ============ 13. 화면 6: 정산 ============ */
+// 팟장이 참여자별 입금 여부를 체크한다. 체크된 사람은 채팅방에서 "팟 나가기"가 뜬다(renderPodChat 참고).
+// 팟장 본인은 스스로에게 입금할 일이 없으니 목록에서 뺀다.
+function renderPaidTracker(pod){
+  const box = document.getElementById('paid-tracker');
+  const list = document.getElementById('paid-list');
+  if (!box || !list) return;
+  const payers = pod.participants.filter(p => !p.isLeader);
+  if (!payers.length) { box.hidden = true; return; }
+  box.hidden = false;
+  list.innerHTML = payers.map(p => `
+    <label class="paid-row">
+      <input type="checkbox" class="paid-checkbox" data-user-id="${p.id}" ${p.paid ? 'checked' : ''}>
+      <span>${escapeHtml(p.nickname)}</span>
+    </label>
+  `).join('');
+  list.querySelectorAll('.paid-checkbox').forEach(cb => {
+    cb.addEventListener('change', async () => {
+      const userId = cb.dataset.userId;
+      const paid = cb.checked;
+      cb.disabled = true;
+      try {
+        if (SUPA_ENABLED) {
+          const { error } = await supa.from('pod_participants').update({ paid }).eq('pod_id', pod.id).eq('user_id', userId);
+          if (error) throw error;
+        }
+        const p = pod.participants.find(x => x.id === userId);
+        if (p) p.paid = paid;
+      } catch (e) {
+        cb.checked = !paid; // 실패했으면 화면을 되돌린다 — 체크됐는데 실제로는 저장 안 된 상태로 두면 안 된다
+        showError(friendlyDbError(e));
+      } finally {
+        cb.disabled = false;
+      }
+    });
+  });
+}
+
 function renderSettlement(podId){
   const pod = findPod(podId);
   const result = pod.finalResult || calcFinalRouteAndFare(pod);
@@ -3359,6 +3411,11 @@ function renderSettlement(podId){
     <div class="info-box" id="settlement-result" hidden>
       <h3>인당 정산금</h3>
       <div id="settlement-list"></div>
+    </div>
+    <div class="info-box" id="paid-tracker" hidden>
+      <h3>입금 확인</h3>
+      <p class="fine-note" style="margin:0 0 10px;">체크하면 그 사람은 채팅방에서 팟을 나갈 수 있어요.</p>
+      <div id="paid-list"></div>
     </div>
     <div class="field" id="account-field" hidden>
       <label for="account-number">입금 계좌번호</label>
@@ -3380,6 +3437,20 @@ function renderSettlement(podId){
   // 이미 한 번 계산해서 계좌를 공유한 뒤 채팅방 갔다가 다시 돌아온 경우엔 다시 입력 안 시키고
   // 바로 종료할 수 있게 둔다. 아직 한 번도 계산 안 했으면 그 전엔 종료 못 누르게 막는다.
   document.getElementById('btn-finish-pod').disabled = !pod.settlement;
+
+  // 정산금액을 이미 계산해둔 채로 다시 들어온 경우(입금 확인하러 재방문 등) 결과와
+  // 입금 확인 체크리스트를 바로 보여준다 — 매번 실제 택시비를 다시 입력시키지 않는다.
+  if (pod.settlement && pod.settlement.length) {
+    const listEl = document.getElementById('settlement-list');
+    const total = pod.settlement.reduce((s, x) => s + x.amount, 0);
+    listEl.innerHTML = `<p class="callout">총 ${won(total)}</p>` +
+      pod.settlement.map(s => `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>`).join('');
+    document.getElementById('settlement-result').hidden = false;
+    document.getElementById('account-field').hidden = false;
+    document.getElementById('receipt-field').hidden = false;
+    document.getElementById('btn-share-account').hidden = false;
+    renderPaidTracker(pod);
+  }
 
   document.getElementById('receipt-photo').addEventListener('change', (e) => {
     const nameEl = document.getElementById('receipt-photo-name');
@@ -3407,6 +3478,7 @@ function renderSettlement(podId){
     document.getElementById('receipt-field').hidden = false;
     document.getElementById('btn-share-account').hidden = false;
     document.getElementById('btn-finish-pod').disabled = false;
+    renderPaidTracker(pod);
   });
 
   document.getElementById('btn-share-account').addEventListener('click', () => {
