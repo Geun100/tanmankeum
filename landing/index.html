@@ -165,7 +165,7 @@
   @media(min-width:900px){.how-preview{position:sticky;top:88px;margin-top:0}}
   .how-preview-note{text-align:center;font-size:12px;color:var(--muted,#697383);margin-top:12px}
   .how-preview .phone-notch,.how-preview .phone-home{display:none}
-  .how-preview .phone-screen{min-height:0}
+  .how-preview .phone-screen{min-height:600px;background:#fff}
   .phone-body--shot{padding:0}
   .how-shot{display:block;width:100%;height:auto}
 
@@ -373,21 +373,29 @@
 <section id="how" class="alt">
   <div class="wrap">
     <div class="eyebrow">이용 방법</div>
-    <h2>세 단계면 끝납니다</h2>
-    <p class="sec-sub">입력하고, 팟 고르고, 하차 지점 확인. 눌러서 실제 화면을 바로 확인해보세요.</p>
+    <h2>다섯 화면이면 끝납니다</h2>
+    <p class="sec-sub">이동 정보 입력부터 탑승 조율까지. 눌러서 실제 화면을 바로 확인해보세요.</p>
     <div class="how-grid">
       <div class="how-steps" role="tablist" aria-label="이용 방법 단계">
         <button type="button" class="how-step is-active" data-step="1" role="tab" aria-selected="true">
           <span class="how-step-n">1</span>
-          <span class="how-step-body"><strong>이동 정보 입력</strong><p>출발지, 목적지, 출발 시간, 원하는 인원을 넣습니다. 인원이 적을수록 매칭될 가능성이 높습니다.</p></span>
+          <span class="how-step-body"><strong>이동 정보 입력</strong><p>출발지, 목적지, 출발 시간, 최대 인원을 넣습니다. 자주 가는 장소는 눌러서 바로 채웁니다.</p></span>
         </button>
         <button type="button" class="how-step" data-step="2" role="tab" aria-selected="false">
           <span class="how-step-n">2</span>
-          <span class="how-step-body"><strong>추천 팟 확인</strong><p>내 경로와 겹치는 팟을 매칭 점수 순으로 보여드립니다. 요금순·시간순 정렬도 됩니다.</p></span>
+          <span class="how-step-body"><strong>추천 팟 확인</strong><p>내 경로와 겹치는 팟을 절약 금액과 함께 보여드립니다. 추천순·요금순 정렬도 됩니다.</p></span>
         </button>
         <button type="button" class="how-step" data-step="3" role="tab" aria-selected="false">
           <span class="how-step-n">3</span>
-          <span class="how-step-body"><strong>내 하차 지점 확인 후 참가</strong><p>어디서 내려서 얼마나 걷는지, 예상 요금까지 보고 참가를 결정합니다. 이후 팟장이 확정하면 채팅방에서 만나 함께 탑니다.</p></span>
+          <span class="how-step-body"><strong>내 하차 지점 확인</strong><p>지도에서 어디서 내려 몇 분 걷는지, 예상 소요 시간까지 봅니다.</p></span>
+        </button>
+        <button type="button" class="how-step" data-step="4" role="tab" aria-selected="false">
+          <span class="how-step-n">4</span>
+          <span class="how-step-body"><strong>참가 결정</strong><p>하차 지점과 예상 부담금을 마지막으로 확인하고 참가합니다.</p></span>
+        </button>
+        <button type="button" class="how-step" data-step="5" role="tab" aria-selected="false">
+          <span class="how-step-n">5</span>
+          <span class="how-step-body"><strong>채팅방에서 조율</strong><p>팟원별 예상 요금이 보이고, 채팅으로 탑승 장소를 맞춥니다. 팟장이 확정하면 최종 경로·요금이 계산됩니다.</p></span>
         </button>
       </div>
       <div class="how-preview">
@@ -572,7 +580,9 @@
   var SHOTS = {
     1: { src: 'img/how-1.png', alt: '이동 정보 입력 화면 — 출발지·목적지·출발 시간·최대 인원' },
     2: { src: 'img/how-2.png', alt: '추천 팟 목록 화면 — 경로가 겹치는 팟과 절약 금액' },
-    3: { src: 'img/how-3.png', alt: '내 하차 지점 화면 — 지도, 도보 거리, 예상 요금' },
+    3: { src: 'img/how-3.png', alt: '내 하차 지점 화면 — 지도, 도보 거리, 예상 소요 시간' },
+    4: { src: 'img/how-4.png', alt: '참가 확인 화면 — 하차 지점과 예상 부담금' },
+    5: { src: 'img/how-5.png', alt: '팟 채팅방 — 팟원별 예상 요금과 탑승 조율 채팅' },
   };
 
   var body = document.getElementById('how-preview-body');
