@@ -43,11 +43,11 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   ul{ list-style:none; margin:0; padding:0; }
   h1,h2,h3,p{ margin:0; }
 
-  .stage{ min-height:100dvh; display:flex; justify-content:center; align-items:stretch; }
-  .phone{ position:relative; width:100%; max-width:430px; min-height:100dvh; background:var(--paper); display:flex; flex-direction:column; }
+  .stage{ height:100dvh; display:flex; justify-content:center; align-items:stretch; overflow:hidden; }
+  .phone{ position:relative; width:100%; max-width:430px; height:100dvh; background:var(--paper); display:flex; flex-direction:column; overflow:hidden; }
   @media (min-width:560px){
-    .stage{ align-items:center; padding:32px 16px; }
-    .phone{ min-height:min(844px,92dvh); max-height:900px; border-radius:36px; box-shadow:var(--shadow-card), 0 0 0 1px var(--line); overflow:hidden; }
+    .stage{ height:auto; min-height:100dvh; align-items:center; padding:32px 16px; }
+    .phone{ height:min(844px,92dvh); max-height:900px; border-radius:36px; box-shadow:var(--shadow-card), 0 0 0 1px var(--line); }
   }
 
   .screen{ display:none; flex-direction:column; flex:1; min-height:0; }
