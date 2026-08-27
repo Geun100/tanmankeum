@@ -143,14 +143,6 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .choice:hover{ border-color:var(--primary); }
   .choice.is-on{ background:var(--primary-soft); border-color:var(--primary); color:var(--primary); }
 
-  /* 성별 잠금 표시 — 이성 간 매칭 방지를 위해 최초 선택 후 다시 못 바꾼다 */
-  .gender-locked{ display:flex; align-items:center; justify-content:space-between; height:48px;
-    padding:0 14px; font-size:15px; border:1px solid var(--line); border-radius:var(--radius-input); background:var(--surface); }
-  .gender-locked strong{ font-size:16px; font-weight:400; color:var(--placeholder); }
-  .gender-locked .lock-ico{ display:inline-flex; color:var(--placeholder); flex-shrink:0; }
-  .gender-lock-note{ display:flex; align-items:center; gap:6px; margin-top:8px; font-size:12.5px; color:var(--ink-soft); }
-  .gender-lock-note svg{ flex-shrink:0; color:var(--muted); }
-
   /* 경로: 출발지 → 목적지 나란히 */
   .route-row{ display:flex; align-items:center; gap:8px; }
   .route-cell{ position:relative; flex:1; min-width:0; }
@@ -454,7 +446,12 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 
     <!-- 1. 온보딩 1/2: 닉네임 + 성별 -->
     <section class="screen" id="screen-ob-profile" aria-label="닉네임과 성별 입력">
-      <header class="topbar topbar--brand"><span class="brand-mark">탄만큼</span></header>
+      <header class="topbar topbar--brand">
+        <button class="icon-btn" id="ob-profile-back-btn" data-back="screen-home" aria-label="뒤로가기" hidden>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <span class="brand-mark">탄만큼</span>
+      </header>
       <div class="screen-body">
         <div class="step-dots" aria-hidden="true"><span class="on"></span><span></span></div>
         <p class="page-title">만나서 반가워요</p>
@@ -575,9 +572,9 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           </svg>
           <span class="brand-word">탄<b>만</b>큼</span>
         </span>
-        <button class="filter-chip" id="btn-open-settings" aria-label="경로 변경" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px;">
+        <button class="filter-chip" id="btn-open-settings" aria-label="프로필 변경" style="margin-left:auto; display:inline-flex; align-items:center; gap:6px;">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          경로 변경
+          프로필 변경
         </button>
       </header>
       <div class="screen-body">
@@ -2028,21 +2025,19 @@ function leaveSplash(){
 const cachedOnboarding = loadOnboardingCache();
 if (cachedOnboarding) {
   splashDone = true;
-  // 재접속 유저는 닉네임/성별 입력(1단계)을 건너뛰고 바로 이동정보 입력(2단계)으로 보낸다 —
-  // 매번 같은 이름을 다시 치게 하지 않되, 이동 정보는 매번 새로 확인시킨다.
-  // 마이크로태스크로 미룬다 — 아래쪽 partySize/sizeValueEl 등은 스크립트가 끝까지 실행돼야
-  // 초기화된다(TDZ). 여기서 바로 참조하면 "Cannot access before initialization".
-  Promise.resolve().then(() => {
-    document.getElementById('ob-nickname').value = cachedOnboarding.nickname;
-    lockGenderUI(cachedOnboarding.gender);
-    document.getElementById('ob-origin').value = cachedOnboarding.origin;
-    document.getElementById('ob-dest').value = cachedOnboarding.dest;
-    partySize = cachedOnboarding.partySize;
-    syncSize();
-    document.getElementById('btn-find-pod').textContent = '그대로 등록하기';
-    showScreen('screen-ob-route');
-    setWheelTime(cachedOnboarding.time);
-  });
+  // 재접속 유저는 온보딩을 다시 거치지 않고 바로 홈으로 간다. 이동 정보를 바꾸고 싶으면
+  // 홈의 "프로필 변경"에서 언제든 고칠 수 있다.
+  const bootNow = new Date();
+  const bootTodayStr = localDateStr(bootNow);
+  const bootDate = new Date(`${bootTodayStr}T${cachedOnboarding.time}`) < bootNow
+    ? localDateStr(new Date(bootNow.getTime() + 86400000))
+    : bootTodayStr;
+  STATE.user = { id: getOrCreateUserId(), ...cachedOnboarding, date: bootDate };
+  // 마이크로태스크로 미룬다 — enterHome()이 쓰는 아래쪽 const들은 스크립트가 끝까지 실행돼야
+  // 초기화된다(TDZ). 여기서 바로 부르면 "Cannot access before initialization".
+  Promise.resolve().then(enterHome)
+    .then(() => { renderHome(); showScreen('screen-home'); })
+    .catch(e => { showError(friendlyDbError(e)); showScreen('screen-ob-profile'); });
 } else {
   // 크롬이 autocomplete="off"를 무시하고 예전에 이 브라우저에서 입력했던 값을 멋대로
   // 채워넣는 경우가 있다 — 새 온보딩인데 출발지/목적지가 미리 채워져 보이는 원인.
@@ -2055,10 +2050,8 @@ if (cachedOnboarding) {
 // --- 1단계: 닉네임 + 성별 ---
 let obMode = 'onboarding'; // 'onboarding' | 'settings' — screen-ob-route를 두 용도로 재사용
 let obGender = null; // 사용자가 명시적으로 고르기 전엔 미선택 — 아무 성별도 임의로 가정하지 않는다
-let genderLocked = false;
 const genderRow = document.getElementById('ob-gender-row');
 genderRow.addEventListener('click', (e) => {
-  if (genderLocked) return;
   const btn = e.target.closest('.choice');
   if (!btn) return;
   obGender = btn.dataset.gender;
@@ -2070,30 +2063,21 @@ genderRow.addEventListener('click', (e) => {
   syncNextBtn();
 });
 
-// 이성 간 매칭을 막으려면 성별이 나중에 바뀌면 안 된다(허위 입력 방지) — 한 번 정해지면
-// 버튼 선택 UI 자체를 없애고 잠금 표시로 바꾼다. 로컬 캐시가 지워져도(uid는 남아있는 채로)
-// 서버 profiles 테이블에 이미 성별이 저장돼 있으면 그 값을 그대로 쓰고 다시 못 고르게 한다.
-function lockGenderUI(gender){
+// 성별은 나중에 고칠 수 있다(오타 정정 등). 다만 다른 사람이 이미 참가한 팟에 속해 있는
+// 동안에는 못 바꾼다 — 그 사람들은 "동성끼리만" 규칙을 보고 합류한 거라, 그 상태에서 성별이
+// 바뀌면 이미 성사된 매칭의 전제가 뒤집힌다. 그 검사는 저장 시점(btn-find-pod)에서 한다.
+function setGenderSelection(gender){
   obGender = gender;
-  genderLocked = true;
-  document.getElementById('ob-gender-field').innerHTML = `
-    <span class="field-label">성별</span>
-    <div class="gender-locked">
-      <strong>${gender}</strong>
-      <span class="lock-ico" title="가입 시 등록한 성별은 변경할 수 없어요">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      </span>
-    </div>
-    <div class="gender-lock-note">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-      법률상 이성끼리 매칭되지 않습니다
-    </div>
-  `;
+  genderRow.querySelectorAll('.choice').forEach(c => {
+    const on = c.dataset.gender === gender;
+    c.classList.toggle('is-on', on);
+    c.setAttribute('aria-checked', String(on));
+  });
   syncNextBtn();
 }
 if (SUPA_ENABLED) {
   supa.from('profiles').select('gender').eq('id', getOrCreateUserId()).maybeSingle()
-    .then(({ data }) => { if (data && data.gender && !genderLocked) lockGenderUI(data.gender); });
+    .then(({ data }) => { if (data && data.gender && !obGender) setGenderSelection(data.gender); });
 }
 
 const nicknameInput = document.getElementById('ob-nickname');
@@ -2249,8 +2233,11 @@ function openSettings(){
   const u = STATE.user;
   if (!u) return;
   obMode = 'settings';
-  document.getElementById('ob-route-back-btn').dataset.back = 'screen-home';
+  document.getElementById('ob-profile-back-btn').hidden = false;
+  document.getElementById('ob-route-back-btn').dataset.back = 'screen-ob-profile';
   document.getElementById('ob-route-title').textContent = '이동 정보 수정';
+  document.getElementById('ob-nickname').value = u.nickname;
+  setGenderSelection(u.gender);
   document.getElementById('ob-origin').value = u.origin;
   document.getElementById('ob-dest').value = u.dest;
   setWheelTime(u.time);
@@ -2258,13 +2245,14 @@ function openSettings(){
   syncSize();
   document.getElementById('btn-find-pod').disabled = false;
   document.getElementById('btn-find-pod').textContent = '저장하기';
-  showScreen('screen-ob-route');
+  showScreen('screen-ob-profile');
 }
 document.getElementById('btn-open-settings').addEventListener('click', openSettings);
+document.getElementById('ob-profile-back-btn').addEventListener('click', () => { obMode = 'onboarding'; });
 
 document.getElementById('btn-find-pod').addEventListener('click', async () => {
-  const nickname = STATE.user ? STATE.user.nickname : document.getElementById('ob-nickname').value.trim();
-  if (obMode === 'onboarding' && !nickname) { document.getElementById('ob-nickname').focus(); return; }
+  const nickname = document.getElementById('ob-nickname').value.trim();
+  if (!nickname) { document.getElementById('ob-nickname').focus(); return; }
   const originInput = document.getElementById('ob-origin');
   const destInput = document.getElementById('ob-dest');
   const originName = originInput.value.trim();
@@ -2293,9 +2281,12 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
         return;
       }
       if (mine.participants.length > 1) {
-        showError('이미 다른 사람이 참가한 팟이라 경로를 바꿀 수 없어요. 바꾸려면 채팅방에서 팟을 취소한 뒤 다시 등록해주세요.');
+        // 성별도 여기서 함께 막힌다 — 다른 사람이 "동성끼리만" 규칙을 보고 합류한 상태라
+        // 성별이 바뀌면 이미 성사된 매칭의 전제가 뒤집힌다.
+        showError('이미 다른 사람이 참가한 팟이라 프로필·경로를 바꿀 수 없어요. 바꾸려면 채팅방에서 팟을 취소한 뒤 다시 등록해주세요.');
         return;
       }
+      if (SUPA_ENABLED) await upsertProfile(STATE.user.id, nickname, obGender);
       const originC = placeCoord(originName), destC = placeCoord(destName);
       if (SUPA_ENABLED) {
         const { error: podErr } = await supa.from('pods').update({
@@ -2316,7 +2307,9 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
         mine.departTime = time; mine.departDate = date; mine.desiredSize = partySize;
         applyTrunk(mine);
       }
-      STATE.user = { ...STATE.user, origin: originName, dest: destName, time, date, partySize };
+      // 닉네임/성별도 방금 upsertProfile로 DB엔 저장했으니, 메모리 상태와 로컬 캐시에도 반영해야
+      // 화면이 새 값을 보여준다 — 여기 안 넣으면 DB만 바뀌고 화면은 새로고침 전까지 옛 값을 보여준다.
+      STATE.user = { ...STATE.user, nickname, gender: obGender, origin: originName, dest: destName, time, date, partySize };
       saveOnboardingCache(STATE.user);
     } catch (e) {
       showError(friendlyDbError(e));
