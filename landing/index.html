@@ -275,8 +275,8 @@
   .safe-item h3{font-size:16px;font-weight:600}
   .safe-item p{margin-top:4px;font-size:14px;color:var(--ink-soft)}
 
-  .demo-video{margin:32px auto 0;max-width:340px}
-  .demo-video video{display:block;width:100%;border-radius:28px;background:#fff;box-shadow:var(--shadow-card)}
+  .pay-shot{position:relative;max-width:320px;margin:0 auto}
+  .pay-shot-body img{display:block;width:100%;border-radius:24px;background:#fff;box-shadow:var(--shadow-card)}
 
   /* fare panel */
   .fare-panel{margin-top:28px;background:var(--surface);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:24px;max-width:520px}
@@ -324,7 +324,7 @@
     <nav class="nav-links">
       <a href="#how">이용 방법</a>
       <a href="#why">왜 탄만큼</a>
-      <a href="#demo">미리보기</a>
+      <a href="#pay">정산</a>
       <a href="#fare">요금</a>
     </nav>
     <a class="btn btn--primary" href="/">내 팟 찾기</a>
@@ -438,13 +438,37 @@
   </div>
 </section>
 
-<section id="demo" class="alt">
+<section id="pay" class="alt">
   <div class="wrap">
-    <div class="eyebrow">미리보기</div>
-    <h2>이렇게 씁니다</h2>
-    <p class="sec-sub">이동 정보 입력부터 팟 채팅방까지, 실제 화면 그대로.</p>
-    <div class="demo-video" data-reveal>
-      <video src="/landing/img/demo.mp4" poster="/landing/img/how-2.png" autoplay muted loop playsinline preload="metadata"></video>
+    <div class="eyebrow">정산</div>
+    <h2>정산도 앱이 계산합니다</h2>
+    <p class="sec-sub">실제 택시비만 넣으면, 각자 낼 돈이 거리 비례로 나옵니다.</p>
+    <div class="how-grid">
+      <div class="how-steps" role="tablist" aria-label="정산 단계">
+        <button type="button" class="how-step is-active" data-step="1" role="tab" aria-selected="true">
+          <span class="how-step-n">1</span>
+          <span class="how-step-body"><strong>타기 전에 예상 요금 확인</strong><p>팟장이 확정하기 전에도, 팟원마다 얼마 낼지 채팅방에서 미리 보입니다.</p></span>
+        </button>
+        <button type="button" class="how-step" data-step="2" role="tab" aria-selected="false">
+          <span class="how-step-n">2</span>
+          <span class="how-step-body"><strong>팟장이 확정하면 다시 계산</strong><p>실제 경로 기준으로 총 요금과 1인 요금이 자동으로 다시 계산됩니다.</p></span>
+        </button>
+        <button type="button" class="how-step" data-step="3" role="tab" aria-selected="false">
+          <span class="how-step-n">3</span>
+          <span class="how-step-body"><strong>실제 택시비만 입력</strong><p>미터기 금액 하나만 넣으면 인당 정산금이 거리 비례로 나뉩니다. 영수증 사진으로도 넣을 수 있어요.</p></span>
+        </button>
+        <button type="button" class="how-step" data-step="4" role="tab" aria-selected="false">
+          <span class="how-step-n">4</span>
+          <span class="how-step-body"><strong>정산 완료, 팟 종료</strong><p>입금까지 확인하면 팟이 끝납니다. 앱 이용료는 0원이에요.</p></span>
+        </button>
+      </div>
+      <div class="how-preview">
+        <div class="pay-shot" data-reveal>
+          <span class="proto-badge">실제 앱 화면</span>
+          <div class="pay-shot-body" id="pay-preview-body"></div>
+        </div>
+        <p class="how-preview-note" id="pay-preview-note"></p>
+      </div>
     </div>
   </div>
 </section>
@@ -454,48 +478,12 @@
     <div class="eyebrow">요금</div>
     <h2>탄만큼 이용료는 0원입니다</h2>
     <p class="sec-sub">택시비만 나눠 내면 됩니다. 정산은 팟 채팅방에서 직접 합니다.</p>
-    <div class="how-grid" style="margin-top:32px">
-      <div class="fare-panel" style="margin-top:0; max-width:none">
-        <div class="fare-row"><span>혼자 탈 때 (포항역 → 한동대학교)</span><s>약 12,000원</s></div>
-        <div class="fare-row"><span>2명이 나눠 탈 때</span><b>1인 약 6,000원</b></div>
-        <div class="fare-row"><span>4명이 나눠 탈 때</span><b>1인 약 3,500원</b></div>
-        <div class="fare-row"><span>탄만큼 이용료</span><b>0원</b></div>
-        <p class="fare-note">예상 요금은 참여자와 최종 경로에 따라 달라질 수 있습니다. 실제 요금은 하차 시점 미터기 기준입니다.</p>
-      </div>
-      <div class="how-preview">
-        <div class="phone-mock">
-          <span class="proto-badge">실제 앱 화면</span>
-          <div class="phone-frame">
-            <div class="phone-notch"></div>
-            <div class="phone-screen">
-              <div class="phone-statusbar"><span>9:41</span><span class="icons">•••• LTE</span></div>
-              <div class="phone-body">
-                <div class="info-box">
-                  <h3>참여자별 예상 정산 요약</h3>
-                  <div class="people-card" style="margin:0; border:none">
-                    <div class="participant-row" style="padding:8px 0"><span class="p-name">친구만나러</span><span class="participant-fare">7,755원</span></div>
-                    <div class="participant-row" style="padding:8px 0"><span class="p-name">포항</span><span class="participant-fare">6,245원</span></div>
-                  </div>
-                </div>
-                <div class="info-box" style="margin-top:10px">
-                  <h3>실제 택시비(원)</h3>
-                  <p class="callout" style="font-size:20px">14,000원</p>
-                </div>
-                <div class="info-box" style="margin-top:10px">
-                  <h3>인당 정산금</h3>
-                  <div class="people-card" style="margin:0; border:none">
-                    <div class="participant-row" style="padding:8px 0"><span class="p-name">친구만나러</span><span class="participant-fare">7,755원</span></div>
-                    <div class="participant-row" style="padding:8px 0"><span class="p-name">포항<span class="badge badge--me" style="margin-left:4px">나</span></span><span class="participant-fare">6,245원</span></div>
-                  </div>
-                </div>
-                <button type="button" class="btn btn--primary btn--block" style="margin-top:14px">정산 완료하고 팟 종료</button>
-              </div>
-            </div>
-            <div class="phone-home"></div>
-          </div>
-        </div>
-        <p class="how-preview-note">실제 택시비를 입력하면, 각자 이동한 거리만큼 자동으로 나눠 계산합니다.</p>
-      </div>
+    <div class="fare-panel">
+      <div class="fare-row"><span>혼자 탈 때 (포항역 → 한동대학교)</span><s>약 12,000원</s></div>
+      <div class="fare-row"><span>2명이 나눠 탈 때</span><b>1인 약 6,000원</b></div>
+      <div class="fare-row"><span>4명이 나눠 탈 때</span><b>1인 약 3,500원</b></div>
+      <div class="fare-row"><span>탄만큼 이용료</span><b>0원</b></div>
+      <p class="fare-note">예상 요금은 참여자와 최종 경로에 따라 달라질 수 있습니다. 실제 요금은 하차 시점 미터기 기준입니다.</p>
     </div>
   </div>
 </section>
@@ -573,22 +561,14 @@
   });
 })();
 
-// 이용 방법 3단계 미리보기 — 클릭하면 페이지 이동 없이 실제 앱 스크린샷만 바뀐다.
-(function(){
-  var SHOTS = {
-    1: { src: '/landing/img/how-1.png', alt: '이동 정보 입력 화면 — 출발지·목적지·출발 시간·최대 인원' },
-    2: { src: '/landing/img/how-2.png', alt: '추천 팟 목록 화면 — 경로가 겹치는 팟과 절약 금액' },
-    3: { src: '/landing/img/how-3.png', alt: '내 하차 지점 화면 — 지도, 도보 거리, 예상 소요 시간' },
-    4: { src: '/landing/img/how-5.png', alt: '팟 채팅방 — 팟원별 예상 요금과 탑승 조율 채팅' },
-  };
-
-  var body = document.getElementById('how-preview-body');
-  var note = document.getElementById('how-preview-note');
-  var steps = document.querySelectorAll('.how-step');
+// 스텝 탭을 누르면 페이지 이동 없이 실제 앱 스크린샷만 바뀐다. #how(이용 방법)·#pay(정산) 둘 다 쓴다.
+function wireShots(sectionId, shots){
+  var body = document.getElementById(sectionId + '-preview-body');
+  var note = document.getElementById(sectionId + '-preview-note');
+  var steps = document.querySelectorAll('#' + sectionId + ' .how-step');
   if (!body) return;
-
   function show(n){
-    var s = SHOTS[n];
+    var s = shots[n];
     if (!s) return;
     body.innerHTML = '<img class="how-shot" src="' + s.src + '" alt="' + s.alt + '" loading="lazy">';
     if (note) note.textContent = '';
@@ -600,7 +580,19 @@
   }
   steps.forEach(function(el){ el.addEventListener('click', function(){ show(el.dataset.step); }); });
   show(1);
-})();
+}
+wireShots('how', {
+  1: { src: '/landing/img/how-1.png', alt: '이동 정보 입력 화면 — 출발지·목적지·출발 시간·최대 인원' },
+  2: { src: '/landing/img/how-2.png', alt: '추천 팟 목록 화면 — 경로가 겹치는 팟과 절약 금액' },
+  3: { src: '/landing/img/how-3.png', alt: '내 하차 지점 화면 — 지도, 도보 거리, 예상 소요 시간' },
+  4: { src: '/landing/img/how-5.png', alt: '팟 채팅방 — 팟원별 예상 요금과 탑승 조율 채팅' },
+});
+wireShots('pay', {
+  1: { src: '/landing/img/pay-1.png', alt: '팟 채팅방 — 확정 전에도 보이는 팟원별 예상 요금' },
+  2: { src: '/landing/img/pay-2.png', alt: '팟 확정 화면 — 최종 경로와 총 요금·1인 요금' },
+  3: { src: '/landing/img/pay-3.png', alt: '정산 화면 — 실제 택시비 입력, 인당 정산금 자동 분배' },
+  4: { src: '/landing/img/pay-4.png', alt: '팟 완료 화면 — 정산 내역 요약' },
+});
 
 // 히어로 제목: 단어별로 span을 감싸서 아래→위로 올라오며 등장시킨다("pull up").
 // 자간/폰트가 흔들리지 않게 항상 실제 h1과 같은 스타일로 렌더한다 — JS로 새로 만드는 게 아니라
