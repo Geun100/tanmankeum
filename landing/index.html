@@ -164,6 +164,10 @@
   .how-preview{position:relative;margin-top:8px}
   @media(min-width:900px){.how-preview{position:sticky;top:88px;margin-top:0}}
   .how-preview-note{text-align:center;font-size:12px;color:var(--muted,#697383);margin-top:12px}
+  .how-preview .phone-notch,.how-preview .phone-home{display:none}
+  .how-preview .phone-screen{min-height:0}
+  .phone-body--shot{padding:0}
+  .how-shot{display:block;width:100%;height:auto}
 
   /* 아래부터는 채팅방 화면(index.html)의 마크업/CSS를 그대로 옮긴 것 — 실제 서비스 쪽이
      바뀌면 여기도 같이 옮겨야 한다. */
@@ -369,8 +373,8 @@
 <section id="how" class="alt">
   <div class="wrap">
     <div class="eyebrow">이용 방법</div>
-    <h2>네 단계면 끝납니다</h2>
-    <p class="sec-sub">가입하고 팟에 타기까지, 화면 네 개. 눌러서 실제 화면을 바로 확인해보세요.</p>
+    <h2>세 단계면 끝납니다</h2>
+    <p class="sec-sub">입력하고, 팟 고르고, 하차 지점 확인. 눌러서 실제 화면을 바로 확인해보세요.</p>
     <div class="how-grid">
       <div class="how-steps" role="tablist" aria-label="이용 방법 단계">
         <button type="button" class="how-step is-active" data-step="1" role="tab" aria-selected="true">
@@ -383,11 +387,7 @@
         </button>
         <button type="button" class="how-step" data-step="3" role="tab" aria-selected="false">
           <span class="how-step-n">3</span>
-          <span class="how-step-body"><strong>내 하차 지점 확인 후 참가</strong><p>어디서 내려서 얼마나 걷는지, 예상 요금까지 보고 참가를 결정합니다.</p></span>
-        </button>
-        <button type="button" class="how-step" data-step="4" role="tab" aria-selected="false">
-          <span class="how-step-n">4</span>
-          <span class="how-step-body"><strong>팟 채팅방에서 만나기</strong><p>팟장이 확정하면 최종 경로·시간·1인 요금이 계산됩니다. 만나서 타고, 각자 하차합니다.</p></span>
+          <span class="how-step-body"><strong>내 하차 지점 확인 후 참가</strong><p>어디서 내려서 얼마나 걷는지, 예상 요금까지 보고 참가를 결정합니다. 이후 팟장이 확정하면 채팅방에서 만나 함께 탑니다.</p></span>
         </button>
       </div>
       <div class="how-preview">
@@ -396,8 +396,7 @@
           <div class="phone-frame">
             <div class="phone-notch"></div>
             <div class="phone-screen">
-              <div class="phone-statusbar"><span>9:41</span><span class="icons">•••• LTE</span></div>
-              <div class="phone-body" id="how-preview-body"></div>
+              <div class="phone-body phone-body--shot" id="how-preview-body"></div>
             </div>
             <div class="phone-home"></div>
           </div>
@@ -568,140 +567,31 @@
   });
 })();
 
-// 이용 방법 4단계 미리보기 — 클릭하면 페이지 이동 없이 폰 목업 내용만 바뀐다.
+// 이용 방법 3단계 미리보기 — 클릭하면 페이지 이동 없이 실제 앱 스크린샷만 바뀐다.
 (function(){
-  var CROWN = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.8 18h16.4l1.8-10-5.6 4L12 4l-4.4 8-5.6-4 1.8 10zM3.5 20h17v2h-17z"/></svg>';
-  var ICON_PIN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
-  var MAP_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>';
-
-  var PIN_INPUT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>';
-  var FAKE_MAP = '\
-    <div class="fake-map">\
-      <svg viewBox="0 0 300 170"><path d="M40 40 C 90 40, 90 90, 150 95 S 210 130, 230 140" fill="none" stroke="#5b6fe8" stroke-width="4" stroke-linecap="round"/></svg>\
-      <span class="fake-map-pin" style="left:40px;top:44px;background:var(--green)">출발</span>\
-      <span class="fake-map-pin" style="left:150px;top:99px;background:var(--orange)">내 하차지점</span>\
-      <span class="fake-map-pin" style="left:230px;top:144px;background:#2f5fd6">종점</span>\
-    </div>';
-
-  var PANELS = {
-    1: {
-      note: '',
-      html: '\
-        <div class="mock-topbar"><span class="mock-icon-btn">' + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>' + '</span><strong>이동 정보 입력</strong></div>\
-        <div class="step-dots"><span class="on"></span><span></span></div>\
-        <div class="route-row">\
-          <div class="route-cell"><input value="한동대학교" readonly><span class="map-pick-btn">' + PIN_INPUT.replace('width="16" height="16"', 'width="14" height="14"') + '</span></div>\
-        </div>\
-        <div class="route-row" style="margin-top:8px">\
-          <div class="route-cell"><input value="영일대해수욕장" readonly><span class="map-pick-btn">' + PIN_INPUT.replace('width="16" height="16"', 'width="14" height="14"') + '</span></div>\
-        </div>\
-        <div class="wheel-picker">\
-          <div class="wheel-band"></div>\
-          <div class="wheel-col"><span class="wheel-item">오전</span><span class="wheel-item is-sel">오전</span><span class="wheel-item">오후</span></div>\
-          <div class="wheel-col"><span class="wheel-item">6</span><span class="wheel-item is-sel">7</span><span class="wheel-item">8</span></div>\
-          <span class="wheel-colon">:</span>\
-          <div class="wheel-col"><span class="wheel-item">50</span><span class="wheel-item is-sel">55</span><span class="wheel-item">00</span></div>\
-        </div>\
-        <div class="stepper-box"><span>최대 탑승자 수</span><div class="stepper"><button class="step-btn" disabled>−</button><strong>4</strong><button class="step-btn">+</button></div></div>',
-    },
-    2: {
-      note: '',
-      html: '\
-        <div class="status-card" style="margin-bottom:14px">\
-          <span class="status-tag"><span class="status-dot"></span>내 팟원 모집 중</span>\
-          <strong>한동대학교 → 영일대해수욕장</strong>\
-          <p>18:00 출발 · 1/4명</p>\
-        </div>\
-        <div class="pod-card">\
-          <div class="pod-card-top"><strong>한동대 오석 → 죽도시장</strong><span class="pod-card-leader">친구만나러 팟장</span></div>\
-          <p class="pod-meta">17:40 출발 · 현재 1/3명 · 영일대해수욕장 인근 하차 후 도보 2분</p>\
-          <div class="pod-stats"><div><strong>5,665원</strong><span>예상 1인 요금</span></div><div><strong>1/3</strong><span>현재 인원</span></div><div><strong>약 24분</strong><span>예상 소요</span></div></div>\
-        </div>\
-        <div class="pod-card" style="margin-top:12px">\
-          <div class="pod-card-top"><strong>한동대학교 → 영일대해수욕장</strong><span class="pod-card-leader">축구하러 팟장</span></div>\
-          <p class="pod-meta">20:10 출발 · 현재 3/4명 · 영일대해수욕장에서 바로 하차</p>\
-          <div class="pod-savings"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 혼자 탈 때보다 8,775원 절약</div>\
-          <div class="pod-stats"><div><strong>2,925원</strong><span>예상 1인 요금</span></div><div><strong>3/4</strong><span>현재 인원</span></div><div><strong>약 25분</strong><span>예상 소요</span></div></div>\
-        </div>',
-    },
-    3: {
-      note: '실제 서비스에서는 여기가 진짜 카카오맵(실도로 경로)이에요.',
-      html: '\
-        <div class="info-box" style="margin-bottom:12px">\
-          <div class="callout">한동대 오석 → 죽도시장</div>\
-          <p class="fine-note">17:40 출발 · 현재 1/3명 모집</p>\
-        </div>\
-        <div class="map-card">\
-          ' + FAKE_MAP + '\
-          <div class="map-legend">\
-            <span><span class="legend-dot" style="background:var(--green)"></span>출발지</span>\
-            <span><span class="legend-dot" style="background:var(--orange)"></span>내 하차지점</span>\
-            <span><span class="legend-dot" style="background:#5b6478"></span>다른 사람 하차</span>\
-            <span><span class="legend-dot" style="background:#2f5fd6"></span>종점(최종 목적지)</span>\
-          </div>\
-        </div>\
-        <div class="info-box">\
-          <h3>내 이동</h3>\
-          <p class="callout">택시: 한동대 오석 → 영일대해수욕장 인근 하차 / 도보 2분 · 142m</p>\
-          <p class="fine-note">내 목적지: 영일대해수욕장</p>\
-        </div>',
-    },
-    4: {
-      note: '',
-      html: '\
-        <div class="chat-status">\
-          <p class="chat-status-line"><span class="chat-status-left"><span class="status-dot"></span>1/3명 · 모집 중</span><span class="muted">17:40 출발 예정</span></p>\
-          <div class="avatar-strip">\
-            <div class="avatar-slot"><span class="avatar-wrap"><span class="avatar avatar--leader">친</span><span class="avatar-crown" title="팟장">' + CROWN + '</span></span><span class="avatar-slot-label">친구만나러</span></div>\
-            <div class="avatar-slot"><span class="avatar avatar--empty">+</span><span class="avatar-slot-label">빈자리</span></div>\
-            <div class="avatar-slot"><span class="avatar avatar--empty">+</span><span class="avatar-slot-label">빈자리</span></div>\
-          </div>\
-        </div>\
-        <div class="route-summary">\
-          <div class="route-flow"><strong>한동대 오석 → 죽도시장</strong><span>약 31분</span></div>\
-          <button type="button" class="map-toggle" aria-expanded="true">' + MAP_ICON + ' 지도 접기</button>\
-          <div class="map-card">\
-            ' + FAKE_MAP + '\
-            <div class="map-legend">\
-              <span><span class="legend-dot" style="background:var(--green)"></span>출발지</span>\
-              <span><span class="legend-dot" style="background:var(--orange)"></span>내 하차지점</span>\
-              <span><span class="legend-dot" style="background:#2f5fd6"></span>종점(최종 목적지)</span>\
-            </div>\
-          </div>\
-          <div class="people-card">\
-            <div class="participant-row"><div><span class="p-name">친구만나러<span class="badge badge--leader" style="margin-left:4px">팟장</span></span><p>남성 · 목적지 죽도시장 · 하차 죽도시장(도보 0분)</p></div><div class="participant-fare">7,755원</div></div>\
-            <div class="participant-row"><div><span class="p-name">포항<span class="badge badge--me" style="margin-left:4px">나</span></span><p>남성 · 목적지 영일대해수욕장 · 하차 영일대해수욕장 인근(도보 2분)</p></div><div class="participant-fare">6,245원</div></div>\
-          </div>\
-        </div>\
-        <div class="chat-section-head">\
-          <span class="section-label">채팅</span>\
-          <div class="chat-section-head-btns">\
-            <a class="btn btn--ghost btn--sm">' + ICON_PIN + ' 카카오맵</a>\
-            <button type="button" class="btn btn--ghost btn--sm">팟 정보</button>\
-          </div>\
-        </div>',
-    },
+  var SHOTS = {
+    1: { src: 'img/how-1.png', alt: '이동 정보 입력 화면 — 출발지·목적지·출발 시간·최대 인원' },
+    2: { src: 'img/how-2.png', alt: '추천 팟 목록 화면 — 경로가 겹치는 팟과 절약 금액' },
+    3: { src: 'img/how-3.png', alt: '내 하차 지점 화면 — 지도, 도보 거리, 예상 요금' },
   };
 
   var body = document.getElementById('how-preview-body');
   var note = document.getElementById('how-preview-note');
   var steps = document.querySelectorAll('.how-step');
+  if (!body) return;
 
   function show(n){
-    var p = PANELS[n];
-    if (!p || !body) return;
-    body.innerHTML = p.html;
-    if (note) note.textContent = p.note;
-    steps.forEach(function(s){
-      var active = s.dataset.step === String(n);
-      s.classList.toggle('is-active', active);
-      s.setAttribute('aria-selected', String(active));
+    var s = SHOTS[n];
+    if (!s) return;
+    body.innerHTML = '<img class="how-shot" src="' + s.src + '" alt="' + s.alt + '" loading="lazy">';
+    if (note) note.textContent = '';
+    steps.forEach(function(el){
+      var active = el.dataset.step === String(n);
+      el.classList.toggle('is-active', active);
+      el.setAttribute('aria-selected', String(active));
     });
   }
-
-  steps.forEach(function(s){
-    s.addEventListener('click', function(){ show(s.dataset.step); });
-  });
+  steps.forEach(function(el){ el.addEventListener('click', function(){ show(el.dataset.step); }); });
   show(1);
 })();
 
