@@ -3181,7 +3181,13 @@ async function renderPodChat(podId){
     ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">참가 취소하기</button>`;
   } else if (isLeader && pod.status === 'in_progress') {
     // 계좌 공유 후 채팅방으로 돌아온 팟장이 정산 화면으로 되돌아가 팟을 종료할 수 있어야 한다.
-    ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하고 팟 종료하기</button>`;
+    // 정산금액을 이미 계산해뒀으면 여기서 바로 종료할 수 있게 하고, 입금 확인은 별도 버튼으로 남긴다.
+    if (pod.settlement && pod.settlement.length) {
+      ctaHtml += `<button class="btn btn--primary btn--block" id="btn-finish-from-chat">정산 완료하고 팟 종료</button>`;
+      ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-go-settlement">입금 확인 · 정산 화면</button>`;
+    } else {
+      ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하러 가기</button>`;
+    }
   } else if (!isLeader && pod.status !== 'recruiting') {
     // 확정 후에는 원래 나갈 방법이 없었다 — 팟장이 정산 화면에서 내 입금을 체크해줘야만
     // 여기서 나갈 수 있다. 아직 안 됐으면 왜 안 되는지 문구로 설명한다.
@@ -3242,11 +3248,12 @@ async function renderPodChat(podId){
   if (viewFinalBtn) viewFinalBtn.addEventListener('click', () => { renderFinal(pod.id); showScreen('screen-final'); });
   const goSettlementBtn = document.getElementById('btn-go-settlement');
   if (goSettlementBtn) goSettlementBtn.addEventListener('click', () => {
-    // 정산금액을 이미 계산해뒀어도 다시 정산 화면으로 보낸다 — 입금 확인 체크를
-    // 한 번에 다 못 하고 여러 번 나눠 할 수 있으니, 매번 종료 확인으로 바로 건너뛰면 안 된다.
+    // 입금 확인 체크는 여러 번 나눠 할 수 있으니 정산 화면으로 보낸다(바로 종료 아님).
     renderSettlement(pod.id);
     showScreen('screen-settlement');
   });
+  const finishFromChatBtn = document.getElementById('btn-finish-from-chat');
+  if (finishFromChatBtn) finishFromChatBtn.addEventListener('click', () => confirmFinishPod(pod));
   const leaveBtn = document.getElementById('btn-leave-pod');
   if (leaveBtn) leaveBtn.addEventListener('click', () => {
     const isPostConfirm = pod.status !== 'recruiting';
