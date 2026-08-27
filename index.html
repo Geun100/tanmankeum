@@ -2366,8 +2366,14 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   if (obMode === 'settings') {
     try {
       const mine = findPod(settingsPodId);
-      if (!mine || mine.leaderId !== STATE.user.id) {
-        showError('지금은 값을 바꿀 수 없어요. 채팅방에서 확인해주세요.');
+      if (!mine) {
+        showError('팟 정보를 찾을 수 없어요. 채팅방에서 다시 확인해주세요.');
+        return;
+      }
+      if (mine.leaderId !== STATE.user.id) {
+        // 팟장이 아니라 참가자로 남의 팟에 들어가 있는 상태 — 여기서 "이동 정보"를 바꾸는 건
+        // 애초에 불가능한 일이라 왜 안 되는지, 어떻게 하면 되는지를 바로 알려준다.
+        showError('이미 참가 중인 팟이 있어요. 채팅방에서 참가를 취소하면 이동 정보를 새로 등록할 수 있어요.');
         return;
       }
       if (mine.participants.length > 1) {
