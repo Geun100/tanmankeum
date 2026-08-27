@@ -3585,8 +3585,12 @@ function renderSettlement(podId){
       const amount = res.ok ? Number(data.amount) : NaN;
       if (Number.isFinite(amount) && amount > 0) {
         document.getElementById('actual-fare').value = amount;
-        noteEl.style.color = 'var(--primary-dark)';
-        noteEl.textContent = 'AI가 읽은 금액이에요. 다르면 고쳐주세요.';
+        const est = result.totalFare;
+        const wayOff = est > 0 && (amount > est * 5 || amount < est / 5);
+        noteEl.style.color = wayOff ? 'var(--danger)' : 'var(--primary-dark)';
+        noteEl.textContent = wayOff
+          ? `AI가 ${won(amount)}로 읽었어요. 예상(${won(est)})과 차이가 커요 — 자릿수를 꼭 확인하세요.`
+          : 'AI가 읽은 금액이에요. 다르면 고쳐주세요.';
       } else {
         noteEl.style.color = 'var(--danger)';
         noteEl.textContent = '금액을 못 읽었어요. 직접 입력해주세요.';
@@ -3599,10 +3603,7 @@ function renderSettlement(podId){
     }
   });
 
-  document.getElementById('btn-calc-settlement').addEventListener('click', () => {
-    const input = document.getElementById('actual-fare');
-    const actual = Number(input.value) || 0;
-    if (actual <= 0) { input.focus(); return; }
+  function applySettlement(actual){
     const weights = result.perPerson.map(p => p.fare);
     const shares = splitProportional(actual, weights);
     pod.settlement = result.perPerson.map((p, i) => ({ nickname: p.nickname, amount: shares[i] }));
@@ -3618,6 +3619,24 @@ function renderSettlement(podId){
     document.getElementById('btn-share-account').hidden = false;
     document.getElementById('btn-finish-pod').disabled = false;
     renderPaidTracker(pod);
+  }
+
+  document.getElementById('btn-calc-settlement').addEventListener('click', () => {
+    const input = document.getElementById('actual-fare');
+    const actual = Number(input.value) || 0;
+    if (actual <= 0) { input.focus(); return; }
+    // 예상 총액과 5배 이상 벌어지면 오타나 OCR 오독일 가능성이 크다 — 그냥 계산하지 말고 한 번 더 확인받는다.
+    const est = result.totalFare;
+    if (est > 0 && (actual > est * 5 || actual < est / 5)) {
+      openModal({
+        title: '입력한 금액이 맞나요?',
+        body: `실제 택시비로 ${won(actual)}을 입력했어요. 예상 요금(${won(est)})과 차이가 너무 커요. 자릿수를 다시 확인해주세요.`,
+        confirmLabel: '이 금액이 맞아요',
+        onConfirm: () => applySettlement(actual),
+      });
+      return;
+    }
+    applySettlement(actual);
   });
 
   document.getElementById('btn-share-account').addEventListener('click', () => {
