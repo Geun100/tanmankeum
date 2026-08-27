@@ -1203,9 +1203,11 @@ function calcMatchScore(user, pod){
   return { total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, hypoPod, myId };
 }
 
-// 실제 경로 API 응답이 아직 없을 때만 쓰는 근사치: 기본 4,800원/1.6km + 이후 131m당 100원.
+// 실제 경로 API 응답이 아직 없을 때만 쓰는 근사치: 포항시 택시요금 공고 기준
+// (기본 4,500원/1.7km + 이후 128m당 100원, 2026-01-20 시행). 예전엔 4,800원/1.6km+131m를
+// 썼는데 이건 어느 지역 요금도 아닌 값이었다 — 실제 포항 택시를 타본 사람은 바로 알아챈다.
 function estimateFareMins(totalMeters){
-  const fare = Math.round((4800 + Math.ceil(Math.max(0, totalMeters - 1600) / 131) * 100) / 100) * 100;
+  const fare = Math.round((4500 + Math.ceil(Math.max(0, totalMeters - 1700) / 128) * 100) / 100) * 100;
   const mins = Math.max(3, Math.round(totalMeters / 1000 * 2.2 + 3));
   return { fare, mins };
 }
