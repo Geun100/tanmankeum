@@ -3340,33 +3340,38 @@ function renderSettlement(podId){
       },
     });
   });
-}
 
-document.getElementById('btn-finish-pod').addEventListener('click', () => {
-  const pod = findPod(STATE.myPodId);
-  openModal({
-    title: '정산을 완료하고 팟을 종료할까요?',
-    body: '이 팟과 채팅 내용이 전부 삭제돼요. 되돌릴 수 없어요.',
-    confirmLabel: '팟 종료하기',
-    danger: true,
-    onConfirm: async () => {
-      try {
-        if (SUPA_ENABLED) {
-          // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
-          // pods 행 하나만 지우면 참가자·채팅(계좌번호·영수증 사진 포함)까지 DB가 같이 지워준다.
-          const { error } = await supa.from('pods').delete().eq('id', pod.id);
-          if (error) throw error;
+  // STATE.myPodId를 다시 조회하는 대신 이 화면을 그릴 때 넘어온 podId(=pod)를 그대로 쓴다 —
+  // 예전엔 클릭 시점에 STATE.myPodId를 새로 찾았는데, 그 값이 화면이 그려진 뒤 어떤 이유로든
+  // 어긋나 있으면(널이 되거나 다른 팟을 가리키면) findPod가 undefined를 돌려줘서 pod.id 접근이
+  // 그 자리에서 바로 죽었다 — 사용자 입장에선 "완료 버튼 눌렀는데 정산 화면에 그대로 머무름"으로
+  // 보였다(에러 모달이 떴다 닫히면 결국 제자리). 버튼이 화면마다 새로 만들어지지 않으므로
+  // addEventListener 대신 onclick으로 덮어써서 다시 그릴 때마다 리스너가 쌓이지 않게 한다.
+  document.getElementById('btn-finish-pod').onclick = () => {
+    openModal({
+      title: '정산을 완료하고 팟을 종료할까요?',
+      body: '이 팟과 채팅 내용이 전부 삭제돼요. 되돌릴 수 없어요.',
+      confirmLabel: '팟 종료하기',
+      danger: true,
+      onConfirm: async () => {
+        try {
+          if (SUPA_ENABLED) {
+            // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
+            // pods 행 하나만 지우면 참가자·채팅(계좌번호·영수증 사진 포함)까지 DB가 같이 지워준다.
+            const { error } = await supa.from('pods').delete().eq('id', pod.id);
+            if (error) throw error;
+          }
+          STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
+          delete STATE.chatMessages[pod.id];
+          STATE.userState = '완료';
+          showScreen('screen-done');
+        } catch (e) {
+          showError(friendlyDbError(e));
         }
-        STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
-        delete STATE.chatMessages[pod.id];
-        STATE.userState = '완료';
-        showScreen('screen-done');
-      } catch (e) {
-        showError(friendlyDbError(e));
-      }
-    },
-  });
-});
+      },
+    });
+  };
+}
 
 /* ============ 14. 화면 7: 완료 → 재매칭 ============ */
 document.getElementById('btn-rematch').addEventListener('click', async () => {
