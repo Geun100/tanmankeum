@@ -3094,11 +3094,12 @@ async function renderPodChat(podId){
         const { error: upErr } = await supa.storage.from('settlement-photos').upload(path, file);
         if (upErr) throw upErr;
         const imageUrl = supa.storage.from('settlement-photos').getPublicUrl(path).data.publicUrl;
-        const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text: '', image_url: imageUrl });
+        // pod_messages.text에 "1자 이상" 제약이 있어서 빈 문자열은 못 넣는다. 사진 메시지는 '사진'으로 채운다.
+        const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text: '사진', image_url: imageUrl });
         if (error) throw error;
       } else {
         const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
-        STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text: '', imageUrl: dataUrl });
+        STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text: '사진', imageUrl: dataUrl });
       }
       renderPodChat(podId);
     } catch (e) {
