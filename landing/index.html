@@ -452,7 +452,7 @@
     btn.disabled = true; say('등록 중…', '');
     db.from('waitlist').insert({ email: email, source: 'landing' }).then(function(res){
       btn.disabled = false;
-      if (!res.error) { form.reset(); say('등록됐습니다. 지역이 열리면 이 주소로 알려드릴게요.', 'ok'); return; }
+      if (!res.error) { form.reset(); say('등록됐습니다. 서비스가 열리면 이 주소로 알려드릴게요.', 'ok'); return; }
       // 23505 = unique_violation — 이미 등록된 주소는 사용자 입장에서 실패가 아니다.
       if (res.error.code === '23505') { form.reset(); say('이미 등록된 주소예요. 열리면 알려드릴게요.', 'ok'); return; }
       say('등록에 실패했습니다. 잠시 후 다시 시도해 주세요.', 'err');
