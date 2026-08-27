@@ -84,6 +84,15 @@
   @media(min-width:900px){h1{font-size:80px}}
   .hero p.lead{margin-top:18px;font-size:16px;color:var(--ink-soft);max-width:46ch}
   .hero-cta{margin-top:24px;display:flex;flex-wrap:wrap;gap:10px}
+  .hero-cta--primary{margin-top:28px;display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+  .hero-cta--primary .btn{box-shadow:var(--shadow-card)}
+  .hero-cta-note{font-size:13px;color:var(--ink-soft)}
+  .hero-alt-cta{margin-top:18px}
+  .hero-alt-cta summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-soft);list-style:none}
+  .hero-alt-cta summary::-webkit-details-marker{display:none}
+  .hero-alt-cta summary:hover{color:var(--ink)}
+  .hero-alt-cta[open] summary{margin-bottom:10px}
+  .hero-alt-cta .signup{margin-top:0;max-width:480px}
   .chips{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px}
   .chip{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-chip);padding:7px 12px;font-size:13px;font-weight:600;color:var(--ink-soft)}
 
@@ -325,19 +334,25 @@
       <div class="eyebrow" data-reveal>한동대 등 지방대생을 위한 합승</div>
       <h1 class="hero-h1" id="hero-h1">같은 방향이면 같이 타고, 탄 만큼만 나눠 냅니다</h1>
       <p class="lead" data-reveal style="transition-delay:.5s">버스가 끊기고 택시비는 부담스러운 시간, 목적지가 똑같은 사람을 찾을 필요 없습니다. 내 목적지가 상대의 택시 경로 위에 있으면 매칭됩니다. 어디서 내리고, 거기서 몇 분 걸어야 하는지까지 타기 전에 보여드립니다.</p>
-<form class="signup" data-reveal style="transition-delay:.6s" novalidate>
-        <div class="signup-row">
-          <input type="email" name="email" inputmode="email" autocomplete="email" required placeholder="이메일 주소" aria-label="이메일 주소">
-          <button class="btn btn--primary" type="submit">출시 알림 받기</button>
-        </div>
-        <p class="signup-note">내 지역에 열리면 가장 먼저 알려드립니다. 광고 메일은 보내지 않습니다.</p>
-        <p class="signup-msg" role="status" aria-live="polite"></p>
-      </form>
-      <div class="hero-cta" data-reveal style="transition-delay:.7s">
-        <a class="btn btn--ghost btn--lg" href="/">먼저 둘러보기</a>
+<div class="hero-cta hero-cta--primary" data-reveal style="transition-delay:.6s">
+        <a class="btn btn--primary btn--lg" href="/">지금 바로 택시팟 둘러보기</a>
+        <p class="hero-cta-note">가입 없이 바로 실제 화면에서 팟을 확인할 수 있어요</p>
+      </div>
+      <details class="hero-alt-cta" data-reveal style="transition-delay:.7s">
+        <summary>내 지역엔 아직 없나요? 열리면 알림 받기</summary>
+        <form class="signup" novalidate>
+          <div class="signup-row">
+            <input type="email" name="email" inputmode="email" autocomplete="email" required placeholder="이메일 주소" aria-label="이메일 주소">
+            <button class="btn btn--ghost" type="submit">출시 알림 받기</button>
+          </div>
+          <p class="signup-note">내 지역에 열리면 가장 먼저 알려드립니다. 광고 메일은 보내지 않습니다.</p>
+          <p class="signup-msg" role="status" aria-live="polite"></p>
+        </form>
+      </details>
+      <div class="hero-cta" data-reveal style="transition-delay:.8s">
         <a class="btn btn--ghost btn--lg" href="#how">이용 방법 보기</a>
       </div>
-      <div class="chips" data-reveal style="transition-delay:.8s">
+      <div class="chips" data-reveal style="transition-delay:.9s">
         <span class="chip">경로 기반 매칭</span>
         <span class="chip">한 팟 최대 4명</span>
         <span class="chip">한동대에서 시작</span>
@@ -458,12 +473,48 @@
     <div class="eyebrow">요금</div>
     <h2>탄만큼 이용료는 0원입니다</h2>
     <p class="sec-sub">택시비만 나눠 내면 됩니다. 정산은 팟 채팅방에서 직접 합니다.</p>
-    <div class="fare-panel">
-      <div class="fare-row"><span>혼자 탈 때 (포항역 → 한동대학교)</span><s>약 12,000원</s></div>
-      <div class="fare-row"><span>2명이 나눠 탈 때</span><b>1인 약 6,000원</b></div>
-      <div class="fare-row"><span>4명이 나눠 탈 때</span><b>1인 약 3,500원</b></div>
-      <div class="fare-row"><span>탄만큼 이용료</span><b>0원</b></div>
-      <p class="fare-note">예상 요금은 참여자와 최종 경로에 따라 달라질 수 있습니다. 실제 요금은 하차 시점 미터기 기준입니다.</p>
+    <div class="how-grid" style="margin-top:32px">
+      <div class="fare-panel" style="margin-top:0; max-width:none">
+        <div class="fare-row"><span>혼자 탈 때 (포항역 → 한동대학교)</span><s>약 12,000원</s></div>
+        <div class="fare-row"><span>2명이 나눠 탈 때</span><b>1인 약 6,000원</b></div>
+        <div class="fare-row"><span>4명이 나눠 탈 때</span><b>1인 약 3,500원</b></div>
+        <div class="fare-row"><span>탄만큼 이용료</span><b>0원</b></div>
+        <p class="fare-note">예상 요금은 참여자와 최종 경로에 따라 달라질 수 있습니다. 실제 요금은 하차 시점 미터기 기준입니다.</p>
+      </div>
+      <div class="how-preview">
+        <div class="phone-mock">
+          <span class="proto-badge">실제 앱 화면</span>
+          <div class="phone-frame">
+            <div class="phone-notch"></div>
+            <div class="phone-screen">
+              <div class="phone-statusbar"><span>9:41</span><span class="icons">•••• LTE</span></div>
+              <div class="phone-body">
+                <div class="info-box">
+                  <h3>참여자별 예상 정산 요약</h3>
+                  <div class="people-card" style="margin:0; border:none">
+                    <div class="participant-row" style="padding:8px 0"><span class="p-name">친구만나러</span><span class="participant-fare">7,755원</span></div>
+                    <div class="participant-row" style="padding:8px 0"><span class="p-name">포항</span><span class="participant-fare">6,245원</span></div>
+                  </div>
+                </div>
+                <div class="info-box" style="margin-top:10px">
+                  <h3>실제 택시비(원)</h3>
+                  <p class="callout" style="font-size:20px">14,000원</p>
+                </div>
+                <div class="info-box" style="margin-top:10px">
+                  <h3>인당 정산금</h3>
+                  <div class="people-card" style="margin:0; border:none">
+                    <div class="participant-row" style="padding:8px 0"><span class="p-name">친구만나러</span><span class="participant-fare">7,755원</span></div>
+                    <div class="participant-row" style="padding:8px 0"><span class="p-name">포항<span class="badge badge--me" style="margin-left:4px">나</span></span><span class="participant-fare">6,245원</span></div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn--primary btn--block" style="margin-top:14px">정산 완료하고 팟 종료</button>
+              </div>
+            </div>
+            <div class="phone-home"></div>
+          </div>
+        </div>
+        <p class="how-preview-note">실제 택시비를 입력하면, 각자 이동한 거리만큼 자동으로 나눠 계산합니다.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -483,16 +534,21 @@
 <section class="final">
   <div class="wrap">
     <h2>지금 같은 방향으로 가는 사람이 있습니다</h2>
-    <p>이메일을 남겨두면 내 지역에 팟이 열릴 때 알려드립니다.</p>
-    <form class="signup" novalidate>
+    <p>지금 바로 들어가서 내 경로에 맞는 팟이 있는지 확인해보세요.</p>
+    <div class="hero-cta hero-cta--primary" style="align-items:center">
+      <a class="btn btn--primary btn--lg" href="/">지금 바로 택시팟 둘러보기</a>
+    </div>
+    <details class="hero-alt-cta" style="text-align:left; max-width:480px; margin-left:auto; margin-right:auto">
+      <summary>내 지역엔 아직 없나요? 열리면 알림 받기</summary>
+      <form class="signup" novalidate>
         <div class="signup-row">
           <input type="email" name="email" inputmode="email" autocomplete="email" required placeholder="이메일 주소" aria-label="이메일 주소">
-          <button class="btn btn--primary" type="submit">출시 알림 받기</button>
+          <button class="btn btn--ghost" type="submit">출시 알림 받기</button>
         </div>
         <p class="signup-note">이메일은 출시·지역 오픈 알림에만 씁니다.</p>
         <p class="signup-msg" role="status" aria-live="polite"></p>
       </form>
-    <div class="hero-cta"><a class="btn btn--ghost btn--lg" href="/">먼저 둘러보기</a></div>
+    </details>
   </div>
 </section>
 
