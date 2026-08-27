@@ -3157,7 +3157,13 @@ async function renderPodChat(podId){
   const viewFinalBtn = document.getElementById('btn-view-final');
   if (viewFinalBtn) viewFinalBtn.addEventListener('click', () => { renderFinal(pod.id); showScreen('screen-final'); });
   const goSettlementBtn = document.getElementById('btn-go-settlement');
-  if (goSettlementBtn) goSettlementBtn.addEventListener('click', () => { renderSettlement(pod.id); showScreen('screen-settlement'); });
+  if (goSettlementBtn) goSettlementBtn.addEventListener('click', () => {
+    // 정산금액을 이미 계산해뒀으면(계좌번호 공유까지 하고 채팅방으로 돌아온 경우) 정산 화면을
+    // 다시 보여주는 대신 바로 종료 확인으로 간다 — 어차피 다 끝난 계산을 또 보여줄 필요 없다.
+    if (pod.settlement) { confirmFinishPod(pod); return; }
+    renderSettlement(pod.id);
+    showScreen('screen-settlement');
+  });
   const leaveBtn = document.getElementById('btn-leave-pod');
   if (leaveBtn) leaveBtn.addEventListener('click', () => {
     openModal({
@@ -3260,6 +3266,36 @@ function renderFinal(podId){
     } catch (e) {
       showError(friendlyDbError(e));
     }
+  });
+}
+
+// 정산 완료 확인 모달 + 실제 삭제. 정산 화면의 "정산 완료하고 팟 종료" 버튼과, 채팅방의
+// "정산하고 팟 종료하기" 버튼(이미 정산·계좌공유까지 끝난 뒤 돌아온 경우) 둘 다 이걸 부른다 —
+// 예전엔 채팅방 버튼이 무조건 정산 화면으로 다시 보냈는데, 계좌번호까지 공유하고 온 사람한테는
+// 이미 끝난 계산을 다시 보여주는 셈이라 한 번 더 누르게 만드는 불필요한 단계였다.
+function confirmFinishPod(pod){
+  openModal({
+    title: '정산을 완료하고 팟을 종료할까요?',
+    body: '이 팟과 채팅 내용이 전부 삭제돼요. 되돌릴 수 없어요.',
+    confirmLabel: '팟 종료하기',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        if (SUPA_ENABLED) {
+          // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
+          // pods 행 하나만 지우면 참가자·채팅(계좌번호·영수증 사진 포함)까지 DB가 같이 지워준다.
+          const { error } = await supa.from('pods').delete().eq('id', pod.id);
+          if (error) throw error;
+        }
+        STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
+        delete STATE.chatMessages[pod.id];
+        STATE.userState = '완료';
+        renderDoneSummary(pod); // STATE.pods에선 방금 빠졌지만 pod 객체 자체(경로·정산 내역)는 그대로 살아있다
+        showScreen('screen-done');
+      } catch (e) {
+        showError(friendlyDbError(e));
+      }
+    },
   });
 }
 
@@ -3410,29 +3446,7 @@ function renderSettlement(podId){
   // 보였다(에러 모달이 떴다 닫히면 결국 제자리). 버튼이 화면마다 새로 만들어지지 않으므로
   // addEventListener 대신 onclick으로 덮어써서 다시 그릴 때마다 리스너가 쌓이지 않게 한다.
   document.getElementById('btn-finish-pod').onclick = () => {
-    openModal({
-      title: '정산을 완료하고 팟을 종료할까요?',
-      body: '이 팟과 채팅 내용이 전부 삭제돼요. 되돌릴 수 없어요.',
-      confirmLabel: '팟 종료하기',
-      danger: true,
-      onConfirm: async () => {
-        try {
-          if (SUPA_ENABLED) {
-            // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
-            // pods 행 하나만 지우면 참가자·채팅(계좌번호·영수증 사진 포함)까지 DB가 같이 지워준다.
-            const { error } = await supa.from('pods').delete().eq('id', pod.id);
-            if (error) throw error;
-          }
-          STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
-          delete STATE.chatMessages[pod.id];
-          STATE.userState = '완료';
-          renderDoneSummary(pod); // STATE.pods에선 방금 빠졌지만 pod 객체 자체(경로·정산 내역)는 그대로 살아있다
-          showScreen('screen-done');
-        } catch (e) {
-          showError(friendlyDbError(e));
-        }
-      },
-    });
+    confirmFinishPod(pod);
   };
 }
 
