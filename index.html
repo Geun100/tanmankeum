@@ -2278,9 +2278,14 @@ function dropNameFor(userDest, walkDist){
   return walkDist < 50 ? userDest : `${userDest} 인근`;
 }
 
+// 설정 화면을 열 때의 STATE.myPodId를 기억해둔다 — 저장하기를 누르는 시점에 다시 읽지 않는다.
+// (정산 종료 버튼과 같은 문제였다: 화면을 연 뒤 이 값이 바뀌면 저장 시점 조회가 엉뚱한/빈 값을
+// 가리킬 수 있다.)
+let settingsPodId = null;
 function openSettings(){
   const u = STATE.user;
   if (!u) return;
+  settingsPodId = STATE.myPodId;
   obMode = 'settings';
   document.getElementById('ob-profile-back-btn').hidden = false;
   document.getElementById('ob-route-back-btn').dataset.back = 'screen-ob-profile';
@@ -2324,7 +2329,7 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
 
   if (obMode === 'settings') {
     try {
-      const mine = findPod(STATE.myPodId);
+      const mine = findPod(settingsPodId);
       if (!mine || mine.leaderId !== STATE.user.id) {
         showError('지금은 값을 바꿀 수 없어요. 채팅방에서 확인해주세요.');
         return;
@@ -2422,7 +2427,7 @@ async function renderHome(){
     <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
-    renderPodChat(STATE.myPodId);
+    renderPodChat(myPod.id); // STATE.myPodId를 다시 읽지 않는다 — 바로 위에서 이미 찾아둔 그 팟이다.
     showScreen('screen-pod-chat');
   });
   renderPodList();
@@ -2564,7 +2569,18 @@ async function renderPodDetail(podId){
       return;
     }
     const idx = STATE.pods.findIndex(p => p.id === podId);
-    if (idx >= 0) STATE.pods[idx] = fresh; else STATE.pods.push(fresh);
+    // finalResult/settlement는 DB에 저장 안 하는 클라이언트 전용 값이다(정산금액 계산하기로만
+    // 채워짐) — fresh는 DB에서 막 다시 읽어온 값이라 이 필드가 없다. 그대로 덮어쓰면 계좌번호
+    // 공유하고 채팅방 갔다가 정산 화면에 돌아왔을 때 "정산 완료하고 팟 종료" 버튼이 다시
+    // disabled가 되고, 이미 낸 정산금액도 화면에서 사라졌다(실제로 그랬다). 갱신 전 값이 있으면
+    // 새 pod 객체로 옮겨 살려둔다.
+    if (idx >= 0) {
+      fresh.finalResult = STATE.pods[idx].finalResult;
+      fresh.settlement = STATE.pods[idx].settlement;
+      STATE.pods[idx] = fresh;
+    } else {
+      STATE.pods.push(fresh);
+    }
     // 보는 중에 다른 사람이 참가/탈퇴하면 정원·요금이 실시간으로 바뀐다.
     subscribePod(podId, () => { if (document.getElementById('screen-pod-detail').classList.contains('active')) renderPodDetail(podId); });
   }
@@ -2787,7 +2803,18 @@ async function renderPodChat(podId){
       return;
     }
     const idx = STATE.pods.findIndex(p => p.id === podId);
-    if (idx >= 0) STATE.pods[idx] = fresh; else STATE.pods.push(fresh);
+    // finalResult/settlement는 DB에 저장 안 하는 클라이언트 전용 값이다(정산금액 계산하기로만
+    // 채워짐) — fresh는 DB에서 막 다시 읽어온 값이라 이 필드가 없다. 그대로 덮어쓰면 계좌번호
+    // 공유하고 채팅방 갔다가 정산 화면에 돌아왔을 때 "정산 완료하고 팟 종료" 버튼이 다시
+    // disabled가 되고, 이미 낸 정산금액도 화면에서 사라졌다(실제로 그랬다). 갱신 전 값이 있으면
+    // 새 pod 객체로 옮겨 살려둔다.
+    if (idx >= 0) {
+      fresh.finalResult = STATE.pods[idx].finalResult;
+      fresh.settlement = STATE.pods[idx].settlement;
+      STATE.pods[idx] = fresh;
+    } else {
+      STATE.pods.push(fresh);
+    }
     // 다른 참여자의 입장/퇴장/메시지가 오면 이 화면을 다시 그린다. 화면을 나가면 showScreen()이 구독을 끊는다.
     subscribePod(podId, () => { if (document.getElementById('screen-pod-chat').classList.contains('active')) renderPodChat(podId); });
   }
