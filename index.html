@@ -417,6 +417,20 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .empty-hero{ text-align:center; padding:24px 8px; }
   .empty-hero .emoji{ font-size:40px; display:block; margin-bottom:14px; }
 
+  .done-hero{ text-align:center; padding:40px 8px 8px; }
+  .done-check{ width:64px; height:64px; border-radius:50%; background:var(--green-soft); color:var(--green);
+    display:flex; align-items:center; justify-content:center; margin:0 auto 18px; animation:done-pop 420ms cubic-bezier(.34,1.56,.64,1); }
+  @keyframes done-pop{ from{ transform:scale(.4); opacity:0; } to{ transform:scale(1); opacity:1; } }
+  .done-summary-card{ margin-top:28px; background:var(--surface); border-radius:var(--radius-card); box-shadow:var(--shadow-card); padding:18px 20px; text-align:left; }
+  .done-summary-route{ font-size:15px; font-weight:700; margin-bottom:2px; }
+  .done-summary-meta{ font-size:12.5px; color:var(--ink-soft); margin-bottom:14px; }
+  .done-summary-row{ display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-top:1px solid var(--line); font-size:13.5px; }
+  .done-summary-row:first-of-type{ border-top:none; }
+  .done-summary-row strong{ font-weight:800; font-variant-numeric:tabular-nums; }
+  .done-summary-total{ margin-top:4px; padding-top:12px; border-top:1px solid var(--line); display:flex; align-items:baseline; justify-content:space-between; }
+  .done-summary-total span{ font-size:13px; color:var(--ink-soft); }
+  .done-summary-total strong{ font-size:19px; font-weight:800; color:var(--primary-dark); font-variant-numeric:tabular-nums; }
+
   @media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important; } }
   :focus-visible{ outline:2px solid var(--primary); outline-offset:2px; }
 </style>
@@ -663,10 +677,12 @@ window.__kakaoReady = new Promise((resolve, reject) => {
     <!-- 7. 완료 -->
     <section class="screen" id="screen-done" aria-label="팟 완료">
       <div class="screen-body">
-        <div class="empty-hero">
+        <div class="done-hero">
+          <div class="done-check" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
           <p class="page-title" style="font-size:22px;">팟이 완료됐어요</p>
           <p class="page-sub">정산까지 마쳤어요. 수고하셨어요!</p>
         </div>
+        <div id="done-summary"></div>
       </div>
       <div class="cta-dock">
         <button class="btn btn--primary btn--block" id="btn-rematch">새 팟 찾으러 가기</button>
@@ -3247,6 +3263,23 @@ function renderFinal(podId){
   });
 }
 
+// 팟 종료 화면에 방금 정산한 내역을 요약해서 보여준다. 예전엔 "팟이 완료됐어요" 한 줄만 있고
+// 밑에 빈 화면이라, 실제로 뭘 얼마씩 나눴는지 다시 확인할 방법이 없었다.
+function renderDoneSummary(pod){
+  const el = document.getElementById('done-summary');
+  if (!el) return;
+  if (!pod.settlement || !pod.settlement.length) { el.innerHTML = ''; return; }
+  const total = pod.settlement.reduce((s, x) => s + x.amount, 0);
+  el.innerHTML = `
+    <div class="done-summary-card">
+      <p class="done-summary-route">${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</p>
+      <p class="done-summary-meta">${pod.departTime} 출발 · ${pod.settlement.length}명 정산</p>
+      ${pod.settlement.map(s => `<div class="done-summary-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></div>`).join('')}
+      <div class="done-summary-total"><span>실제 택시비 합계</span><strong>${won(total)}</strong></div>
+    </div>
+  `;
+}
+
 /* ============ 13. 화면 6: 정산 ============ */
 function renderSettlement(podId){
   const pod = findPod(podId);
@@ -3393,6 +3426,7 @@ function renderSettlement(podId){
           STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
           delete STATE.chatMessages[pod.id];
           STATE.userState = '완료';
+          renderDoneSummary(pod); // STATE.pods에선 방금 빠졌지만 pod 객체 자체(경로·정산 내역)는 그대로 살아있다
           showScreen('screen-done');
         } catch (e) {
           showError(friendlyDbError(e));
