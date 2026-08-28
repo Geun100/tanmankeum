@@ -1137,28 +1137,20 @@ function recommendDropOff(userDest, pod){
 
 function walkTimeOf(meters){ return meters < 1 ? 0 : Math.max(1, Math.round(meters / 70)); } // 도보 약 70m/분
 
-// 그룹 안에서 원점으로부터 가장 먼 목적지 = 택시가 실제로 가는 최종 목적지(trunk 경로의 종점).
-// "팟장"은 고정된 사회적 역할(확정/취소 권한)일 뿐이고, 실제 경로 종점은 인원이 바뀔 때마다 다시 정한다 —
-// 그래야 나중에 합류한 사람이 더 멀어도 "먼저 판 만든 사람이 팟장"이라는 이유만으로 거부되지 않는다.
-// 여기선 아직 실제 도로 경로가 없을 수도 있어 직선거리로 고른다(누가 더 먼지 대소 비교만 하면 되므로 근사로 충분).
-function trunkDestOf(originName, dests){
-  if (!dests.length) return null;
-  const o = placeCoord(originName);
-  let best = dests[0], bestDist = -Infinity;
-  dests.forEach(d => {
-    const c = placeCoord(d);
-    const dd = (o && c) ? dist(o, c) : 0;
-    if (dd > bestDist) { bestDist = dd; best = d; }
-  });
-  return best;
+// 최종 목적지(trunk 경로의 종점)는 언제나 "팟장의 목적지"다. 팟장 목적지는 그 팟에서만 최종 목적지가
+// 되고, 다른 사람이 더 먼 곳으로 합류해도 팟장 목적지를 밀어내지 않는다 — 각자의 목적지는 자기 팟에서만
+// 최종 목적지 역할을 한다. 그래서 합류 조건은 "누가 더 먼가"가 아니라 "팟장 경로 위, 도보 10분 이내인가"다.
+function leaderDestOf(pod){
+  const leader = pod.participants.find(p => p.isLeader);
+  return leader ? leader.dest : (pod.participants[0] && pod.participants[0].dest) || null;
 }
 
 // pod.leaderDest(=trunk)/routeStops/참가자별 하차지점을 현재 참가자 구성 기준으로 다시 계산해 pod에 반영한다.
-// trunk가 바뀌면 원래 있던 사람들 하차지점도 같이 바뀌므로, 참가자가 늘거나 줄 때마다 반드시 다시 불러야 한다
-// (podFromRow/makePod/join 이후 등 — 저장된 값을 믿지 않고 항상 다시 계산한다는 기존 원칙의 연장).
+// trunk는 팟장 목적지로 고정이라 참가자 구성과 무관하지만, 참가자가 늘거나 줄면 각자의 하차지점은
+// 다시 계산해야 하므로 여전히 참가자 변경 시마다 불러야 한다.
 function applyTrunk(pod){
   if (!pod.participants.length) return pod;
-  pod.leaderDest = trunkDestOf(pod.originName, pod.participants.map(p => p.dest));
+  pod.leaderDest = leaderDestOf(pod);
   pod.routeStops = buildRouteStops(pod.originName, pod.leaderDest);
   pod.participants.forEach(p => { p.dropOff = recommendDropOff(p.dest, pod); });
   return pod;
@@ -1206,7 +1198,8 @@ function calcMatchScore(user, pod){
   const ORIGIN_WALK_RADIUS_M = 300;
   const nearOrigin = originDist <= ORIGIN_WALK_RADIUS_M;
 
-  // 내가 합류했을 때를 가정해 trunk(최종 목적지)를 다시 잡고 전원 하차지점을 재계산한다.
+  // 내가 합류했을 때를 가정해 전원(나 포함) 하차지점을 재계산한다. trunk(최종 목적지)는 팟장 목적지로
+  // 고정이라 내가 합류해도 안 바뀐다 — 내 목적지는 어디까지나 내 팟에서만 최종 목적지가 된다.
   // 이미 이 팟에 있으면(내 팟을 보는 경우) 나를 또 추가하지 않는다 — 안 그러면 인원수가 부풀고
   // 참가자 목록에도 나와 겹치는 항목이 하나 더 생긴다.
   const alreadyIn = pod.participants.some(p => p.id === user.id);
@@ -1215,9 +1208,9 @@ function calcMatchScore(user, pod){
     .map(p => Object.assign({}, p));
   const hypoPod = applyTrunk(Object.assign({}, pod, { participants: hypoParticipants }));
 
-  // 이 조합이 성립하려면: 참가자 전원(나 포함)이 각자 하차지점에서 도보 10분 안에 목적지에 닿아야 한다.
-  // 내가 trunk를 더 멀리 밀어내는 쪽이면, 원래 있던 사람들 하차가 그만큼 멀어질 수도 있으므로
-  // 그 사람들까지 같이 재검증한다 — 나 혼자 걸을 만하다고 매칭이 성립하는 게 아니다.
+  // 이 조합이 성립하려면: 나를 포함해 참가자 전원이 팟장 경로 위 하차지점에서 도보 10분 안에
+  // 자기 목적지에 닿아야 한다. trunk가 고정이므로 원래 있던 사람들 하차지점은 내가 합류해도 안 바뀐다 —
+  // 검증 대상은 사실상 나 하나지만, 구조를 단순하게 유지하려고 전원을 같이 재계산한다.
   // 동성끼리만 매칭한다. 성별은 최초 등록 후 잠겨서 안 바뀌므로(허위 입력 방지),
   // 팟 안 참가자 전원과 내 성별이 같아야만 합류할 수 있다.
   const sameGender = pod.participants.every(p => p.gender === user.gender);
@@ -2532,22 +2525,8 @@ function renderPodList(){
   // (fetchRoute가 실패한 경로도 캐시에 넣으므로 언젠가는 pending이 비고 멈춘다).
   const pending = allPreview.filter(x => !routeAttempted([x.pod.originName, x.pod.leaderDest]));
 
-  // 내가 합류했다고 가정했을 때의 trunk(=calcMatchScore가 판정에 쓰는 경로)도 따로 데워야 한다.
-  // 내 목적지가 지금 팟 인원 전원보다 멀면 trunk가 나로 옮겨가는데, 그 경로는 warmPodRoutes가
-  // 절대 미리 받아두지 않는 "이 팟의 원래 경로"와 다른 경로라서, 캐시가 없으면 각도 근사치로
-  // 대충 판정하다가 실제로는 참가 가능한 조합을 "너무 멀다"고 잘못 거절하는 일이 실제로 있었다.
-  const hypoTrunkPending = allPreview.map(x => {
-      if (x.pod.participants.some(p => p.id === u.id)) return null; // 내 팟이면 판정 대상이 아니다
-      const hypoTrunk = trunkDestOf(x.pod.originName, x.pod.participants.map(p => p.dest).concat([u.dest]));
-      return hypoTrunk !== x.pod.leaderDest ? [x.pod.originName, hypoTrunk] : null;
-    })
-    .filter(pair => pair && !routeAttempted(pair));
-
-  if (pending.length || hypoTrunkPending.length) {
-    Promise.all([
-      ...pending.slice(0, WARM_BATCH).map(x => warmPodRoutes(x.pod)),
-      ...hypoTrunkPending.slice(0, WARM_BATCH).map(pair => fetchRoute(pair)),
-    ]).then(() => renderPodList());
+  if (pending.length) {
+    Promise.all(pending.slice(0, WARM_BATCH).map(x => warmPodRoutes(x.pod))).then(() => renderPodList());
   }
   // 실제 사용자를 시드/더미 계정보다 항상 앞에 둔다(정렬 기준이 뭐든 1순위로 적용).
   // seedLeaderIds가 아직 안 채워졌으면(첫 렌더) 이번 패스는 구분 없이 그리고, 로드되는 대로
