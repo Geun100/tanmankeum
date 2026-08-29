@@ -265,6 +265,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .pod-card.is-blocked{ opacity:.55; }
   .pod-card-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .pod-card-top strong{ font-size:16px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pod-card-badges{ flex-shrink:0; display:flex; align-items:center; gap:6px; }
   .pod-card-leader{ flex-shrink:0; display:inline-flex; align-items:center; font-size:11px; font-weight:700;
     padding:4px 10px; border-radius:var(--radius-pill); background:var(--orange-soft); color:#9c5008; white-space:nowrap; }
   .pod-meta{ font-size:12.5px; color:var(--muted); }
@@ -285,6 +286,13 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .badge--recruit{ background:var(--pending-soft); color:var(--pending); }
   .badge--confirmed{ background:var(--green-soft); color:var(--green); }
   .badge--done{ background:var(--line); color:var(--ink-soft); }
+  .badge--match{ background:var(--primary-soft); color:var(--primary-dark); gap:3px; }
+  .badge--match svg{ flex-shrink:0; }
+  .match-reason-head{ display:flex; align-items:center; gap:8px; }
+  .match-reason-label{ flex:1; font-size:13px; font-weight:600; color:var(--ink); }
+  .match-reason-link{ appearance:none; border:none; background:none; padding:4px 2px; font-size:13px; font-weight:600;
+    color:var(--primary); cursor:pointer; flex-shrink:0; }
+  .match-reason-link:disabled{ color:var(--muted); cursor:default; }
 
   .map-card{ background:var(--surface); border-radius:var(--radius-card); padding:12px; margin-bottom:16px; box-shadow:var(--shadow-card); }
   .kakao-map-box{ width:100%; height:220px; border-radius:var(--radius-input); overflow:hidden; background:var(--paper); }
@@ -620,7 +628,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           <span class="section-label">추천 팟</span>
           <div class="select-row">
             <select id="sort-select" aria-label="정렬">
-              <option value="match">추천순</option>
+              <option value="match">AI 추천</option>
               <option value="fare">요금 낮은순</option>
               <option value="time">출발시간 빠른순</option>
               <option value="origin">출발지 가까운순</option>
@@ -2584,7 +2592,10 @@ function renderPodList(){
     li.innerHTML = `
       <div class="pod-card-top">
         <strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong>
-        <span class="pod-card-leader">${leaderNickname} 팟장</span>
+        <div class="pod-card-badges">
+          <span class="badge badge--match">${ICON_SPARK} ${prev.matchScore.total}점</span>
+          <span class="pod-card-leader">${leaderNickname} 팟장</span>
+        </div>
       </div>
       <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}</p>
       ${savingsHtml}
@@ -2667,8 +2678,12 @@ async function renderPodDetail(podId){
   if (prev.eligible) {
     html += `
       <div class="info-box" id="match-reason-box">
-        <button class="btn btn--ghost btn--block" id="btn-match-reason">${ICON_SPARK} 매칭 점수 ${prev.matchScore.total}점 — AI한테 이유 물어보기</button>
-        <p class="fine-note" id="match-reason-text" style="margin-top:10px; display:none;"></p>
+        <div class="match-reason-head">
+          <span class="badge badge--match">${ICON_SPARK} ${prev.matchScore.total}점</span>
+          <span class="match-reason-label">AI 매칭 이유</span>
+          <button type="button" class="match-reason-link" id="btn-match-reason">보기</button>
+        </div>
+        <p class="fine-note" id="match-reason-text" style="margin-top:8px; display:none;"></p>
       </div>
     `;
   }
@@ -2745,7 +2760,7 @@ async function renderPodDetail(podId){
   const matchReasonBtn = document.getElementById('btn-match-reason');
   if (matchReasonBtn) matchReasonBtn.addEventListener('click', async () => {
     matchReasonBtn.disabled = true;
-    matchReasonBtn.textContent = 'AI가 보는 중…';
+    matchReasonBtn.textContent = '보는 중…';
     const textEl = document.getElementById('match-reason-text');
     try {
       const ms = prev.matchScore;
@@ -2769,7 +2784,7 @@ async function renderPodDetail(podId){
       }
     } catch (e) {
       matchReasonBtn.disabled = false;
-      matchReasonBtn.innerHTML = `${ICON_SPARK} 매칭 점수 ${prev.matchScore.total}점 — AI한테 이유 물어보기`;
+      matchReasonBtn.textContent = '보기';
       showError('지금은 이유를 못 받아왔어요. 잠시 후 다시 시도해주세요.');
     }
   });
