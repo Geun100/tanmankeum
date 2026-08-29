@@ -376,6 +376,9 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   .bot-person-name .badge{ font-size:10px; padding:1px 6px; margin-left:2px; }
   .bot-person-fare{ font-size:13.5px; font-weight:700; color:var(--primary-dark); flex-shrink:0; }
   .bot-person-route{ margin:2px 0 0; font-size:12.5px; color:var(--ink-soft); }
+  .bot-person-links{ display:flex; gap:12px; margin-top:4px; }
+  .bot-person-links a{ display:inline-flex; align-items:center; gap:3px; font-size:11.5px; font-weight:600; color:var(--primary); }
+  .bot-person-links svg{ flex-shrink:0; }
   .bot-total-row{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:13.5px; font-weight:700; }
   .bot-total-row strong{ color:var(--primary-dark); font-size:15px; }
   .chat-input-dock{ flex-shrink:0; display:flex; align-items:flex-end; gap:8px; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--surface); }
@@ -2877,6 +2880,10 @@ function buildBotSummaryHtml(pod, result, intro){
   const settlementMap = {};
   (pod.settlement || []).forEach(s => { settlementMap[s.nickname] = s.amount; });
   const arrival = minToTime(timeToMin(pod.departTime) + result.totalMins);
+  // 팟장은 출발지+모든 경유지(하차지점)+최종 목적지가 순서대로 찍힌 전체 경로 하나,
+  // 나머지 참가자는 "나만의" 두 구간(택시로 내가 내리는 곳까지, 거기서 내 목적지까지 도보)만
+  // 본다 — 남의 하차지점까지 낀 경로를 보여주면 오히려 헷갈린다.
+  const leaderRouteHref = kakaoMapMultiRouteUrl(result.stops);
   return `
     <span class="chat-name">🤖 택시팟 매니저</span>
     ${intro ? `<p class="bot-intro">${intro}</p>` : ''}
@@ -2888,6 +2895,18 @@ function buildBotSummaryHtml(pod, result, intro){
           : `${escapeHtml(p.dropPoint)} 하차 → ${escapeHtml(p.dest)}${p.walkTime > 0 ? ` (도보 ${p.walkTime}분)` : ''}`;
         const isLeader = p.id === leaderId;
         const settled = settlementMap[p.nickname];
+        const destCoord = placeCoord(p.dest);
+        const dropLinkHref = p.dropCoord ? kakaoMapPlaceUrl(p.dropPoint, p.dropCoord) : null;
+        const walkLinkHref = (p.walkTime > 0 && destCoord) ? kakaoMapRouteUrl(p.dest, p.dropPoint, p.dropCoord) : null;
+        let linksHtml;
+        if (isLeader && leaderRouteHref) {
+          linksHtml = `<a target="_blank" rel="noopener" href="${leaderRouteHref}">${ICON_PIN} 전체 경로(출발지·경유지·목적지) 카카오맵</a>`;
+        } else {
+          const parts = [];
+          if (dropLinkHref) parts.push(`<a target="_blank" rel="noopener" href="${dropLinkHref}">${ICON_PIN} 하차지점</a>`);
+          if (walkLinkHref) parts.push(`<a target="_blank" rel="noopener" href="${walkLinkHref}">${ICON_WALK} 목적지까지 도보</a>`);
+          linksHtml = parts.join('');
+        }
         return `
           <div class="bot-person">
             <div class="bot-person-top">
@@ -2896,6 +2915,7 @@ function buildBotSummaryHtml(pod, result, intro){
             </div>
             <p class="bot-person-route">${routeText}</p>
             ${settled != null ? `<p class="bot-person-route">정산금 ${won(settled)}</p>` : ''}
+            ${linksHtml ? `<div class="bot-person-links">${linksHtml}</div>` : ''}
           </div>`;
       }).join('')}
     </div>
