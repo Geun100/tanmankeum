@@ -10,6 +10,20 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://tanmankeum.vercel.app/">
 <meta name="twitter:card" content="summary">
+
+<!-- PWA: "홈 화면에 추가"로 앱처럼 설치할 수 있게 하는 최소 구성. 오프라인 캐싱은 안 한다(sw.js 참고) -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0078ff">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="탄만큼">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+  }
+</script>
+
 <script src="kakao-keys.local.js"></script>
 <script src="supabase-keys.local.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
