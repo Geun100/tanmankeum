@@ -1,0 +1,9 @@
+{
+  "name": "tanmankeum-api",
+  "private": true,
+  "description": "api/*.js Vercel 서버리스 함수용 의존성. 프론트(index.html)는 이 패키지를 쓰지 않는다 — 순수 정적 파일 그대로 서빙됨.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2",
+    "web-push": "^3"
+  }
+}
