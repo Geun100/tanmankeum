@@ -989,6 +989,29 @@ function unsubscribePod(){
   if (realtimeChannel) { supa.removeChannel(realtimeChannel); realtimeChannel = null; }
 }
 
+// 홈 화면에서도 내 팟에 누가 들어오면 인원수 카드(my-status-card)가 바로 갱신되도록,
+// 내 팟 하나만 따로 구독한다. 팟 상세/채팅용 realtimeChannel과는 별개 채널이라 서로 간섭하지 않는다.
+// ("목록 화면은 재조회로 충분"이라는 기존 설계 결정의 예외 — 내 팟 카드만은 실시간이 필요하다.)
+let homeChannel = null;
+let homeSubPodId = null;
+function subscribeHome(podId){
+  if (podId === homeSubPodId && homeChannel) return; // 같은 팟이면 재구독 안 함(불필요한 채널 교체 방지)
+  if (homeChannel) { supa.removeChannel(homeChannel); homeChannel = null; }
+  homeSubPodId = podId;
+  if (!SUPA_ENABLED || !podId) return;
+  const refreshIfHome = () => {
+    if (document.getElementById('screen-home').classList.contains('active')) renderHome();
+  };
+  homeChannel = supa.channel('home:' + podId)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pod_participants', filter: 'pod_id=eq.' + podId }, refreshIfHome)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pods', filter: 'id=eq.' + podId }, refreshIfHome)
+    .subscribe();
+}
+function unsubscribeHome(){
+  if (homeChannel) { supa.removeChannel(homeChannel); homeChannel = null; }
+  homeSubPodId = null;
+}
+
 /* ============ 2. 유틸 ============ */
 function toRad(d){ return d * Math.PI / 180; }
 function toDeg(r){ return r * 180 / Math.PI; }
@@ -1469,6 +1492,8 @@ function showScreen(id){
   document.getElementById(id).classList.add('active');
   // 실시간 구독은 팟 상세/채팅 화면에서만 필요하다. 다른 화면으로 나가면 끊는다.
   if (id !== 'screen-pod-detail' && id !== 'screen-pod-chat') unsubscribePod();
+  // 홈 카드 실시간 구독은 홈에서만 유지한다.
+  if (id !== 'screen-home') unsubscribeHome();
 }
 // 뒤로가기로 홈에 돌아갈 땐 항상 renderHome()을 다시 돌린다 — 안 그러면 그새 팟에 참가/탈퇴해도
 // 홈 카드가 마지막으로 renderHome()이 실제로 실행됐던 시점 그대로 멈춰있는다(예: 다른 팟 참가하고
@@ -2506,6 +2531,8 @@ async function renderHome(){
   }
   const u = STATE.user, myPod = findPod(STATE.myPodId);
   const isLeaderOfOwn = myPod && myPod.leaderId === u.id;
+  // 홈에 머무는 동안 내 팟에 누가 들어오면 아래 인원수 표시가 실시간으로 갱신되도록 구독한다.
+  subscribeHome(myPod && myPod.id);
   const card = document.getElementById('my-status-card');
   // 남의 팟에 참가 중일 땐 내가 입력했던 값(STATE.user)이 아니라 실제 참가 중인 팟(myPod)의
   // 경로/시간을 보여준다 — 둘이 다를 수 있다(재등록 시도 등으로 STATE.user만 바뀐 경우).
