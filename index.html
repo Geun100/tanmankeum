@@ -1030,6 +1030,19 @@ function bearing(a, b){
 }
 function angleDiff(b1, b2){ const d = Math.abs(b1 - b2) % 360; return d > 180 ? 360 - d : d; }
 function won(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
+
+// "왜 이 금액이에요?" 펼치기 — calcFinalRouteAndFare가 perPerson[i].breakdown에 넣어준
+// 구간별 내역(이 구간 요금 ÷ 그때 같이 타고 있던 인원수)을 그대로 문장으로 보여준다.
+// <details>/<summary>라 JS 없이 클릭으로 펼쳐진다.
+// isActual=true면 실제 택시비 입력 후 화면에서 쓰는 것 — 아래 구간별 금액은 "예상 요금" 기준
+// 비율 계산 근거라 실제 정산액(위에 표시된 금액)과 합계가 정확히 같지 않을 수 있다는 걸 알려준다.
+function fareBreakdownHtml(p, isActual){
+  if (!p.breakdown || !p.breakdown.length) return '';
+  const rows = p.breakdown.map(b =>
+    `<p class="fine-note" style="margin:2px 0;">${escapeHtml(b.from)} → ${escapeHtml(b.to)} 구간: ${won(b.segmentFare)} ÷ ${b.riders}명 = <strong>${won(b.share)}</strong></p>`
+  ).join('') + (isActual ? '<p class="fine-note" style="margin:4px 0 0; color:var(--muted);">※ 아래는 예상 요금 기준 나눔 비율이에요. 실제 금액은 위 총액에 맞춰 같은 비율로 조정돼요.</p>' : '');
+  return `<details style="margin:2px 0 6px;"><summary style="cursor:pointer; color:var(--primary-dark); font-size:13px;">왜 이 금액이에요?</summary>${rows}</details>`;
+}
 // 닉네임·계좌번호처럼 사용자가 직접 입력한 문자열을 템플릿 리터럴로 innerHTML에 꽂을 때 반드시
 // 거친다. 온보딩 입력창의 maxlength는 클라이언트 표시일 뿐이라, Supabase REST API를 직접 호출하면
 // 누구나 길이·내용 제한 없이 어떤 문자열이든 nickname으로 저장할 수 있다 — 실제로 이 앱은
@@ -1072,6 +1085,25 @@ const ANGLE_THRESHOLD_DEG = 25; // 후보 정류장(routeStops) 필터링용 각
 const DIST_BUFFER = 1.15;       // "거리가 비슷하면"의 허용 오차(15%, 위와 같은 용도)
 const ROUTE_CORRIDOR_M = 500;   // 실제 도로 경로에서 이만큼 안쪽이면 "경로 위"로 본다(도보 약 7분, 위와 같은 용도)
 const WALK_CAP_MIN = 10;        // 하차지점에서 실제 목적지까지 허용하는 최대 도보 시간(분). 매칭 성립의 최종 기준.
+
+// 출발지 근접도 / 경로 적합도에 공통으로 쓰는 3단계 반경. 300m=강력추천(같은 생활권),
+// 500m=매칭(도보 6~8분), 500~800m=조건부 매칭 — 이 마지막 구간은 500m 안에서 매칭이
+// 부족할 때(MIN_MATCH_RESULTS 미만)만 넓혀서 재탐색할 때 열어준다.
+const TIER_STRONG_M = 300;
+const TIER_MATCH_M = 500;
+const TIER_CONDITIONAL_M = 800;
+const MIN_MATCH_RESULTS = 3; // 500m 기준 결과가 이 수 미만이면 800m로 넓혀서 조건부 후보를 채운다.
+
+// 300/500/800m 3단계 근접도 점수. 가까울수록 만점, 조건부 구간(500~800m)은
+// allowConditional이 true일 때만(=매칭 부족해서 반경을 넓힌 재탐색일 때만) 점수를 준다 —
+// 평소엔 800m짜리 먼 후보가 점수만 낮게 슬쩍 끼어드는 걸 막는다.
+function tierScore(distance, fullScore, allowConditional){
+  if (!Number.isFinite(distance)) return 0;
+  if (distance <= TIER_STRONG_M) return fullScore;
+  if (distance <= TIER_MATCH_M) return Math.round(fullScore * 2 / 3);
+  if (allowConditional && distance <= TIER_CONDITIONAL_M) return Math.round(fullScore * 1 / 4);
+  return 0;
+}
 
 // 점 p와 선분 ab 사이 최단거리(미터). 위경도를 등거리 평면으로 근사한다 —
 // 수 km 범위에서 오차가 무시할 수준이라 경로선 판정에는 충분하다.
@@ -1227,21 +1259,36 @@ function nearestPointOnPath(coord, path){
 
 
 // 매칭 점수 100점 만점: 출발지근접30 + 목적지경로적합30 + 실경로포함25 + 출발시간차10 + 인원조건5
-function calcMatchScore(user, pod){
+// allowConditional: 500m 기준 매칭이 MIN_MATCH_RESULTS보다 적을 때만 true로 호출된다 —
+// 그때만 500~800m "조건부 매칭" 구간을 점수/자격 판정에 넣는다(renderPodList의 2차 패스).
+function calcMatchScore(user, pod, allowConditional = false){
   const uOrigin = placeCoord(user.origin), pOrigin = placeCoord(pod.originName);
   const originDist = (uOrigin && pOrigin) ? dist(uOrigin, pOrigin) : Infinity;
-  const originScore = Math.max(0, 30 - Math.round(originDist / 200)); // 200m당 1점 감점
+  const originScore = tierScore(originDist, 30, allowConditional);
 
+  // 목적지 방향 적합도. 실제 도로 경로가 이미 캐시돼 있으면(cachedRoute) 내 목적지가 그
+  // 경로선에서 실제로 몇 m 벗어나는지(distToPath)로 재는 게 방위각 근사보다 정확하다 —
+  // 카카오모빌리티 길찾기가 이미 준 실좌표 폴리라인을 그대로 재사용하는 거라 API를 더
+  // 부르지 않는다. 경로를 아직 못 받았을 때만 방위각 차이로 근사한다(폴백).
   const pDest = placeCoord(pod.leaderDest), uDest = placeCoord(user.dest);
-  const angleDiffDeg = (pOrigin && pDest && uDest) ? angleDiff(bearing(pOrigin, pDest), bearing(pOrigin, uDest)) : 180;
-  const fitScore = Math.max(0, 30 - Math.round(angleDiffDeg * (30 / ANGLE_THRESHOLD_DEG)));
+  const baseRouteForFit = cachedRoute([pod.originName, pod.leaderDest]);
+  let fitScore;
+  if (baseRouteForFit && baseRouteForFit.path.length > 1 && uDest) {
+    const corridorDist = distToPath(uDest, baseRouteForFit.path);
+    fitScore = tierScore(corridorDist, 30, allowConditional);
+  } else {
+    const angleDiffDeg = (pOrigin && pDest && uDest) ? angleDiff(bearing(pOrigin, pDest), bearing(pOrigin, uDest)) : 180;
+    fitScore = Math.max(0, 30 - Math.round(angleDiffDeg * (30 / ANGLE_THRESHOLD_DEG)));
+  }
 
-  // 출발지가 도보권(300m)이어야 한다. 이름이 완전히 같을 필요는 없다 — "포항역"과
+  // 출발지가 도보권이어야 한다. 이름이 완전히 같을 필요는 없다 — "포항역"과
   // "포항역 앞"처럼 실제로는 걸어서 만날 수 있는 곳인데 이름이 다르다는 이유로 매칭에서
   // 통째로 빠지면 안 된다. 물리적으로 같은 택시를 타려면 어차피 한 지점에서 만나야 하니
   // 정확한 합류 지점은 채팅으로 조율한다.
-  const ORIGIN_WALK_RADIUS_M = 300;
-  const nearOrigin = originDist <= ORIGIN_WALK_RADIUS_M;
+  // 반경 자체도 3단계를 따른다: 평소엔 500m(강력추천+매칭)까지만 자격을 주고, 800m(조건부)는
+  // allowConditional일 때만 열어준다.
+  const originLimit = allowConditional ? TIER_CONDITIONAL_M : TIER_MATCH_M;
+  const nearOrigin = originDist <= originLimit;
 
   // 내가 합류했을 때를 가정해 전원(나 포함) 하차지점을 재계산한다. trunk(최종 목적지)는 팟장 목적지로
   // 고정이라 내가 합류해도 안 바뀐다 — 내 목적지는 어디까지나 내 팟에서만 최종 목적지가 된다.
@@ -1274,8 +1321,10 @@ function calcMatchScore(user, pod){
   const sizeScore = sizeDiff === 0 ? 5 : sizeDiff === 1 ? 3 : sizeDiff === 2 ? 1 : 0;
 
   const total = Math.min(100, originScore + fitScore + routeScore + timeScore + sizeScore);
+  // 500m 안이었으면 강력추천/매칭, 그 바깥인데 조건부 확장 덕에 붙었으면 conditional=true.
+  const conditional = eligible && originDist > TIER_MATCH_M;
   return {
-    total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, hypoPod, myId,
+    total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, conditional, hypoPod, myId,
     originDistM: Number.isFinite(originDist) ? Math.round(originDist) : null, diffMin,
   };
 }
@@ -1352,9 +1401,16 @@ function calcFinalRouteAndFare(pod){
     // 위치면 호출마다 도로를 다르게 골라서 "그 구간이 전체 중 몇 %"가 크게 출렁였다(한 사람은
     // 정상 요금, 다른 사람은 몇 백 원만 뜨는 식). 총액은 정밀 요금 그대로 쓰고 나누는 비율만
     // 안정적인 값으로 고정한다.
+    // progressAlongPath는 "경로선에서 가장 가까운 지점"을 찾는 최근접 투영이라, 도로가
+    // 곡선이거나 근처에서 꺾이면(예: 아파트 단지 진입로) 실제로는 나중에 지나는 지점인데
+    // 경로 초반 구간에 잘못 스냅되어 진행거리가 거꾸로/거의 0으로 나올 수 있다. 그러면 이
+    // 구간의 weight가 1m에 가깝게 무너지고, 그 구간을 타는 사람의 요금·시간이 둘 다
+    // "100원대·1분" 식으로 같이 무너진다. 두 지점 사이 직선거리보다 도로거리가 더 짧을 수는
+    // 없으니(물리적 하한), 그 직선거리를 weight의 바닥값으로 강제해 이 붕괴를 막는다.
+    const straightLine = dist(coordOf(a), coordOf(b));
     const weight = hasPath
-      ? Math.max(1, progressOf(b) - progressOf(a))
-      : Math.max(1, dist(coordOf(a), coordOf(b)));
+      ? Math.max(straightLine, progressOf(b) - progressOf(a))
+      : Math.max(1, straightLine);
     if (hasPrecise) {
       segments.push({
         from: a, to: b, weight,
@@ -1391,13 +1447,20 @@ function calcFinalRouteAndFare(pod){
   const totalMins = segments.reduce((s, x) => s + x.mins, 0);
 
   // 각 구간 요금은 그 구간에 아직 타고 있는 사람들이 나눠 낸다.
+  // breakdown: "왜 이 금액인지"를 사용자에게 그대로 보여주기 위한 구간별 내역
+  // (정산 화면 등에서 fare와 별개로 표시). 최종 fares(정수 원 단위)는 rawShare 비율대로
+  // splitProportional이 반올림하므로, breakdown 항목 합계가 fare와 1~2원 정도 차이 날 수 있다
+  // — 반올림 나머지 배분 때문이라 정상이다.
   const dropIdxOf = p => stops.indexOf(p.dropOff.point);
   const rawShare = participants.map(() => 0);
+  const breakdowns = participants.map(() => []);
   participants.forEach((p, pi) => {
     const dropIdx = dropIdxOf(p);
     for (let i = 0; i < dropIdx; i++){
       const ridersOnSeg = participants.filter(q => dropIdxOf(q) > i).length || 1;
-      rawShare[pi] += segments[i].fare / ridersOnSeg;
+      const share = segments[i].fare / ridersOnSeg;
+      rawShare[pi] += share;
+      breakdowns[pi].push({ from: segments[i].from, to: segments[i].to, segmentFare: segments[i].fare, riders: ridersOnSeg, share: Math.round(share) });
     }
   });
   const fares = splitProportional(totalFare, rawShare);
@@ -1405,14 +1468,14 @@ function calcFinalRouteAndFare(pod){
   const perPerson = participants.map((p, pi) => ({
     id: p.id, nickname: p.nickname, dest: p.dest,
     dropPoint: p.dropOff.point, dropCoord: p.dropOff.coord, walkDist: p.dropOff.walkDist, walkTime: p.dropOff.walkTime,
-    fare: fares[pi],
+    fare: fares[pi], breakdown: breakdowns[pi],
   }));
   return { stops, segments, totalFare, totalMins, perPerson, isRealFare };
 }
 
 // 홈 목록/팟 상세 화면에서 "내가 참가했다면"을 미리 계산 (참가 전 미리보기)
-function previewJoin(pod, user){
-  const matchScore = calcMatchScore(user, pod);
+function previewJoin(pod, user, allowConditional = false){
+  const matchScore = calcMatchScore(user, pod, allowConditional);
   if (!matchScore.eligible) return { eligible: false, matchScore };
   // hypoPod는 calcMatchScore가 이미 trunk 재계산 + 전원 하차지점 갱신까지 끝내둔 상태다.
   const hypoPod = matchScore.hypoPod;
@@ -2568,9 +2631,20 @@ function renderPodList(){
 
   // 내 목적지가 경로 밖인 팟은 아예 안 보여준다. 참가할 수 없는 팟을 목록에 남기면
   // "참가 불가" 카드만 늘어나서 고를 게 없어 보인다.
+  // 1차 패스: 평소 반경(500m, TIER_MATCH_M)으로만 본다.
   const allPreview = list.map(p => ({ pod: p, prev: previewJoin(p, u) }));
-  const blockedCount = allPreview.filter(x => !x.prev.eligible).length;
-  const withPreview = allPreview.filter(x => x.prev.eligible);
+  let withPreview = allPreview.filter(x => x.prev.eligible);
+  // 2차 패스(조건부 매칭): 1차 결과가 MIN_MATCH_RESULTS보다 적으면, 1차에서 떨어진 팟만
+  // 800m(TIER_CONDITIONAL_M) 반경으로 다시 본다. 매칭이 이미 충분하면 굳이 반경을 넓히지 않는다 —
+  // "매칭 부족할 때만 확장"이라는 요구사항 그대로.
+  if (withPreview.length < MIN_MATCH_RESULTS) {
+    const rejected = allPreview.filter(x => !x.prev.eligible);
+    const conditionalPreview = rejected
+      .map(x => ({ pod: x.pod, prev: previewJoin(x.pod, u, true) }))
+      .filter(x => x.prev.eligible);
+    withPreview = withPreview.concat(conditionalPreview);
+  }
+  const blockedCount = allPreview.length - withPreview.length;
 
   // 아직 경로를 못 받은 팟이 있으면 받아온 뒤 한 번 다시 그린다(그래야 목록 요금이 실제 값이 된다).
   // 한 번에 WARM_BATCH개씩만 받는다 — 팟이 100개면 길찾기 호출도 100개가 한꺼번에 나가서
@@ -3488,7 +3562,7 @@ function renderFinal(podId){
   html += `<div class="info-box"><h3>예상 요금</h3>
     <p class="info-row info-row--highlight"><span>총 예상 요금</span><strong>${won(result.totalFare)}</strong></p>`;
   result.perPerson.forEach(p => {
-    html += `<p class="info-row"><span>${escapeHtml(p.nickname)}</span><strong>${won(p.fare)}</strong></p>`;
+    html += `<p class="info-row"><span>${escapeHtml(p.nickname)}</span><strong>${won(p.fare)}</strong></p>${fareBreakdownHtml(p)}`;
   });
   html += `<p class="fine-note" style="margin-top:8px;">${result.isRealFare
     ? '카카오내비 경로 기준 예상 요금이에요. 실제 요금은 교통상황에 따라 달라질 수 있어요.'
@@ -3576,7 +3650,10 @@ function renderDoneSummary(pod){
     <div class="done-summary-card">
       <p class="done-summary-route">${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</p>
       <p class="done-summary-meta">${pod.departTime} 출발 · ${pod.settlement.length}명 정산</p>
-      ${pod.settlement.map(s => `<div class="done-summary-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></div>`).join('')}
+      ${pod.settlement.map(s => {
+        const p = pod.finalResult && pod.finalResult.perPerson.find(x => x.nickname === s.nickname);
+        return `<div class="done-summary-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></div>${p ? fareBreakdownHtml(p, true) : ''}`;
+      }).join('')}
       <div class="done-summary-total"><span>실제 택시비 합계</span><strong>${won(total)}</strong></div>
     </div>
   `;
@@ -3647,7 +3724,7 @@ function renderSettlement(podId){
   let html = `
     <div class="info-box">
       <h3>참여자별 예상 정산 요약</h3>
-      ${result.perPerson.map(p => `<p class="info-row"><span>${escapeHtml(p.nickname)}</span><strong>${won(p.fare)}</strong></p>`).join('')}
+      ${result.perPerson.map(p => `<p class="info-row"><span>${escapeHtml(p.nickname)}</span><strong>${won(p.fare)}</strong></p>${fareBreakdownHtml(p)}`).join('')}
       <p class="info-row info-row--highlight" style="border-top:1px solid var(--line); margin-top:8px; padding-top:8px;"><span>예상 총액 (참고)</span><strong>${won(result.totalFare)}</strong></p>
     </div>
     <div class="field">
@@ -3698,7 +3775,10 @@ function renderSettlement(podId){
     const listEl = document.getElementById('settlement-list');
     const total = pod.settlement.reduce((s, x) => s + x.amount, 0);
     listEl.innerHTML = `<p class="callout">총 ${won(total)}</p>` +
-      pod.settlement.map(s => `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>`).join('');
+      pod.settlement.map(s => {
+        const p = result.perPerson.find(x => x.nickname === s.nickname);
+        return `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${p ? fareBreakdownHtml(p, true) : ''}`;
+      }).join('');
     document.getElementById('settlement-result').hidden = false;
     document.getElementById('account-field').hidden = false;
     document.getElementById('receipt-field').hidden = false;
@@ -3785,8 +3865,8 @@ function renderSettlement(podId){
 
     const listEl = document.getElementById('settlement-list');
     listEl.innerHTML = `<p class="callout">총 ${won(actual)}</p>`;
-    pod.settlement.forEach(s => {
-      listEl.innerHTML += `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>`;
+    pod.settlement.forEach((s, i) => {
+      listEl.innerHTML += `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${fareBreakdownHtml(result.perPerson[i], true)}`;
     });
     document.getElementById('settlement-result').hidden = false;
     document.getElementById('account-field').hidden = false;
