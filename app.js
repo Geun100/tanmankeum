@@ -1501,6 +1501,20 @@ function mapPickerReverseGeocode(lat, lng){
   });
 }
 
+// GeolocationPositionError.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT.
+// 셋을 뭉뚱그려 "권한을 확인해주세요"라고만 하면, 권한은 이미 허용했는데 GPS가 느려서
+// 타임아웃난 사람도 "권한이 문제"라고 오해해 브라우저 설정만 뒤지다 못 찾는다.
+function geoErrorMessage(err){
+  if (err && err.code === 1) return '위치 권한이 꺼져 있어요. 브라우저(또는 기기) 설정에서 이 사이트의 위치 접근을 허용해주세요.';
+  if (err && err.code === 3) return '위치를 찾는 데 시간이 너무 걸려요. 실내거나 신호가 약할 수 있어요. 잠시 후 다시 시도해주세요.';
+  if (err && err.code === 2) return '지금 위치를 확인할 수 없어요. GPS나 인터넷 연결 상태를 확인해주세요.';
+  return '위치를 가져오지 못했어요. 잠시 후 다시 시도해주세요.';
+}
+// iOS를 "홈 화면에 추가"해서 standalone(단독 앱)으로 열면, WebKit이 이 모드에서 위치 권한
+// 요청을 제대로 처리하지 못하는 오래된 버그가 있다(설정을 다 허용해도 실패/무응답). Safari
+// 탭으로 직접 열면 정상 동작하니, standalone에서 실패하면 그 안내를 따로 붙여준다.
+const IS_IOS_STANDALONE = /iPad|iPhone|iPod/.test(navigator.userAgent) && window.navigator.standalone === true;
+
 function mapPickerUseGPS(silent){
   if (!navigator.geolocation) { if (!silent) showError('이 브라우저에서는 위치 정보를 쓸 수 없어요.'); return; }
   navigator.geolocation.getCurrentPosition(
@@ -1509,8 +1523,17 @@ function mapPickerUseGPS(silent){
       mapPickerMap.setCenter(new kakao.maps.LatLng(latitude, longitude));
       mapPickerReverseGeocode(latitude, longitude);
     },
-    () => { if (!silent) showError('위치 권한을 확인해주세요.'); },
-    { enableHighAccuracy: true, timeout: 5000 }
+    (err) => {
+      if (silent) return;
+      if (IS_IOS_STANDALONE) {
+        showError('홈 화면 앱에서는 iOS 제약으로 위치를 못 가져올 수 있어요. Safari 앱으로 tanmankeum.vercel.app을 열어서 시도해보세요.');
+        return;
+      }
+      showError(geoErrorMessage(err));
+    },
+    // enableHighAccuracy:true는 iOS(특히 홈 화면 앱)에서 응답이 아예 안 오는 경우가 보고돼 있어
+    // 끈다 — 정확도는 조금 떨어지지만 응답 자체는 훨씬 안정적으로 온다.
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 30000 }
   );
 }
 document.getElementById('map-picker-gps-btn').addEventListener('click', () => mapPickerUseGPS(false));
