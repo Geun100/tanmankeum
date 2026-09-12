@@ -1654,6 +1654,7 @@ nicknameInput.addEventListener('input', syncNextBtn);
 syncNextBtn();
 nextBtn.addEventListener('click', () => {
   if (nextBtn.disabled) return;
+  document.getElementById('ob-route-home-btn').hidden = true; // 최초 온보딩 중엔 아직 홈이 없다
   showScreen('screen-ob-route');
   // 휠은 화면이 보인 뒤에야 scrollTop이 적용된다(숨겨진 요소는 스크롤 높이가 0이다).
   setWheelTime(clockFromNow(30).time);
@@ -1815,7 +1816,7 @@ function openSettings(){
   if (!u) return;
   settingsPodId = STATE.myPodId;
   obMode = 'settings';
-  document.getElementById('ob-route-back-btn').dataset.back = 'screen-home';
+  document.getElementById('ob-route-home-btn').hidden = false;
   document.getElementById('ob-route-title').textContent = '이동 정보 수정';
   document.getElementById('ob-nickname').value = u.nickname;
   setGenderSelection(u.gender);
