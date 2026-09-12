@@ -24,14 +24,15 @@ drop policy if exists push_subscriptions_update on public.push_subscriptions;
 create policy push_subscriptions_update on public.push_subscriptions
   for update to anon using (true) with check (true);
 
--- select는 anon에게 안 연다 — 이 테이블엔 개인 알림 채널(endpoint)이 들어있고, 클라이언트가
--- 이 값을 직접 읽어갈 이유가 없다(구독 성공 여부만 알면 됨). api/notify-*.js는 서버에서
--- SUPABASE_ANON_KEY로 접근하는데, RLS가 select를 막으면 서버도 못 읽으므로 select 정책이
--- 하나는 있어야 한다 — 다만 "구조적 검사" 트레이드오프를 따라 anon 전체가 아니라 이 프로젝트의
--- 서버 함수만 실질적으로 쓰는 경로이므로 열어둔다(다른 테이블들과 동일한 신뢰 모델).
+-- select는 anon에게 절대 안 연다 — 다른 테이블들의 "구조적 검사만" 트레이드오프를 여기엔
+-- 그대로 못 따른다. anon 키는 프론트 번들에 그대로 박혀있는 공개값이라, select를 열면
+-- 누구든 브라우저 콘솔에서 supa.from('push_subscriptions').select('*')로 전체 유저의
+-- endpoint/p256dh/auth를 통째로 긁어갈 수 있다 — 그 값만 있으면 Web Push 프로토콜로
+-- 그 사람 브라우저에 임의 알림을 직접 쏠 수 있으니(앱 서버를 거치지 않고), pods/profiles와는
+-- 위험도가 다르다. 클라이언트는 이 테이블을 읽을 일이 없으니(upsert만 함) 막아도 기능이
+-- 안 깨진다. api/notify-*.js는 이제 SUPABASE_SERVICE_ROLE_KEY(RLS 우회)로 읽는다 —
+-- 이 값이 아직 없으면 그 함수들은 "조용히 알림을 건너뛴다"로 폴백한다(에러 안 남).
 drop policy if exists push_subscriptions_select on public.push_subscriptions;
-create policy push_subscriptions_select on public.push_subscriptions
-  for select to anon using (true);
 
 drop policy if exists push_subscriptions_delete on public.push_subscriptions;
 create policy push_subscriptions_delete on public.push_subscriptions

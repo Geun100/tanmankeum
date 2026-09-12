@@ -31,15 +31,18 @@ function timeToMin(t) { const [h, m] = t.split(':').map(Number); return h * 60 +
 module.exports = async (req, res) => {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST만 지원해요' }); return; }
 
-  const { SUPABASE_URL, SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { res.status(500).json({ error: '서버에 SUPABASE_URL/SUPABASE_ANON_KEY가 없어요' }); return; }
+  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
+  if (!SUPABASE_URL) { res.status(500).json({ error: '서버에 SUPABASE_URL이 없어요' }); return; }
+  // push_subscriptions는 RLS가 anon select를 막아둔다(supabase/push-subscriptions.sql 참고) — 서비스
+  // 롤 키로만 읽는다. 키가 없으면 조용히 건너뛴다(팟 등록 자체는 알림과 무관하게 성공해야 한다).
+  if (!SUPABASE_SERVICE_ROLE_KEY) { res.status(200).json({ notified: 0, skipped: 'SUPABASE_SERVICE_ROLE_KEY 없음' }); return; }
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY || !VAPID_SUBJECT) { res.status(200).json({ notified: 0, skipped: 'VAPID 키 없음' }); return; }
 
   const podId = req.body && req.body.podId;
   if (!podId) { res.status(400).json({ error: 'podId 필요해요' }); return; }
 
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-  const supa = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supa = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
     const { data: pod, error: podErr } = await supa.from('pods').select('*, profiles!leader_id(gender)').eq('id', podId).single();
