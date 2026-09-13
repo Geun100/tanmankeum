@@ -94,9 +94,9 @@ window.__kakaoReady = new Promise((resolve, reject) => {
             <button type="button" class="choice" data-gender="여성" role="radio" aria-checked="false">여성</button>
             <button type="button" class="choice" data-gender="남성" role="radio" aria-checked="false">남성</button>
           </div>
-          <p class="gender-note">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-            법률상 이성끼리는 매칭되지 않습니다
+          <p class="gender-note hint-box" style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            법률상 같은 성별끼리만 매칭돼요
           </p>
         </div>
       </div>
@@ -122,6 +122,10 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <div class="step-dots" aria-hidden="true"><span></span><span class="on"></span></div>
         <p class="page-title">어디로 이동하세요?</p>
         <p class="page-sub">경로와 시간을 알려주면 딱 맞는 동승자를 찾아드려요</p>
+        <p class="hint-box" style="display:flex; align-items:center; gap:6px; margin:0 0 18px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M5 17h14M6 17v-5l1.5-5h9L18 12v5M9 17v2M15 17v2"/><circle cx="7.5" cy="14.5" r="1"/><circle cx="16.5" cy="14.5" r="1"/></svg>
+          가맹 택시가 아니에요. 길에서 잡거나 평소 쓰던 앱으로 부른 택시, 아무거나 같이 타면 돼요
+        </p>
 
         <span class="field-label">경로</span>
         <div class="route-row">
