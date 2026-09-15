@@ -48,6 +48,13 @@ window.__kakaoReady = new Promise((resolve, reject) => {
 <div class="stage">
   <main class="phone">
 
+    <!-- 등록/이동정보 저장 중 잠깐 뜨는 오버레이. 화면 전환이 아니라 지금 화면 위에 얹는 것뿐이라
+         showScreen() 대상 목록엔 안 넣는다 — 매칭 자체는 기존 홈 화면이 그대로 담당한다. -->
+    <div class="searching-overlay" id="searching-overlay" hidden aria-live="polite">
+      <div class="searching-spinner" aria-hidden="true"></div>
+      <p class="searching-text" id="searching-text">같은 방향 찾는 중…</p>
+    </div>
+
     <!-- 1. 온보딩 -->
     <!-- 0. 스플래시: 로고 등장 애니메이션 -->
     <section class="screen active" id="screen-splash" aria-label="탄만큼">
@@ -127,6 +134,11 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           가맹 택시가 아니에요. 길에서 잡거나 평소 쓰던 앱으로 부른 택시, 아무거나 같이 타면 돼요
         </p>
 
+        <div class="chip-row" id="route-presets" aria-label="자주 쓰는 경로">
+          <button type="button" class="chip" id="preset-to-station">🚉 한동대학교 → 포항역</button>
+          <button type="button" class="chip" id="preset-to-campus">🎓 포항역 → 한동대학교</button>
+        </div>
+
         <span class="field-label">경로</span>
         <div class="route-row">
           <div class="route-cell">
@@ -153,6 +165,11 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           <input type="date" id="ob-date">
         </div>
 
+        <button type="button" class="btn btn--ghost btn--block" id="btn-train-schedule" style="margin-top:14px;" hidden>
+          🚆 기차 시간표에서 고르기
+        </button>
+        <div class="train-schedule-list" id="train-schedule-list" hidden></div>
+
         <span class="field-label" style="margin-top:18px;">출발 시간</span>
         <div class="wheel-picker" id="time-picker">
           <div class="wheel-band" aria-hidden="true"></div>
@@ -168,6 +185,15 @@ window.__kakaoReady = new Promise((resolve, reject) => {
             <button type="button" class="step-btn" id="btn-size-minus" aria-label="인원 줄이기">−</button>
             <strong id="size-value">2</strong>
             <button type="button" class="step-btn" id="btn-size-plus" aria-label="인원 늘리기">+</button>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:18px;">
+          <span class="field-label" style="margin:0;">짐</span>
+          <div class="chip-row" id="luggage-chips">
+            <button type="button" class="chip" data-luggage="none" aria-pressed="true">🙌 없음</button>
+            <button type="button" class="chip" data-luggage="small" aria-pressed="false">👜 작은 짐</button>
+            <button type="button" class="chip" data-luggage="large" aria-pressed="false">🧳 큰 짐</button>
           </div>
         </div>
       </div>

@@ -87,6 +87,7 @@ function saveOnboardingCache(user){
   localStorage.setItem(ONBOARDING_CACHE_KEY, JSON.stringify({
     nickname: user.nickname, gender: user.gender,
     origin: user.origin, dest: user.dest, time: user.time, date: user.date, partySize: user.partySize,
+    luggageType: user.luggageType, train: user.train || null,
     originLat: originC ? originC.lat : null, originLng: originC ? originC.lng : null,
     destLat: destC ? destC.lat : null, destLng: destC ? destC.lng : null,
   }));
@@ -102,6 +103,8 @@ function loadOnboardingCache(){
     // 아니면 사용자가 입력 화면에서 다시 골라야 한다(제출 버튼이 좌표 없이는 비활성화된다).
     if (c.originLat != null && c.originLng != null) registerPlace(c.origin, c.originLat, c.originLng);
     if (c.destLat != null && c.destLng != null) registerPlace(c.dest, c.destLat, c.destLng);
+    if (!c.luggageType) c.luggageType = 'none'; // 짐 필드 추가 전에 저장된 예전 캐시 대응
+    if (c.train === undefined) c.train = null;
     return c;
   } catch { return null; }
 }
@@ -169,6 +172,8 @@ function podFromRow(podRow){
         dest: row.dest_name, isLeader: row.user_id === podRow.leader_id,
         paid: !!row.paid,
         accepted: !!row.accepted,
+        luggageType: row.luggage_type || 'none',
+        train: row.train_no ? { trainNo: row.train_no, trainType: row.train_type, date: row.train_date, time: row.train_time } : null,
       };
     });
   const pod = {
@@ -656,8 +661,21 @@ function calcMatchScore(user, pod, allowConditional = false){
   const total = Math.min(100, originScore + fitScore + routeScore + timeScore + sizeScore);
   // 500m 안이었으면 강력추천/매칭, 그 바깥인데 조건부 확장 덕에 붙었으면 conditional=true.
   const conditional = eligible && originDist > TIER_MATCH_M;
+
+  // 같은 열차 탄 사람 우선순위 — 기존 100점 배점(origin/fit/route/time/size)은 그대로 두고
+  // 별도 신호로만 얹는다. 정렬 우선순위·배지 표시에만 쓰고 total 점수 자체는 안 바꾼다
+  // (탄만큼 매칭의 핵심 기준인 "물리적으로 도보권인가"를 열차 때문에 흔들면 안 된다).
+  let trainMatch = null;
+  if (user.train) {
+    for (const p of pod.participants) {
+      if (!p.train || p.train.date !== user.train.date) continue;
+      if (p.train.trainNo === user.train.trainNo) { trainMatch = 'exact'; break; }
+      if (Math.abs(timeToMin(p.train.time) - timeToMin(user.train.time)) <= TRAIN_TIME_TOLERANCE_MINUTES) trainMatch = trainMatch || 'near';
+    }
+  }
+
   return {
-    total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, conditional, hypoPod, myId,
+    total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, conditional, hypoPod, myId, trainMatch,
     originDistM: Number.isFinite(originDist) ? Math.round(originDist) : null, diffMin,
   };
 }
@@ -835,11 +853,11 @@ function previewJoin(pod, user, allowConditional = false){
 }
 
 /* ============ 4. 시드 팟 데이터 ============ */
-function makePod({ id, originName, leaderNickname, leaderGender, leaderDest, departTime, departDate, desiredSize, extras }){
-  const leader = { id: id + '_leader', nickname: leaderNickname, gender: leaderGender, dest: leaderDest, isLeader: true };
+function makePod({ id, originName, leaderNickname, leaderGender, leaderDest, departTime, departDate, desiredSize, leaderLuggageType, leaderTrain, extras }){
+  const leader = { id: id + '_leader', nickname: leaderNickname, gender: leaderGender, dest: leaderDest, isLeader: true, luggageType: leaderLuggageType || 'none', train: leaderTrain || null };
   const participants = [leader];
   (extras || []).forEach((ep, i) => {
-    participants.push({ id: id + '_p' + i, nickname: ep.nickname, gender: ep.gender, dest: ep.dest, isLeader: false });
+    participants.push({ id: id + '_p' + i, nickname: ep.nickname, gender: ep.gender, dest: ep.dest, isLeader: false, luggageType: ep.luggageType || 'none', train: ep.train || null });
   });
   const pod = {
     id, leaderId: leader.id, originName,
@@ -1237,7 +1255,7 @@ async function createOwnPod(){
   const u = STATE.user;
   if (!SUPA_ENABLED) {
     const pod = makePod({ id: 'pod_' + Date.now(), originName: u.origin, leaderNickname: u.nickname, leaderGender: u.gender,
-      leaderDest: u.dest, departTime: u.time, departDate: u.date, desiredSize: u.partySize, extras: [] });
+      leaderDest: u.dest, departTime: u.time, departDate: u.date, desiredSize: u.partySize, leaderLuggageType: u.luggageType, leaderTrain: u.train, extras: [] });
     pod.leaderId = u.id;
     pod.participants[0].id = u.id;
     STATE.pods.push(pod);
@@ -1254,6 +1272,15 @@ async function createOwnPod(){
   }).select(POD_SELECT).single();
   if (error) throw error;
   const pod = podFromRow(data);
+  // 팟장의 참가자 행은 DB 트리거(add_leader_as_participant)가 pods 테이블 컬럼만 보고 자동 생성해서
+  // 짐·열차 정보를 모른다 — insert 직후 한 번 더 채워준다. 트리거를 건드리는 것보다 안전하다.
+  if ((u.luggageType && u.luggageType !== 'none') || u.train) {
+    const patch = { luggage_type: u.luggageType || 'none' };
+    if (u.train) Object.assign(patch, { train_no: u.train.trainNo, train_type: u.train.trainType, train_date: u.train.date, train_time: u.train.time });
+    await supa.from('pod_participants').update(patch).eq('pod_id', pod.id).eq('user_id', u.id);
+    const me = pod.participants.find(p => p.id === u.id);
+    if (me) { me.luggageType = u.luggageType || 'none'; me.train = u.train || null; }
+  }
   STATE.pods.push(pod);
   STATE.myPodId = pod.id;
   STATE.committed = false;
@@ -1283,6 +1310,9 @@ async function joinPod(pod){
     const { error } = await supa.from('pod_participants').insert({
       pod_id: pod.id, user_id: u.id, dest_name: u.dest, dest_lat: destC.lat, dest_lng: destC.lng,
       dropoff_point: dropOff.point, walk_dist: dropOff.walkDist, walk_time: dropOff.walkTime,
+      luggage_type: u.luggageType || 'none',
+      train_no: u.train ? u.train.trainNo : null, train_type: u.train ? u.train.trainType : null,
+      train_date: u.train ? u.train.date : null, train_time: u.train ? u.train.time : null,
     });
     if (error) {
       // 참가가 실패했으면(정원 마감 등) 방금 해체한 내 팟을 되살려 원래 상태로 돌린다.
@@ -1296,7 +1326,7 @@ async function joinPod(pod){
     STATE.pods = STATE.pods.filter(p => p.id !== ownPodId && p.id !== pod.id);
     if (fresh) STATE.pods.push(fresh); // null이면 방금 참가한 그 순간 팟이 사라진 극단적 경쟁 상황 — 다음 화면 재조회 때 자연히 빠진다
   } else {
-    pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false });
+    pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false, luggageType: u.luggageType || 'none', train: u.train || null });
     applyTrunk(pod); // trunk 재계산 + 전원(신규 포함) 하차지점 갱신
     if (ownPodId && ownPodId !== pod.id) {
       STATE.pods = STATE.pods.filter(p => p.id !== ownPodId);
@@ -1409,7 +1439,7 @@ const ICON_SPARK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" 
 const ICON_CAR = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16C5.67 16 5 15.33 5 14.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
 const ICON_GROUP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z"/></svg>';
 const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교', '한동대 버스 정류장', '한동대 현동', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블'];
-const POPULAR_DESTS = ['영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블', '한동대 버스 정류장', '한동대 현동'];
+const POPULAR_DESTS = ['포항역', '영일대해수욕장', '죽도시장', '환호공원', '포항시청', '포항공과대학교', '한동대학교', '포항터미널', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블', '한동대 버스 정류장', '한동대 현동'];
 
 function setupPlaceChips(chipsId, inputId, names){
   const wrap = document.getElementById(chipsId);
@@ -1764,6 +1794,24 @@ minusBtn.addEventListener('click', () => { if (partySize > SIZE_MIN) { partySize
 plusBtn.addEventListener('click', () => { if (partySize < SIZE_MAX) { partySize++; syncSize(); } });
 syncSize();
 
+// --- 2단계: 짐 종류(없음/작은 짐/큰 짐) + 자유 메모 — 평소엔 칩 한 번 탭이면 끝나고,
+// 트렁크 용량 계산 같은 건 안 한다. 특이사항 있는 사람만 메모에 직접 적게 둔다. ---
+const LUGGAGE_LABEL = { small: '👜 작은 짐', large: '🧳 큰 짐' }; // none은 표시 안 함
+let luggageType = 'none';
+const luggageChipsEl = document.getElementById('luggage-chips');
+function syncLuggageChips(){
+  luggageChipsEl.querySelectorAll('.chip').forEach(c => {
+    c.setAttribute('aria-pressed', String(c.dataset.luggage === luggageType));
+  });
+}
+luggageChipsEl.addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  luggageType = chip.dataset.luggage;
+  syncLuggageChips();
+});
+syncLuggageChips();
+
 // --- 2단계: 등록하기는 출발지·목적지 좌표가 모두 확정됐을 때만 활성화 ---
 const originInputEl = document.getElementById('ob-origin');
 const destInputEl = document.getElementById('ob-dest');
@@ -1794,6 +1842,111 @@ function bindChipReveal(inputId, chipsId){
 }
 bindChipReveal('ob-origin', 'ob-origin-chips');
 bindChipReveal('ob-dest', 'ob-dest-chips');
+
+// --- 2단계: 자주 쓰는 경로 원클릭 프리셋 — 실사용 데이터에서 포항역↔한동대 축이 압도적이었다.
+// 한동대 부속 건물(오석/현동/버스정류장 등)이 아니라 항상 "한동대학교" 대표 이름으로 채운다 —
+// 그래야 어느 부속 건물을 검색해서 왔든 프리셋 결과가 하나로 통일된다. ---
+function fillRoute(origin, dest){
+  // 'input' 이벤트를 그대로 흉내내면 자동완성 검색(setupPlaceAutocomplete)까지 같이 반응해서
+  // 드롭다운이 열린다 — 이미 확정된 값이니 그럴 이유가 없다. 칩 클릭과 같은 방식으로,
+  // 값만 채우고 필요한 동기화 함수들만 직접 부른다.
+  originInputEl.value = origin;
+  destInputEl.value = dest;
+  document.getElementById('ob-origin-list').hidden = true;
+  document.getElementById('ob-dest-list').hidden = true;
+  syncRegisterBtn();
+  syncTrainScheduleButton();
+}
+document.getElementById('preset-to-station').addEventListener('click', () => fillRoute('한동대학교', '포항역'));
+document.getElementById('preset-to-campus').addEventListener('click', () => fillRoute('포항역', '한동대학교'));
+
+// --- 2단계: 포항역 기차 시간표에서 시간 고르기 (경로에 포항역이 있을 때만) ---
+// 열차 출발/도착 시각 자체가 "정확한 계산"이라 AI 없이 코드+공공API 값 그대로 쓴다.
+// 포항역→어딘가(도착): 그 열차가 포항역에 도착한 뒤 택시를 잡는 흐름이라 도착시각 목록을 보여주고,
+// 고르면 도착시각+10분(하차·이동 여유)을 출발 시간으로 채운다.
+// 어딘가→포항역(출발): 그 열차를 타러 가는 흐름이라 출발시각 목록을 보여주고,
+// 고르면 출발시각-20분(역 도착·탑승 여유)을 출발 시간으로 채운다.
+const POHANG_NAME = '포항역';
+const TRAIN_TIME_TOLERANCE_MINUTES = 30; // 매칭 시 "비슷한 시간대 열차"로 쳐주는 허용범위
+const TAXI_BUFFER_MINUTES = { arrival: 10, departure: -20 }; // 도착 후 여유 / 출발 전 여유
+const trainScheduleBtn = document.getElementById('btn-train-schedule');
+const trainScheduleList = document.getElementById('train-schedule-list');
+let selectedTrain = null; // { trainNo, trainType, date, time, direction } — 팟 데이터로 넘어가는 값
+
+function trainScheduleContext(){
+  const origin = originInputEl.value.trim(), dest = destInputEl.value.trim();
+  if (origin === POHANG_NAME && dest !== POHANG_NAME) return { direction: 'arrival', bufferMin: TAXI_BUFFER_MINUTES.arrival };
+  if (dest === POHANG_NAME && origin !== POHANG_NAME) return { direction: 'departure', bufferMin: TAXI_BUFFER_MINUTES.departure };
+  return null;
+}
+
+function syncTrainScheduleButton(){
+  const ctx = trainScheduleContext();
+  trainScheduleBtn.hidden = !ctx;
+  if (!ctx) { trainScheduleList.hidden = true; selectedTrain = null; syncTrainScheduleButtonLabel(); }
+}
+function syncTrainScheduleButtonLabel(){
+  trainScheduleBtn.textContent = selectedTrain
+    ? `🚄 ${selectedTrain.trainType} ${selectedTrain.time} 선택됨 · 다시 고르기`
+    : '🚆 기차 시간표에서 고르기';
+}
+[originInputEl, destInputEl].forEach(el => {
+  el.addEventListener('input', syncTrainScheduleButton);
+  el.addEventListener('change', syncTrainScheduleButton);
+});
+document.getElementById('ob-origin-chips').addEventListener('click', syncTrainScheduleButton);
+document.getElementById('ob-dest-chips').addEventListener('click', syncTrainScheduleButton);
+document.getElementById('ob-origin-list').addEventListener('click', () => setTimeout(syncTrainScheduleButton, 0));
+document.getElementById('ob-dest-list').addEventListener('click', () => setTimeout(syncTrainScheduleButton, 0));
+syncTrainScheduleButton();
+
+function addMinutesToTime(hhmm, delta){
+  let [h, m] = hhmm.split(':').map(Number);
+  let total = ((h * 60 + m + delta) % 1440 + 1440) % 1440; // 자정 넘나들어도 안전하게
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+trainScheduleBtn.addEventListener('click', async () => {
+  const ctx = trainScheduleContext();
+  if (!ctx) return;
+  trainScheduleBtn.disabled = true;
+  trainScheduleBtn.textContent = '불러오는 중…';
+  trainScheduleList.innerHTML = '';
+  trainScheduleList.hidden = false;
+  try {
+    const dateStr = (dateInput.value || localDateStr(new Date())).replace(/-/g, '');
+    // origin=포항역(ctx=arrival)이면 "포항 도착" 열차를, dest=포항역(ctx=departure)이면 "포항 출발" 열차를 구한다.
+    const param = ctx.direction === 'arrival' ? `arrival=${encodeURIComponent(POHANG_NAME.replace('역', ''))}` : `departure=${encodeURIComponent(POHANG_NAME.replace('역', ''))}`;
+    const r = await fetch(`/api/trains?date=${dateStr}&${param}`);
+    const data = await r.json();
+    const trains = data.trains || [];
+    if (!trains.length) {
+      trainScheduleList.innerHTML = `<p class="train-schedule-note">${escapeHtml(data.error || '지금 시간표를 불러올 수 없어요. 직접 입력해주세요.')}</p>`;
+    } else {
+      trains.forEach(t => {
+        const time = ctx.direction === 'arrival' ? t.arrivalTime : t.departureTime;
+        const counterpart = ctx.direction === 'arrival' ? t.departureStation : t.arrivalStation;
+        const label = ctx.direction === 'arrival' ? `${counterpart} 출발` : `${counterpart} 방향`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'train-schedule-item';
+        btn.innerHTML = `<span class="tsi-sub">${escapeHtml(t.trainType)} · ${escapeHtml(label)}</span><span class="tsi-time">${time}</span>`;
+        btn.addEventListener('click', () => {
+          setWheelTime(addMinutesToTime(time, ctx.bufferMin));
+          selectedTrain = { trainNo: t.trainNo, trainType: t.trainType, date: t.departureDate, time, direction: ctx.direction };
+          syncTrainScheduleButtonLabel();
+          trainScheduleList.hidden = true;
+        });
+        trainScheduleList.appendChild(btn);
+      });
+    }
+  } catch (e) {
+    trainScheduleList.innerHTML = '<p class="train-schedule-note">지금 시간표를 불러올 수 없어요. 직접 입력해주세요.</p>';
+  } finally {
+    trainScheduleBtn.disabled = false;
+    syncTrainScheduleButtonLabel();
+  }
+});
 
 // 팟을 만들기 전에 각 팟장 경로의 실제 도로 경로를 받아둔다.
 // 경로적합성/하차지점이 makePod 시점에 확정되므로, 이걸 먼저 받아야 직선 근사가 아닌 실제 경로로 계산된다.
@@ -1849,6 +2002,11 @@ function openSettings(){
   setObDate(u.date && u.date >= localDateStr(new Date()) ? u.date : localDateStr(new Date()));
   partySize = u.partySize;
   syncSize();
+  luggageType = u.luggageType || 'none';
+  syncLuggageChips();
+  selectedTrain = u.train || null;
+  syncTrainScheduleButton();
+  syncTrainScheduleButtonLabel();
   document.getElementById('btn-find-pod').disabled = false;
   document.getElementById('btn-find-pod').textContent = '저장하기';
   showScreen('screen-ob-route');
@@ -1871,6 +2029,10 @@ function promptRescheduleAfterExpiry(){
   setObDate(localDateStr(new Date()));
   partySize = u.partySize;
   syncSize();
+  luggageType = u.luggageType || 'none';
+  syncLuggageChips();
+  selectedTrain = null; // 출발 시간이 새로 잡히니 예전에 고른 열차는 다시 고르게 한다
+  syncTrainScheduleButton();
   document.getElementById('btn-find-pod').disabled = false;
   document.getElementById('btn-find-pod').textContent = '저장하기';
   showScreen('screen-ob-route');
@@ -1895,6 +2057,9 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   const btn = document.getElementById('btn-find-pod');
   btn.disabled = true;
   btn.textContent = obMode === 'settings' ? '저장 중…' : '경로 확인 중…';
+  // 등록/저장 즉시 결과(=홈 화면의 추천 팟 목록)로 넘어간다는 걸 체감하게, 짧게라도
+  // "찾는 중" 화면을 거친다 — 기존 홈 화면을 그대로 매칭 결과 화면으로 쓴다(새 화면 안 만든다).
+  document.getElementById('searching-overlay').hidden = false;
 
   if (obMode === 'settings') {
     try {
@@ -1926,6 +2091,9 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
         if (podErr) throw podErr;
         const { error: partErr } = await supa.from('pod_participants').update({
           dest_name: destName, dest_lat: destC.lat, dest_lng: destC.lng, dropoff_point: destName,
+          luggage_type: luggageType,
+          train_no: selectedTrain ? selectedTrain.trainNo : null, train_type: selectedTrain ? selectedTrain.trainType : null,
+          train_date: selectedTrain ? selectedTrain.date : null, train_time: selectedTrain ? selectedTrain.time : null,
         }).eq('pod_id', mine.id).eq('user_id', STATE.user.id);
         if (partErr) throw partErr;
         const updated = await loadPod(mine.id);
@@ -1933,12 +2101,14 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
       } else {
         mine.originName = originName;
         mine.participants[0].dest = destName; // trunk(leaderDest)는 applyTrunk가 이 값으로 다시 정한다
+        mine.participants[0].luggageType = luggageType;
+        mine.participants[0].train = selectedTrain;
         mine.departTime = time; mine.departDate = date; mine.desiredSize = partySize;
         applyTrunk(mine);
       }
       // 닉네임/성별도 방금 upsertProfile로 DB엔 저장했으니, 메모리 상태와 로컬 캐시에도 반영해야
       // 화면이 새 값을 보여준다 — 여기 안 넣으면 DB만 바뀌고 화면은 새로고침 전까지 옛 값을 보여준다.
-      STATE.user = { ...STATE.user, nickname, gender: obGender, origin: originName, dest: destName, time, date, partySize };
+      STATE.user = { ...STATE.user, nickname, gender: obGender, origin: originName, dest: destName, time, date, partySize, luggageType, train: selectedTrain };
       saveOnboardingCache(STATE.user);
     } catch (e) {
       showError(friendlyDbError(e));
@@ -1947,6 +2117,7 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
       btn.disabled = false;
       btn.textContent = '저장하기';
       obMode = 'onboarding';
+      document.getElementById('searching-overlay').hidden = true;
     }
     renderHome();
     showScreen('screen-home');
@@ -1962,6 +2133,8 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
     date,
     time,
     partySize,
+    luggageType,
+    train: selectedTrain,
   };
   try {
     await enterHome();
@@ -1971,6 +2144,7 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
     btn.textContent = '등록하기';
+    document.getElementById('searching-overlay').hidden = true;
   }
   renderHome();
   showScreen('screen-home');
@@ -2065,6 +2239,11 @@ function renderPodList(){
   withPreview.sort((a, b) => {
     const seedDiff = Number(isSeedPod(a.pod)) - Number(isSeedPod(b.pod));
     if (seedDiff !== 0) return seedDiff;
+    // 같은 열차(exact) 탄 사람을 최우선으로, 시간대 비슷한 열차(near)를 그다음으로 띄운다.
+    // 정렬 기준(요금순/시간순 등)이 뭐든 이 우선순위가 먼저 적용된다.
+    const trainRank = m => m === 'exact' ? 2 : m === 'near' ? 1 : 0;
+    const trainDiff = trainRank(b.prev.matchScore.trainMatch) - trainRank(a.prev.matchScore.trainMatch);
+    if (trainDiff !== 0) return trainDiff;
     if (sortMode === 'fare') {
       const fa = a.prev.eligible ? a.prev.mine.fare : Infinity, fb = b.prev.eligible ? b.prev.mine.fare : Infinity;
       return fa - fb;
@@ -2100,7 +2279,19 @@ function renderPodList(){
     const walkNote = prev.dropOff.walkTime > 0
       ? ` · ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분`
       : ` · ${prev.dropOff.point}에서 바로 하차`;
+    const withLuggage = pod.participants.filter(p => p.luggageType && p.luggageType !== 'none').length;
+    const luggageNote = withLuggage > 0 ? ` · 짐 있는 인원 ${withLuggage}명` : '';
     const leaderNickname = (pod.participants.find(p => p.isLeader) || {}).nickname || '알 수 없음';
+    const trainBadge = prev.matchScore.trainMatch === 'exact' ? `<span class="badge badge--train">🚄 같은 열차</span>`
+      : prev.matchScore.trainMatch === 'near' ? `<span class="badge badge--train">🚄 비슷한 시간 열차</span>` : '';
+    // 배지만으론 "무슨 열차인지"가 안 보이니, 실제로 매칭된 상대방의 열차 정보를 한 줄 더 보여준다.
+    const matchedTrainP = prev.matchScore.trainMatch && u.train
+      ? pod.participants.find(p => p.train && p.train.date === u.train.date &&
+          (p.train.trainNo === u.train.trainNo || Math.abs(timeToMin(p.train.time) - timeToMin(u.train.time)) <= TRAIN_TIME_TOLERANCE_MINUTES))
+      : null;
+    const trainInfoHtml = matchedTrainP
+      ? `<p class="pod-meta pod-meta--train">🚄 ${escapeHtml(matchedTrainP.train.trainType || 'KTX')} · ${escapeHtml(matchedTrainP.train.time)} 기준${matchedTrainP.train.trainNo === u.train.trainNo ? ' · 같은 열차번호' : ' · 비슷한 시간대'}</p>`
+      : '';
     const savingsHtml = prev.savings
       ? `<div class="pod-savings">${SAVE_ICON} 혼자 탈 때보다 ${won(prev.savings)} 절약</div>`
       : '';
@@ -2109,10 +2300,12 @@ function renderPodList(){
         <strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong>
         <div class="pod-card-badges">
           <span class="badge badge--match">${ICON_SPARK} ${prev.matchScore.total}점</span>
+          ${trainBadge}
           <span class="pod-card-leader">${leaderNickname} 팟장</span>
         </div>
       </div>
-      <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}</p>
+      <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}${luggageNote}</p>
+      ${trainInfoHtml}
       ${savingsHtml}
       <div class="pod-stats">
         <div class="pod-stat">
@@ -2568,7 +2761,7 @@ async function renderPodChat(podId){
           ${p.id === pod.leaderId ? '<span class="badge badge--leader">팟장</span>' : ''}
           ${p.id === u.id ? '<span class="badge badge--me">나</span>' : ''}
         </span>
-        <p>${escapeHtml(p.gender)} · 목적지 ${escapeHtml(p.dest)} · 하차 ${escapeHtml(f.dropPoint)}(도보 ${f.walkTime}분)</p>
+        <p>${escapeHtml(p.gender)} · 목적지 ${escapeHtml(p.dest)} · 하차 ${escapeHtml(f.dropPoint)}(도보 ${f.walkTime}분)${LUGGAGE_LABEL[p.luggageType] ? ` · ${LUGGAGE_LABEL[p.luggageType]}` : ''}</p>
       </div>
       <div class="participant-fare">${won(f.fare)}</div>
     `;
