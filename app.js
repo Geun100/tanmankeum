@@ -1996,7 +1996,7 @@ function openSettings(){
   settingsPodId = STATE.myPodId;
   obMode = 'settings';
   document.getElementById('ob-route-home-btn').hidden = false;
-  document.getElementById('ob-route-back-btn').dataset.back = 'screen-home';
+  document.getElementById('ob-route-back-btn').dataset.back = 'screen-ob-profile';
   document.getElementById('ob-route-title').textContent = '이동 정보 수정';
   document.getElementById('ob-nickname').value = u.nickname;
   setGenderSelection(u.gender);
