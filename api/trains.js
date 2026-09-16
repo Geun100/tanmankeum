@@ -40,6 +40,11 @@ function toHHMM(yyyymmddhhmmss){
 function toDashedDate(yyyymmdd){
   return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
 }
+function shiftYmd(yyyymmdd, days){
+  const d = new Date(Date.UTC(+yyyymmdd.slice(0, 4), +yyyymmdd.slice(4, 6) - 1, +yyyymmdd.slice(6, 8)));
+  d.setUTCDate(d.getUTCDate() + days);
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+}
 
 // 한 OD 쌍(출발역→도착역, 날짜)을 조회해 표준 형태 배열로 돌려준다. 실패해도 빈 배열만 준다 —
 // 호출부가 여러 상대역을 순회하므로 하나 실패했다고 전체가 죽으면 안 된다.
@@ -78,6 +83,41 @@ async function fetchOnePair(apiKey, depId, arrId, date){
   }
 }
 
+// departure/arrival 이름 + 날짜 하나로 병합·중복제거·필터까지 끝낸 열차 목록을 돌려준다.
+// 요청 처리와 대체 날짜 재조회(명절 등으로 원래 날짜가 비었을 때) 양쪽에서 그대로 재사용한다.
+async function fetchTrainsForDate(apiKey, departureName, arrivalName, depId, arrId, date, trainTypeFilter){
+  let trains = [];
+  if (departureName && arrivalName) {
+    trains = await fetchOnePair(apiKey, depId, arrId, date);
+  } else {
+    const known = departureName ? depId : arrId;
+    const counterparts = POHANG_COUNTERPARTS.filter(n => STATION_NODE_ID[n] !== known);
+    const results = await Promise.all(counterparts.map(name => {
+      const cId = STATION_NODE_ID[name];
+      return departureName ? fetchOnePair(apiKey, known, cId, date) : fetchOnePair(apiKey, cId, known, date);
+    }));
+    const seen = new Set();
+    trains = results.flat().filter(t => {
+      if (seen.has(t.trainNo)) return false;
+      seen.add(t.trainNo);
+      return true;
+    });
+  }
+  if (trainTypeFilter) trains = trains.filter(t => t.trainType.includes(trainTypeFilter));
+  trains.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
+  return trains;
+}
+
+// 명절 특별예매 기간(설날·추석) — 이 기간은 "출발 한 달 전 순차 오픈"이 아니라 코레일이 별도
+// 이벤트로 한 번에 예매를 끝내버려서, TAGO 데이터에 구조적으로 절대 안 잡힌다. 연 2회 정도
+// 새 명절 날짜가 정해지면 여기 한 줄만 추가하면 된다.
+const HOLIDAY_RANGES = [
+  { name: '추석', start: '20260923', end: '20260927' },
+];
+function isHolidayDate(ymd){
+  return HOLIDAY_RANGES.some(h => ymd >= h.start && ymd <= h.end);
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'GET만 지원해요' });
@@ -104,35 +144,33 @@ module.exports = async (req, res) => {
   if (!departureName && !arrivalName) { res.status(200).json({ trains: [], error: 'departure 또는 arrival 중 하나는 있어야 해요.' }); return; }
 
   try {
-    let trains = [];
-    if (departureName && arrivalName) {
-      // 출발·도착 둘 다 지정 — 그 OD 쌍 하나만 조회한다.
-      trains = await fetchOnePair(apiKey, depId, arrId, date);
-    } else {
-      // 한쪽만 포항이면(주로 이 경우) 반대편 방향으로 주요 상대역 전부를 조회해 합친다.
-      const known = departureName ? STATION_NODE_ID[departureName] : STATION_NODE_ID[arrivalName];
-      const counterparts = POHANG_COUNTERPARTS.filter(n => STATION_NODE_ID[n] !== known);
-      const results = await Promise.all(counterparts.map(name => {
-        const cId = STATION_NODE_ID[name];
-        return departureName ? fetchOnePair(apiKey, known, cId, date) : fetchOnePair(apiKey, cId, known, date);
-      }));
-      // 한 열차가 여러 상대역을 경유하면(예: 포항→동대구→서울) OD 쌍마다 한 번씩 잡혀 같은 trainNo가
-      // 중복된다. 열차번호 기준으로 하나만 남긴다 — 사용자가 궁금한 건 "몇 시에 포항에 열차가 있냐"지
-      // 최종 도착역이 아니다.
-      const seen = new Set();
-      trains = results.flat().filter(t => {
-        if (seen.has(t.trainNo)) return false;
-        seen.add(t.trainNo);
-        return true;
-      });
+    const trains = await fetchTrainsForDate(apiKey, departureName, arrivalName, depId, arrId, date, trainTypeFilter);
+    if (trains.length) {
+      res.status(200).json({ trains, date: toDashedDate(date) });
+      return;
     }
 
-    if (trainTypeFilter) {
-      trains = trains.filter(t => t.trainType.includes(trainTypeFilter));
+    // 요청한 날짜에 열차가 하나도 없다 — 명절 특별예매 기간이거나(영영 안 채워짐) 아직 정기
+    // 예매가 안 열린 먼 미래(약 한 달 넘게 남음)이거나, 드물게 원인 불명 개별 구멍일 수 있다.
+    // KTX는 매일 거의 같은 시각에 다니므로, 가까운 날짜 중 실제로 데이터가 있는 날을 찾아
+    // "참고용"으로 보여준다 — 완전히 빈 화면보다 "대략 이 시간대다"가 훨씬 쓸모있다.
+    for (const delta of [-1, 1, -2, 2, -3, 3, -4, 4, -5, 5]) {
+      const refDate = shiftYmd(date, delta);
+      const refTrains = await fetchTrainsForDate(apiKey, departureName, arrivalName, depId, arrId, refDate, trainTypeFilter);
+      if (refTrains.length) {
+        res.status(200).json({
+          trains: refTrains,
+          date: toDashedDate(date),
+          isReference: true,
+          referenceNote: isHolidayDate(date)
+            ? '명절 연휴는 코레일이 별도 특별예매로 진행돼서 정확한 시간표를 못 가져와요. 평소 비슷한 시간대예요 — 실제와 다를 수 있어요.'
+            : '이 날짜는 아직 정확한 시간표가 안 열렸어요. 평소 비슷한 시간대예요 — 가까워지면 다시 확인해보세요.',
+        });
+        return;
+      }
     }
-    trains.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
 
-    res.status(200).json({ trains, date: toDashedDate(date) });
+    res.status(200).json({ trains: [], error: '지금 시간표를 불러올 수 없어요. 직접 입력해주세요.' });
   } catch (e) {
     res.status(200).json({ trains: [], error: '열차 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.' });
   }

@@ -134,23 +134,6 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           가맹 택시가 아니에요. 길에서 잡거나 평소 쓰던 앱으로 부른 택시, 아무거나 같이 타면 돼요
         </p>
 
-        <div class="preset-cards" id="route-presets" aria-label="자주 쓰는 경로">
-          <button type="button" class="preset-card" id="preset-to-station">
-            <div class="preset-icon">🚉</div>
-            <div class="preset-info">
-              <span class="preset-name">한동대 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-7-7 7 7-7 7"/></svg> 포항역</span>
-              <span class="preset-sub">가장 많이 찾는 경로</span>
-            </div>
-          </button>
-          <button type="button" class="preset-card" id="preset-to-campus">
-            <div class="preset-icon">🎓</div>
-            <div class="preset-info">
-              <span class="preset-name">포항역 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-7-7 7 7-7 7"/></svg> 한동대</span>
-              <span class="preset-sub">기차 도착 후 바로 탑승</span>
-            </div>
-          </button>
-        </div>
-
         <span class="field-label">경로</span>
         <div class="route-row">
           <div class="route-cell">
@@ -172,15 +155,19 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <div class="chip-row chip-row--collapsible" id="ob-origin-chips" aria-label="출발지 빠른 선택"></div>
         <div class="chip-row chip-row--collapsible" id="ob-dest-chips" aria-label="목적지 빠른 선택"></div>
 
+        <div class="train-hint" id="train-hint" hidden>
+          <div class="train-hint-row">
+            <span class="train-hint-icon" aria-hidden="true">🚄</span>
+            <p class="train-hint-text" id="train-hint-text">포항역 KTX 시간에 맞춰 택시 출발 시각을 잡아드릴게요</p>
+            <button type="button" class="train-hint-action" id="btn-train-schedule">시간표 보기</button>
+          </div>
+          <div class="train-schedule-list" id="train-schedule-list" hidden></div>
+        </div>
+
         <div class="field" style="margin-top:18px;">
           <label for="ob-date">출발 날짜</label>
           <input type="date" id="ob-date">
         </div>
-
-        <button type="button" class="btn btn--ghost btn--block" id="btn-train-schedule" style="margin-top:14px;" hidden>
-          🚆 기차 시간표에서 고르기
-        </button>
-        <div class="train-schedule-list" id="train-schedule-list" hidden></div>
 
         <span class="field-label" style="margin-top:18px;">출발 시간</span>
         <div class="wheel-picker" id="time-picker">

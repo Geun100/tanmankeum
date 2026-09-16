@@ -1843,25 +1843,9 @@ function bindChipReveal(inputId, chipsId){
 bindChipReveal('ob-origin', 'ob-origin-chips');
 bindChipReveal('ob-dest', 'ob-dest-chips');
 
-// --- 2단계: 자주 쓰는 경로 원클릭 프리셋 — 실사용 데이터에서 포항역↔한동대 축이 압도적이었다.
-// 한동대 부속 건물(오석/현동/버스정류장 등)이 아니라 항상 "한동대학교" 대표 이름으로 채운다 —
-// 그래야 어느 부속 건물을 검색해서 왔든 프리셋 결과가 하나로 통일된다. ---
-function fillRoute(origin, dest){
-  // 'input' 이벤트를 그대로 흉내내면 자동완성 검색(setupPlaceAutocomplete)까지 같이 반응해서
-  // 드롭다운이 열린다 — 이미 확정된 값이니 그럴 이유가 없다. 칩 클릭과 같은 방식으로,
-  // 값만 채우고 필요한 동기화 함수들만 직접 부른다.
-  originInputEl.value = origin;
-  destInputEl.value = dest;
-  document.getElementById('ob-origin-list').hidden = true;
-  document.getElementById('ob-dest-list').hidden = true;
-  syncRegisterBtn();
-  syncTrainScheduleButton();
-}
-document.getElementById('preset-to-station').addEventListener('click', () => fillRoute('한동대학교', '포항역'));
-document.getElementById('preset-to-campus').addEventListener('click', () => fillRoute('포항역', '한동대학교'));
-
-// --- 2단계: 포항역 기차 시간표에서 시간 고르기 (경로에 포항역이 있을 때만) ---
-// 열차 출발/도착 시각 자체가 "정확한 계산"이라 AI 없이 코드+공공API 값 그대로 쓴다.
+// --- 2단계: 포항역 기차 시간표에서 시간 고르기 — 출발지·목적지 중 하나가 "포항역"이면 경로란
+// 바로 아래에 인라인 배너로 뜬다(별도 화면 없이, 입력한 그 자리에서 바로). 열차 출발/도착 시각
+// 자체가 "정확한 계산"이라 AI 없이 코드+공공API 값 그대로 쓴다.
 // 포항역→어딘가(도착): 그 열차가 포항역에 도착한 뒤 택시를 잡는 흐름이라 도착시각 목록을 보여주고,
 // 고르면 도착시각+10분(하차·이동 여유)을 출발 시간으로 채운다.
 // 어딘가→포항역(출발): 그 열차를 타러 가는 흐름이라 출발시각 목록을 보여주고,
@@ -1869,6 +1853,8 @@ document.getElementById('preset-to-campus').addEventListener('click', () => fill
 const POHANG_NAME = '포항역';
 const TRAIN_TIME_TOLERANCE_MINUTES = 30; // 매칭 시 "비슷한 시간대 열차"로 쳐주는 허용범위
 const TAXI_BUFFER_MINUTES = { arrival: 10, departure: -20 }; // 도착 후 여유 / 출발 전 여유
+const trainHint = document.getElementById('train-hint');
+const trainHintText = document.getElementById('train-hint-text');
 const trainScheduleBtn = document.getElementById('btn-train-schedule');
 const trainScheduleList = document.getElementById('train-schedule-list');
 let selectedTrain = null; // { trainNo, trainType, date, time, direction } — 팟 데이터로 넘어가는 값
@@ -1882,13 +1868,20 @@ function trainScheduleContext(){
 
 function syncTrainScheduleButton(){
   const ctx = trainScheduleContext();
-  trainScheduleBtn.hidden = !ctx;
-  if (!ctx) { trainScheduleList.hidden = true; selectedTrain = null; syncTrainScheduleButtonLabel(); }
+  trainHint.hidden = !ctx;
+  if (!ctx) { trainScheduleList.hidden = true; selectedTrain = null; }
+  syncTrainScheduleButtonLabel();
 }
 function syncTrainScheduleButtonLabel(){
-  trainScheduleBtn.textContent = selectedTrain
-    ? `🚄 ${selectedTrain.trainType} ${selectedTrain.time} 선택됨 · 다시 고르기`
-    : '🚆 기차 시간표에서 고르기';
+  if (selectedTrain) {
+    trainHintText.textContent = selectedTrain.isReference
+      ? `${selectedTrain.trainType} ${selectedTrain.time} 선택됨 · 참고 시간표`
+      : `${selectedTrain.trainType} ${selectedTrain.time} 선택됨`;
+    trainScheduleBtn.textContent = '다시 고르기';
+  } else {
+    trainHintText.textContent = '포항역 KTX 시간에 맞춰 택시 출발 시각을 잡아드릴게요';
+    trainScheduleBtn.textContent = '시간표 보기';
+  }
 }
 [originInputEl, destInputEl].forEach(el => {
   el.addEventListener('input', syncTrainScheduleButton);
@@ -1923,6 +1916,14 @@ trainScheduleBtn.addEventListener('click', async () => {
     if (!trains.length) {
       trainScheduleList.innerHTML = `<p class="train-schedule-note">${escapeHtml(data.error || '지금 시간표를 불러올 수 없어요. 직접 입력해주세요.')}</p>`;
     } else {
+      if (data.isReference) {
+        // 명절 연휴거나(영영 안 열림) 너무 먼 미래라(아직 예매 안 열림) 이 날짜 자체엔 데이터가
+        // 없어서, 가까운 다른 날짜의 시간표를 대신 보여주는 중이다 — 위에 주의문구를 먼저 띄운다.
+        const note = document.createElement('p');
+        note.className = 'train-schedule-note train-schedule-note--warn';
+        note.textContent = data.referenceNote || '이 날짜는 정확한 시간표가 없어요. 평소 비슷한 시간대예요.';
+        trainScheduleList.appendChild(note);
+      }
       trains.forEach(t => {
         const time = ctx.direction === 'arrival' ? t.arrivalTime : t.departureTime;
         const counterpart = ctx.direction === 'arrival' ? t.departureStation : t.arrivalStation;
@@ -1933,7 +1934,9 @@ trainScheduleBtn.addEventListener('click', async () => {
         btn.innerHTML = `<span class="tsi-sub">${escapeHtml(t.trainType)} · ${escapeHtml(label)}</span><span class="tsi-time">${time}</span>`;
         btn.addEventListener('click', () => {
           setWheelTime(addMinutesToTime(time, ctx.bufferMin));
-          selectedTrain = { trainNo: t.trainNo, trainType: t.trainType, date: t.departureDate, time, direction: ctx.direction };
+          // date는 항상 실제로 고른 이동 날짜(dateStr) 기준으로 저장한다 — 참고 시간표 조회일 땐
+          // t.departureDate가 대체로 빌려온 날짜라 그대로 쓰면 진짜 출발일이 틀어진다.
+          selectedTrain = { trainNo: t.trainNo, trainType: t.trainType, date: dateInput.value, time, direction: ctx.direction, isReference: !!data.isReference };
           syncTrainScheduleButtonLabel();
           trainScheduleList.hidden = true;
         });
@@ -1993,6 +1996,7 @@ function openSettings(){
   settingsPodId = STATE.myPodId;
   obMode = 'settings';
   document.getElementById('ob-route-home-btn').hidden = false;
+  document.getElementById('ob-route-back-btn').dataset.back = 'screen-home';
   document.getElementById('ob-route-title').textContent = '이동 정보 수정';
   document.getElementById('ob-nickname').value = u.nickname;
   setGenderSelection(u.gender);
