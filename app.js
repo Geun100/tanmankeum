@@ -25,6 +25,14 @@ const PLACE_COORDS = {
   '한동대 현동':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   '그레이스더테이블':      { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   '한동대 버스 정류장':     { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
+  // 은어 목록(docs/place-nicknames.md) 중 카카오 검색으로 실좌표 확인된 것만 추가.
+  '한동대 뉴턴홀':        { lat: 36.103297,          lng: 129.387057,         isStop: true },
+  '한동대 느헤미야홀':     { lat: 36.103872,          lng: 129.386990,         isStop: true },
+  '한동대 언어교육원':     { lat: 36.104669,          lng: 129.389497,         isStop: true },
+  '궁물촌':             { lat: 36.081020,          lng: 129.396519,         isStop: true },
+  '다이소':             { lat: 36.084135,          lng: 129.396480,         isStop: true },
+  '금강산돌구이':         { lat: 36.080485,          lng: 129.397852,         isStop: true },
+  '맛깨비':             { lat: 36.080513,          lng: 129.398106,         isStop: true },
   '육거리':             { lat: 36.0406908061984,   lng: 129.366669497903,   isStop: true },
   '북포항우체국':        { lat: 36.03876536335639,  lng: 129.3643887261654,  isStop: true },
   '환호아주종합시장':     { lat: 36.0702569588253,   lng: 129.398953346644,   isStop: true },
@@ -69,7 +77,16 @@ const STATE = {
    검증할 수 없다. localStorage uuid를 신원처럼 쓰고, RLS는 구조적 검사만 한다(SETUP.md 참고).
    supabase-keys.local.js에 값이 없으면 SUPA_ENABLED=false로 인메모리 프로토타입 그대로 동작한다
    (이전처럼 새로고침하면 날아감) — 로컬에서 키 없이도 계속 테스트할 수 있게 하는 폴백이다. */
-const SUPA_ENABLED = !!(window.SUPABASE_KEYS && window.SUPABASE_KEYS.url && window.SUPABASE_KEYS.anonKey);
+// 키 파일과 외부 SDK는 서로 독립적으로 로드된다. 광고 차단기·학교망·CDN 장애로
+// supabase-js만 빠졌을 때 키만 보고 createClient를 호출하면 여기서 앱 전체가 멈추고,
+// 아래 스플래시 전환 타이머까지 도달하지 못한다. SDK까지 확인해 인메모리 모드로 폴백한다.
+const SUPA_ENABLED = !!(
+  window.SUPABASE_KEYS
+  && window.SUPABASE_KEYS.url
+  && window.SUPABASE_KEYS.anonKey
+  && window.supabase
+  && typeof window.supabase.createClient === 'function'
+);
 const supa = SUPA_ENABLED ? window.supabase.createClient(window.SUPABASE_KEYS.url, window.SUPABASE_KEYS.anonKey) : null;
 
 function getOrCreateUserId(){
@@ -78,6 +95,11 @@ function getOrCreateUserId(){
   if (!id) { id = crypto.randomUUID(); localStorage.setItem(KEY, id); }
   return id;
 }
+
+// posthog-keys.local.js에 키가 없으면 window.posthog가 없다 — 애드블록에 막힌 경우도 마찬가지라
+// 항상 존재 여부를 확인하고 부른다.
+function track(event, props){ try { if (window.posthog) posthog.capture(event, props); } catch (_) {} }
+function identifyUser(id){ try { if (window.posthog) posthog.identify(id); } catch (_) {} }
 
 const ONBOARDING_CACHE_KEY = 'tanmankeum_onboarding_v1';
 function saveOnboardingCache(user){
@@ -1262,6 +1284,7 @@ async function createOwnPod(){
     STATE.myPodId = pod.id;
     STATE.committed = false;
     STATE.chatMessages[pod.id] = [];
+    track('pod_created', { origin: u.origin, dest: u.dest, party_size: u.partySize, via_train: !!u.train });
     return;
   }
   const originC = placeCoord(u.origin), destC = placeCoord(u.dest);
@@ -1284,6 +1307,7 @@ async function createOwnPod(){
   STATE.pods.push(pod);
   STATE.myPodId = pod.id;
   STATE.committed = false;
+  track('pod_created', { origin: u.origin, dest: u.dest, party_size: u.partySize, via_train: !!u.train });
   notifyMatchCandidates(pod.id); // 조건 맞는 대기자들에게 "나에게 맞는 팟이 있어요" 푸시
 }
 
@@ -1325,9 +1349,11 @@ async function joinPod(pod){
     const fresh = await loadPod(pod.id);
     STATE.pods = STATE.pods.filter(p => p.id !== ownPodId && p.id !== pod.id);
     if (fresh) STATE.pods.push(fresh); // null이면 방금 참가한 그 순간 팟이 사라진 극단적 경쟁 상황 — 다음 화면 재조회 때 자연히 빠진다
+    track('pod_joined', { pod_id: pod.id, party_size_after: pod.participants.length + 1 });
   } else {
     pod.participants.push({ id: u.id, nickname: u.nickname, gender: u.gender, dest: u.dest, isLeader: false, luggageType: u.luggageType || 'none', train: u.train || null });
     applyTrunk(pod); // trunk 재계산 + 전원(신규 포함) 하차지점 갱신
+    track('pod_joined', { pod_id: pod.id, party_size_after: pod.participants.length });
     if (ownPodId && ownPodId !== pod.id) {
       STATE.pods = STATE.pods.filter(p => p.id !== ownPodId);
       delete STATE.chatMessages[ownPodId];
@@ -1642,6 +1668,7 @@ if (cachedOnboarding) {
   const refreshedTime = scheduleIsPast ? clockFromNow(30).time : cachedOnboarding.time;
   const refreshedDate = scheduleIsPast ? clockFromNow(30).date : (cachedDateValid ? cachedOnboarding.date : bootTodayStr);
   STATE.user = { id: getOrCreateUserId(), ...cachedOnboarding, time: refreshedTime, date: refreshedDate };
+  identifyUser(STATE.user.id);
   // 마이크로태스크로 미룬다 — enterHome()이 쓰는 아래쪽 const들은 스크립트가 끝까지 실행돼야
   // 초기화된다(TDZ). 여기서 바로 부르면 "Cannot access before initialization".
   Promise.resolve().then(enterHome)
@@ -2140,6 +2167,8 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
     luggageType,
     train: selectedTrain,
   };
+  identifyUser(STATE.user.id);
+  track('onboarding_completed', { party_size: partySize, via_train: !!selectedTrain });
   try {
     await enterHome();
   } catch (e) {
@@ -3028,6 +3057,7 @@ async function renderPodChat(podId){
           pod.status = 'confirmed';
           pod.finalResult = calcFinalRouteAndFare(pod);
           STATE.userState = '팟확정';
+          track('pod_confirmed', { pod_id: pod.id, party_size: pod.participants.length });
           renderFinal(pod.id);
           showScreen('screen-final');
         } catch (e) {
@@ -3227,6 +3257,7 @@ function confirmFinishPod(pod){
         STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
         delete STATE.chatMessages[pod.id];
         STATE.userState = '완료';
+        track('pod_completed', { pod_id: pod.id, party_size: pod.participants.length });
         renderDoneSummary(pod); // STATE.pods에선 방금 빠졌지만 pod 객체 자체(경로·정산 내역)는 그대로 살아있다
         showScreen('screen-done');
       } catch (e) {
@@ -3566,4 +3597,3 @@ document.getElementById('btn-rematch').addEventListener('click', async () => {
   renderHome();
   showScreen('screen-home');
 });
-

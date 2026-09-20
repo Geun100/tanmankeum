@@ -11,7 +11,7 @@ function writeIfMissing(file, content) {
   console.log(`wrote ${file}`);
 }
 
-const { KAKAO_JS_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, WAITLIST_SUPABASE_URL, WAITLIST_SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY } = process.env;
+const { KAKAO_JS_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, WAITLIST_SUPABASE_URL, WAITLIST_SUPABASE_ANON_KEY, VAPID_PUBLIC_KEY, POSTHOG_API_KEY, POSTHOG_HOST } = process.env;
 
 // KAKAO_REST_API_KEY는 여기서 파일로 안 쓴다 — 이 파일은 브라우저가 그대로 다운받는 정적 파일이라,
 // 여기 적으면 REST 키가 누구나 볼 수 있게 노출된다(실제로 그랬음). REST 키는 api/kakao-route.js가
@@ -36,6 +36,13 @@ if (VAPID_PUBLIC_KEY) {
   writeIfMissing('push-keys.local.js', `window.VAPID_PUBLIC_KEY = '${VAPID_PUBLIC_KEY}';\n`);
 } else {
   console.warn('VAPID_PUBLIC_KEY 환경변수 없음 — push-keys.local.js 생성 건너뜀');
+}
+
+// posthog 키는 원래 공개용으로 설계된 키라(REST 키와 다름) 노출돼도 안전하다.
+if (POSTHOG_API_KEY) {
+  writeIfMissing('posthog-keys.local.js', `window.POSTHOG_KEYS = {\n  apiKey: '${POSTHOG_API_KEY}',\n  host: '${POSTHOG_HOST || 'https://us.i.posthog.com'}',\n};\n`);
+} else {
+  console.warn('POSTHOG_API_KEY 환경변수 없음 — posthog-keys.local.js 생성 건너뜀');
 }
 
 // waitlist는 앱 본체와 별개인 supabase 프로젝트다 — 랜딩 이메일 수집용이라
