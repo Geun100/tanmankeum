@@ -74,7 +74,7 @@ const STATE = {
 
 /* ============ 1-1. Supabase 데이터 계층 ============
    로그인이 없어(카카오 로그인 제외 결정) 서버가 "이 요청이 진짜 그 사람 브라우저에서 왔다"를
-   검증할 수 없다. localStorage uuid를 신원처럼 쓰고, RLS는 구조적 검사만 한다(SETUP.md 참고).
+   검증할 수 없다. localStorage uuid를 신원처럼 쓰고, RLS는 구조적 검사만 한다(docs/SETUP.md 참고).
    supabase-keys.local.js에 값이 없으면 SUPA_ENABLED=false로 인메모리 프로토타입 그대로 동작한다
    (이전처럼 새로고침하면 날아감) — 로컬에서 키 없이도 계속 테스트할 수 있게 하는 폴백이다. */
 // 키 파일과 외부 SDK는 서로 독립적으로 로드된다. 광고 차단기·학교망·CDN 장애로
@@ -406,7 +406,7 @@ function fareBreakdownHtml(p, isActual){
 // 닉네임·계좌번호처럼 사용자가 직접 입력한 문자열을 템플릿 리터럴로 innerHTML에 꽂을 때 반드시
 // 거친다. 온보딩 입력창의 maxlength는 클라이언트 표시일 뿐이라, Supabase REST API를 직접 호출하면
 // 누구나 길이·내용 제한 없이 어떤 문자열이든 nickname으로 저장할 수 있다 — 실제로 이 앱은
-// RLS가 구조 검사만 하고 신원 검증은 못 하므로(SETUP.md) 서버도 이걸 막지 못한다.
+// RLS가 구조 검사만 하고 신원 검증은 못 하므로(docs/SETUP.md) 서버도 이걸 막지 못한다.
 // 이스케이프 안 하면 <img src=x onerror=...> 같은 닉네임이 그 팟을 보는 모든 사람 브라우저에서
 // 실행되는 저장형 XSS가 된다. textContent로 넣는 곳(예: 채팅 메시지)은 이미 안전하니 건드리지 않는다.
 function escapeHtml(s){
@@ -2413,22 +2413,6 @@ async function renderPodDetail(podId){
     </div>
   `;
 
-  // 1-1) AI 추천 이유 — 점수·순위는 calcMatchScore(규칙 기반)가 이미 정했다. AI는 그 점수 구성을
-  // 자연어 한 문장으로 풀어 설명만 한다(새 숫자를 만들지 않는다). 버튼 눌러야 호출한다(자동 아님) —
-  // 매번 확정 안 된 팟까지 죄다 API를 부르면 비용만 나가고, 사용자가 궁금할 때만 보면 충분하다.
-  if (prev.eligible) {
-    html += `
-      <div class="info-box" id="match-reason-box">
-        <div class="match-reason-head">
-          <span class="badge badge--match">${ICON_SPARK} ${prev.matchScore.total}점</span>
-          <span class="match-reason-label">AI 매칭 이유</span>
-          <button type="button" class="match-reason-link" id="btn-match-reason">보기</button>
-        </div>
-        <p class="fine-note" id="match-reason-text" style="margin-top:8px; display:none;"></p>
-      </div>
-    `;
-  }
-
   if (!prev.eligible) {
     // 경로 이탈: 지도까지만 보여주고 이후는 참가 불가 안내로 대체
     const fallbackStop = pod.routeStops[pod.routeStops.length - 1];
@@ -2497,38 +2481,6 @@ async function renderPodDetail(podId){
   `;
 
   body.innerHTML = html;
-
-  const matchReasonBtn = document.getElementById('btn-match-reason');
-  if (matchReasonBtn) matchReasonBtn.addEventListener('click', async () => {
-    matchReasonBtn.disabled = true;
-    matchReasonBtn.textContent = '보는 중…';
-    const textEl = document.getElementById('match-reason-text');
-    try {
-      const ms = prev.matchScore;
-      const res = await fetch('/api/match-reason', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          total: ms.total, originScore: ms.originScore, fitScore: ms.fitScore, routeScore: ms.routeScore,
-          timeScore: ms.timeScore, sizeScore: ms.sizeScore, eligible: ms.eligible,
-          originDistM: ms.originDistM, diffMin: ms.diffMin,
-          originName: pod.originName, trunkDest: displayDest,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.reason) {
-        textEl.textContent = data.reason;
-        textEl.style.display = 'block';
-        matchReasonBtn.remove();
-      } else {
-        throw new Error('no reason');
-      }
-    } catch (e) {
-      matchReasonBtn.disabled = false;
-      matchReasonBtn.textContent = '보기';
-      showError('지금은 이유를 못 받아왔어요. 잠시 후 다시 시도해주세요.');
-    }
-  });
 
   // 실제 경로가 아직 없으면, 응답이 온 뒤 실제 요금으로 한 번 다시 그린다.
   // (그때는 캐시에 값이 있어 onRoute를 넘기지 않으므로 재귀하지 않는다)
