@@ -2,7 +2,7 @@
 create table if not exists public.waitlist (
   id uuid primary key default gen_random_uuid(),
   email text not null,
-  region text,                       -- 관심 지역(선택 입력)
+  region text,                       -- 도입 원하는 학교(선택 입력) — 컬럼명은 region이지만 랜딩 폼은 "학교" 값을 여기 담는다
   source text default 'landing',
   created_at timestamptz not null default now()
 );
