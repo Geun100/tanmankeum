@@ -99,7 +99,17 @@ function getOrCreateUserId(){
 // posthog-keys.local.js에 키가 없으면 window.posthog가 없다 — 애드블록에 막힌 경우도 마찬가지라
 // 항상 존재 여부를 확인하고 부른다.
 function track(event, props){ try { if (window.posthog) posthog.capture(event, props); } catch (_) {} }
-function identifyUser(id){ try { if (window.posthog) posthog.identify(id); } catch (_) {} }
+// ?dev=1로 한 번 열면 이 브라우저는 계속 "테스트 기기"로 표시된다 — PostHog 분석은
+// 실사용자만 봐야 하므로, 개발자가 직접 써보는 트래픽은 항상 걸러낼 수 있어야 한다.
+// (프로젝트의 test_account_filters가 is_test_account=true를 기본 제외하도록 설정돼 있다.)
+if (new URLSearchParams(location.search).get('dev') === '1') { try { localStorage.setItem('tanmankeum_dev', '1'); } catch (_) {} }
+function identifyUser(id){
+  try {
+    if (!window.posthog) return;
+    posthog.identify(id);
+    if (localStorage.getItem('tanmankeum_dev') === '1') posthog.setPersonProperties({ is_test_account: true });
+  } catch (_) {}
+}
 
 const ONBOARDING_CACHE_KEY = 'tanmankeum_onboarding_v1';
 function saveOnboardingCache(user){
