@@ -1823,7 +1823,7 @@ syncSize();
 
 // --- 2단계: 짐 종류(없음/작은 짐/큰 짐) + 자유 메모 — 평소엔 칩 한 번 탭이면 끝나고,
 // 트렁크 용량 계산 같은 건 안 한다. 특이사항 있는 사람만 메모에 직접 적게 둔다. ---
-const LUGGAGE_LABEL = { small: '👜 작은 짐', large: '🧳 큰 짐' }; // none은 표시 안 함
+const LUGGAGE_LABEL = { small: '🎒 백팩·소형', carryon: '🧳 기내용 캐리어', large: '🛄 대형 캐리어' }; // none은 표시 안 함
 let luggageType = 'none';
 const luggageChipsEl = document.getElementById('luggage-chips');
 function syncLuggageChips(){
