@@ -1886,10 +1886,10 @@ bindChipReveal('ob-dest', 'ob-dest-chips');
 // 포항역→어딘가(도착): 그 열차가 포항역에 도착한 뒤 택시를 잡는 흐름이라 도착시각 목록을 보여주고,
 // 고르면 도착시각+10분(하차·이동 여유)을 출발 시간으로 채운다.
 // 어딘가→포항역(출발): 그 열차를 타러 가는 흐름이라 출발시각 목록을 보여주고,
-// 고르면 출발시각-20분(역 도착·탑승 여유)을 출발 시간으로 채운다.
+// 고르면 출발시각-30분(역 도착·탑승 여유)을 출발 시간으로 채운다.
 const POHANG_NAME = '포항역';
 const TRAIN_TIME_TOLERANCE_MINUTES = 30; // 매칭 시 "비슷한 시간대 열차"로 쳐주는 허용범위
-const TAXI_BUFFER_MINUTES = { arrival: 10, departure: -20 }; // 도착 후 여유 / 출발 전 여유
+const TAXI_BUFFER_MINUTES = { arrival: 10, departure: -30 }; // 도착 후 여유 / 출발 전 여유
 const trainHint = document.getElementById('train-hint');
 const trainHintText = document.getElementById('train-hint-text');
 const trainScheduleBtn = document.getElementById('btn-train-schedule');
@@ -2212,6 +2212,8 @@ async function renderHome(){
   // 홈에 머무는 동안 내 팟에 누가 들어오면 아래 인원수 표시가 실시간으로 갱신되도록 구독한다.
   subscribeHome(myPod && myPod.id);
   initPushUI();
+  // 홈에 있는 동안 새로 들어온 사람이 있으면 토스트로 알린다(처음 렌더는 기준값만 저장).
+  if (myPod) announceJoiners(myPod, u.id);
   const card = document.getElementById('my-status-card');
   // 남의 팟에 참가 중일 땐 내가 입력했던 값(STATE.user)이 아니라 실제 참가 중인 팟(myPod)의
   // 경로/시간을 보여준다 — 둘이 다를 수 있다(재등록 시도 등으로 STATE.user만 바뀐 경우).
@@ -2219,6 +2221,7 @@ async function renderHome(){
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${escapeHtml(myPod.originName)} → ${escapeHtml(myPod.leaderDest)}</strong>
     <p>${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명</p>
+    <p class="status-members">${myPod.participants.map(p => escapeHtml(p.nickname) + (p.id === u.id ? '(나)' : '')).join(', ')}</p>
     <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
@@ -2226,6 +2229,24 @@ async function renderHome(){
     showScreen('screen-pod-chat');
   });
   renderPodList();
+}
+
+let seenJoiners = null; // { podId, names } — 홈/채팅방에서 마지막으로 본 내 팟의 다른 참여자
+function announceJoiners(pod, myId){
+  const names = pod.participants.filter(p => p.id !== myId).map(p => p.nickname);
+  if (seenJoiners && seenJoiners.podId === pod.id) {
+    const added = names.filter(n => !seenJoiners.names.includes(n));
+    if (added.length) showToast(`${added.join(', ')}님이 내 팟에 들어왔어요`);
+  }
+  seenJoiners = { podId: pod.id, names };
+}
+function showToast(msg){
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.setAttribute('role', 'status');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4000);
 }
 
 function statusLabel(){
@@ -2664,6 +2685,7 @@ async function renderPodChat(podId){
     subscribePod(podId, () => { if (document.getElementById('screen-pod-chat').classList.contains('active')) renderPodChat(podId); });
   }
   const pod = findPod(podId);
+  announceJoiners(pod, u.id);
   const isLeader = pod.leaderId === u.id;
   const seatsLeft = pod.desiredSize - pod.participants.length;
   document.getElementById('chat-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
