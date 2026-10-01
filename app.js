@@ -947,7 +947,15 @@ function showScreen(id){
 document.querySelectorAll('[data-back]').forEach(btn => {
   btn.addEventListener('click', async () => {
     const target = btn.dataset.back;
-    if (target === 'screen-home') await renderHome();
+    try {
+      if (target === 'screen-home') await renderHome();
+      // 최종 경로·정산 화면으로 이동하는 동안 팟 상태가 바뀐다. 기존 DOM만 다시 보이면
+      // DB는 in_progress인데 화면은 여전히 모집 중인 상태가 되므로 반드시 새로 그린다.
+      if (target === 'screen-pod-chat' && STATE.myPodId) await renderPodChat(STATE.myPodId);
+    } catch (e) {
+      showError(friendlyDbError(e));
+      return;
+    }
     showScreen(target);
   });
 });
@@ -2702,7 +2710,13 @@ async function renderPodChat(podId){
     });
   }
 
-  const statusText = seatsLeft > 0 ? `${pod.participants.length}/${pod.desiredSize}명 · 모집 중` : '정원이 다 찼어요';
+  const statusText = pod.status === 'recruiting'
+    ? (seatsLeft > 0 ? `${pod.participants.length}/${pod.desiredSize}명 · 모집 중` : '정원이 다 찼어요')
+    : pod.status === 'confirmed'
+      ? '팟 확정됨'
+      : pod.status === 'in_progress'
+        ? '이동·정산 중'
+        : '팟 완료';
   const chatMap = mapContainerHTML();
   const kakaoRouteHref = kakaoMapMultiRouteUrl(result.stops);
   let html = `
@@ -2874,7 +2888,7 @@ async function renderPodChat(podId){
   const chatInput = document.getElementById('chat-input');
   const sendBtn = document.getElementById('btn-chat-send');
   const autoGrow = () => { chatInput.style.height = 'auto'; chatInput.style.height = chatInput.scrollHeight + 'px'; };
-  const syncSendState = () => { sendBtn.disabled = !chatInput.value.trim(); };
+  const syncSendState = () => { sendBtn.disabled = chatSending || !chatInput.value.trim(); };
   autoGrow();
   syncSendState();
   chatInput.oninput = () => { autoGrow(); syncSendState(); };
@@ -2904,6 +2918,7 @@ async function renderPodChat(podId){
         const path = `${podId}/${Date.now()}${extMatch ? extMatch[0] : ''}`;
         const { error: upErr } = await supa.storage.from('settlement-photos').upload(path, file);
         if (upErr) throw upErr;
+  let chatSending = false;
         const imageUrl = supa.storage.from('settlement-photos').getPublicUrl(path).data.publicUrl;
         // pod_messages.text에 "1자 이상" 제약이 있어서 빈 문자열은 못 넣는다. 사진 메시지는 '사진'으로 채운다.
         const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text: '사진', image_url: imageUrl });
@@ -2964,17 +2979,27 @@ async function renderPodChat(podId){
 
   async function sendChat(){
     const text = chatInput.value.trim();
-    if (!text) return;
-    chatInput.value = '';
-    autoGrow();
-    syncSendState();
-    if (SUPA_ENABLED) {
-      const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text });
-      if (error) { showError(friendlyDbError(error)); return; }
-    } else {
-      STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text });
+    if (!text || chatSending) return;
+    chatSending = true;
+    sendBtn.disabled = true;
+    try {
+      if (SUPA_ENABLED) {
+        const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text });
+        if (error) throw error;
+      } else {
+        STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text });
+      }
+      // 저장이 성공한 뒤에만 지운다. 실패하면 사용자가 쓴 문장을 그대로 남겨 재시도할 수 있게 한다.
+      chatInput.value = '';
+      autoGrow();
+      await renderPodChat(podId);
+    } catch (e) {
+      showError(friendlyDbError(e));
+    } finally {
+      chatSending = false;
+      // renderPodChat으로 입력 DOM이 교체되지 않은 실패 경로에서만 현재 버튼 상태를 복원한다.
+      if (document.getElementById('chat-input') === chatInput) syncSendState();
     }
-    renderPodChat(podId);
   }
 
   // CTA: 팟장에게만 확정하기/취소, 참여자에게는 안내 문구만
@@ -3460,7 +3485,9 @@ function renderSettlement(podId){
           : 'AI가 읽은 금액이에요. 다르면 고쳐주세요.';
       } else {
         noteEl.style.color = 'var(--danger)';
-        noteEl.textContent = '금액을 못 읽었어요. 직접 입력해주세요.';
+        noteEl.textContent = data.degraded
+          ? '자동 금액 인식을 잠시 사용할 수 없어요. 직접 입력해주세요.'
+          : '금액을 못 읽었어요. 직접 입력해주세요.';
         document.getElementById('actual-fare').focus();
       }
     } catch (err) {
