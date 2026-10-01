@@ -999,6 +999,35 @@ function friendlyDbError(e){
   if (msg.includes('이미 마감된 팟입니다')) return '이미 마감되거나 취소된 팟이에요.';
   return '네트워크 문제로 처리하지 못했어요. 다시 시도해주세요.';
 }
+function friendlyPhotoError(e){
+  const msg = ((e && e.message) || String(e)).toLowerCase();
+  const status = e && (e.statusCode || e.status);
+  if (status === 413 || msg.includes('too large') || msg.includes('payload')) return '사진 용량이 너무 커요. 더 작은 사진으로 다시 시도해주세요.';
+  if (status === 401 || status === 403 || msg.includes('row-level security') || msg.includes('unauthorized')) return '사진 업로드 권한 설정을 확인해주세요.';
+  if (status === 404 || msg.includes('bucket not found')) return '사진 저장소가 준비되지 않았어요. 관리자에게 알려주세요.';
+  return '사진을 보내지 못했어요. 연결을 확인하고 다시 시도해주세요.';
+}
+
+// Storage 삭제 권한은 브라우저(anon 키)에 주지 않는다 — 공개 키만으로 버킷 전체를 지울 수 있게 되기 때문.
+// 삭제는 서버 함수(api/delete-photos.js)가 "이 팟의 참가자인지" 확인한 뒤에만 한다.
+async function callDeletePhotos(podId, paths){
+  if (!SUPA_ENABLED) return;
+  const body = { podId, userId: STATE.user.id };
+  if (paths) body.paths = paths;
+  const r = await fetch('/api/delete-photos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error('photo delete failed: ' + r.status);
+}
+
+// 업로드 경로는 항상 `${podId}/${파일명}` 한 단계다.
+async function removeSettlementPhotos(paths){
+  if (!paths.length) return;
+  await callDeletePhotos(paths[0].split('/')[0], paths);
+}
+
+// 팟 종료 시 DB 행만 cascade 삭제하면 Storage 객체는 그대로 남는다. 팟 폴더 전체를 서버가 비운다.
+async function cleanupPodPhotos(podId){
+  await callDeletePhotos(podId);
+}
 document.getElementById('modal-cancel').addEventListener('click', closeModal);
 document.getElementById('modal-confirm').addEventListener('click', () => {
   const fn = modalConfirmHandler; closeModal(); if (fn) fn();
@@ -2887,6 +2916,7 @@ async function renderPodChat(podId){
 
   const chatInput = document.getElementById('chat-input');
   const sendBtn = document.getElementById('btn-chat-send');
+  let chatSending = false;
   const autoGrow = () => { chatInput.style.height = 'auto'; chatInput.style.height = chatInput.scrollHeight + 'px'; };
   const syncSendState = () => { sendBtn.disabled = chatSending || !chatInput.value.trim(); };
   autoGrow();
@@ -2912,24 +2942,32 @@ async function renderPodChat(podId){
     if (!file.type.startsWith('image/')) { showError('이미지 파일만 첨부할 수 있어요.'); return; }
     if (file.size > 5 * 1024 * 1024) { showError('사진은 5MB 이하만 올릴 수 있어요.'); return; }
     attachBtn.disabled = true;
+    let uploadedPath = null;
+    let messageSaved = false;
     try {
       if (SUPA_ENABLED) {
         const extMatch = /\.[a-zA-Z0-9]+$/.exec(file.name);
         const path = `${podId}/${Date.now()}${extMatch ? extMatch[0] : ''}`;
         const { error: upErr } = await supa.storage.from('settlement-photos').upload(path, file);
         if (upErr) throw upErr;
-  let chatSending = false;
+        uploadedPath = path;
         const imageUrl = supa.storage.from('settlement-photos').getPublicUrl(path).data.publicUrl;
         // pod_messages.text에 "1자 이상" 제약이 있어서 빈 문자열은 못 넣는다. 사진 메시지는 '사진'으로 채운다.
         const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text: '사진', image_url: imageUrl });
         if (error) throw error;
+        messageSaved = true;
       } else {
         const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
         STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text: '사진', imageUrl: dataUrl });
       }
-      renderPodChat(podId);
+      await renderPodChat(podId);
     } catch (e) {
-      showError(friendlyDbError(e));
+      // 업로드 뒤 메시지 INSERT가 실패하면 공개 버킷에 고아 사진이 남는다. 방금 만든 정확한
+      // 객체만 지우며, 정리 실패가 원래 오류를 덮어쓰지는 않게 한다.
+      if (uploadedPath && !messageSaved) {
+        try { await removeSettlementPhotos([uploadedPath]); } catch (_) {}
+      }
+      showError(friendlyPhotoError(e));
     } finally {
       attachBtn.disabled = false;
     }
@@ -3259,7 +3297,8 @@ function confirmFinishPod(pod){
       try {
         if (SUPA_ENABLED) {
           // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
-          // pods 행 하나만 지우면 참가자·채팅(계좌번호·영수증 사진 포함)까지 DB가 같이 지워준다.
+          // DB 행의 cascade와 Storage 객체 삭제는 별개다. 사진을 먼저 지워야 공개 URL이 남지 않는다.
+          await cleanupPodPhotos(pod.id);
           const { error } = await supa.from('pods').delete().eq('id', pod.id);
           if (error) throw error;
         }
@@ -3550,6 +3589,8 @@ function renderSettlement(podId){
       onConfirm: async () => {
         const btn = document.getElementById('btn-share-account');
         btn.disabled = true;
+        let uploadedPath = null;
+        let messageSaved = false;
         try {
           const lines = [`정산 내역이에요.`, `입금 계좌: ${acc}`];
           (pod.settlement || []).forEach(s => lines.push(`${s.nickname}: ${won(s.amount)}`));
@@ -3564,11 +3605,13 @@ function renderSettlement(podId){
             const path = `${podId}/${Date.now()}${ext}`;
             const { error: upErr } = await supa.storage.from('settlement-photos').upload(path, file);
             if (upErr) throw upErr;
+            uploadedPath = path;
             imageUrl = supa.storage.from('settlement-photos').getPublicUrl(path).data.publicUrl;
           }
           if (SUPA_ENABLED) {
             const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: pod.leaderId, text, image_url: imageUrl });
             if (error) throw error;
+            messageSaved = true;
           } else {
             if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
             STATE.chatMessages[podId].push({ who: '나', mine: true, text, imageUrl });
@@ -3580,7 +3623,10 @@ function renderSettlement(podId){
           await renderPodChat(podId);
           showScreen('screen-pod-chat');
         } catch (e) {
-          showError(friendlyDbError(e));
+          if (uploadedPath && !messageSaved) {
+            try { await removeSettlementPhotos([uploadedPath]); } catch (_) {}
+          }
+          showError(uploadedPath ? friendlyPhotoError(e) : friendlyDbError(e));
         } finally {
           btn.disabled = false;
         }
