@@ -17,6 +17,12 @@ const SYSTEM_PROMPT =
   '조금이라도 확실하지 않으면 amount는 null. ' +
   '반드시 JSON만 출력: {"amount": 정수 또는 null}';
 
+function sendUnavailable(res, reason) {
+  // OCR은 편의 기능이고 실제 금액 입력란은 항상 수정 가능하다. 상위 API 장애를 5xx로
+  // 노출해 전체 정산이 고장 난 것처럼 보이게 하지 말고 수동 입력으로 명확히 폴백한다.
+  res.status(200).json({ amount: null, degraded: true, reason });
+}
+
 function normalizeAmount(raw) {
   const n = Math.round(Number(raw));
   if (!Number.isFinite(n) || n <= MIN_FARE || n > MAX_FARE) return null;
@@ -31,7 +37,7 @@ module.exports = async (req, res) => {
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ error: '서버에 OPENAI_API_KEY가 설정돼 있지 않아요' });
+    sendUnavailable(res, 'not_configured');
     return;
   }
 
@@ -74,7 +80,7 @@ module.exports = async (req, res) => {
       // OpenAI 에러 본문을 그대로 돌려주지 않는다 — 키가 잘못됐을 때 부분 키가 섞여 나올 수 있다.
       const errText = await r.text().catch(() => '');
       console.error('OpenAI OCR error', r.status, errText.slice(0, 500));
-      res.status(502).json({ error: 'OCR 응답 실패' });
+      sendUnavailable(res, 'upstream_unavailable');
       return;
     }
 
@@ -88,6 +94,7 @@ module.exports = async (req, res) => {
     }
     res.status(200).json({ amount });
   } catch (e) {
-    res.status(500).json({ error: '요청 처리 중 오류가 났어요' });
+    console.error('OpenAI OCR request failed', e && e.message ? e.message : String(e));
+    sendUnavailable(res, 'upstream_unavailable');
   }
 };

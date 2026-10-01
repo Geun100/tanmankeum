@@ -52,6 +52,28 @@ function buildSummaryContext(body) {
   ].join('\n');
 }
 
+// AI 안내는 채팅의 핵심 데이터가 아니라 한두 문장짜리 보조 설명이다. 키 누락·한도 초과·
+// 일시 장애 때문에 이 기능 전체가 502가 되면 사용자는 실제 채팅/DB 장애로 오해한다.
+// 같은 입력만으로 만들 수 있는 결정적 폴백을 항상 준비해 핵심 흐름과 분리한다.
+function fallbackSummary(body) {
+  const seatsLeft = Math.max(0, Math.min(MAX_PEOPLE, Number(body.seatsLeft) || 0));
+  const isLeader = !!body.isLeader;
+  const status = clip(body.status, 20) || 'recruiting';
+  if (status === 'recruiting') {
+    if (seatsLeft > 0) return isLeader
+      ? '아직 자리가 남아 있어요. 채팅방 링크를 공유해 팟원을 더 모아보세요.'
+      : '팟장이 확정할 때까지 채팅으로 탑승 장소를 맞춰보세요.';
+    return isLeader ? '정원이 찼어요. 팟을 확정해 최종 경로와 요금을 확인해보세요.' : '정원이 찼어요. 팟장의 확정을 기다려주세요.';
+  }
+  if (status === 'confirmed' || status === 'in_progress') return '팟이 확정됐어요. 채팅으로 탑승 장소와 순서를 맞춰보세요.';
+  if (status === 'done') return '이동과 정산이 모두 끝났어요. 함께해주셔서 감사합니다.';
+  return '채팅으로 탑승 장소와 이동 순서를 맞춰보세요.';
+}
+
+function sendFallback(res, body, reason) {
+  res.status(200).json({ summary: fallbackSummary(body), degraded: true, reason });
+}
+
 const SUMMARY_SYSTEM_PROMPT = '너는 "🤖 택시팟 매니저"라는 채팅봇이야. 경로/하차지점/요금 같은 숫자는 아래에 표로 이미 표시돼 있으니 ' +
   '절대 나열하거나 계산하지 마. 대신 "지금 할 일" 정보를 받았으니, 그걸 자연스러운 안내 문장 한두 문장으로 바꿔서 말해줘 — ' +
   '단순히 상황을 요약하지 말고, 지금 이 사람이 뭘 하면 되는지(또는 왜 기다리는지)를 실질적으로 안내해. ' +
@@ -66,7 +88,7 @@ module.exports = async (req, res) => {
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ error: '서버에 OPENAI_API_KEY가 설정돼 있지 않아요' });
+    sendFallback(res, req.body || {}, 'not_configured');
     return;
   }
 
@@ -97,18 +119,19 @@ module.exports = async (req, res) => {
       // 일반 메시지만 준다.
       const errText = await r.text().catch(() => '');
       console.error('OpenAI API error', r.status, errText.slice(0, 500));
-      res.status(502).json({ error: 'OpenAI 응답 실패' });
+      sendFallback(res, body, 'upstream_unavailable');
       return;
     }
 
     const data = await r.json();
     const text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || '').trim();
     if (!text) {
-      res.status(502).json({ error: '응답을 만들지 못했어요' });
+      sendFallback(res, body, 'empty_response');
       return;
     }
     res.status(200).json({ summary: text });
   } catch (e) {
-    res.status(500).json({ error: '요청 처리 중 오류가 났어요' });
+    console.error('OpenAI API request failed', e && e.message ? e.message : String(e));
+    sendFallback(res, body, 'upstream_unavailable');
   }
 };
