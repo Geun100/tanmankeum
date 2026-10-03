@@ -219,7 +219,11 @@ function podFromRow(podRow){
   return applyTrunk(pod);
 }
 
-const POD_SELECT = '*, pod_participants(*, profiles(nickname, gender))';
+// 베타 한정: true면 성별 상관없이 매칭된다(previewJoin의 동성 조건 해제). 정식 출시 전 false로 되돌리고,
+// index.html의 .gender-note 문구도 "법률상 같은 성별끼리만 매칭돼요"로 복구할 것.
+const BETA_ANY_GENDER = true;
+
+const POD_SELECT ='*, pod_participants(*, profiles(nickname, gender))';
 
 
 async function loadOpenPods(){
@@ -660,7 +664,8 @@ function calcMatchScore(user, pod, allowConditional = false){
   // 검증 대상은 사실상 나 하나지만, 구조를 단순하게 유지하려고 전원을 같이 재계산한다.
   // 동성끼리만 매칭한다. 성별은 최초 등록 후 잠겨서 안 바뀌므로(허위 입력 방지),
   // 팟 안 참가자 전원과 내 성별이 같아야만 합류할 수 있다.
-  const sameGender = pod.participants.every(p => p.gender === user.gender);
+  // 베타 기간에는 성별 제한을 푼다(BETA_ANY_GENDER). 정식 출시 때 false로 되돌리면 동성 매칭이 복구된다.
+  const sameGender = BETA_ANY_GENDER || pod.participants.every(p => p.gender === user.gender);
 
   // 내가 고른 시간보다 1시간 넘게 일찍 출발한 팟은 이미 놓친 팟이라 안 보여준다.
   // 내 시간보다 늦게 출발하는 팟은 얼마나 늦든 상관없다 — 기다렸다 타면 되니까.
