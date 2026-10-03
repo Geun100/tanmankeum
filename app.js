@@ -393,13 +393,23 @@ function won(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
 // "왜 이 금액이에요?" 펼치기 — calcFinalRouteAndFare가 perPerson[i].breakdown에 넣어준
 // 구간별 내역(이 구간 요금 ÷ 그때 같이 타고 있던 인원수)을 그대로 문장으로 보여준다.
 // <details>/<summary>라 JS 없이 클릭으로 펼쳐진다.
-// isActual=true면 실제 택시비 입력 후 화면에서 쓰는 것 — 아래 구간별 금액은 "예상 요금" 기준
-// 비율 계산 근거라 실제 정산액(위에 표시된 금액)과 합계가 정확히 같지 않을 수 있다는 걸 알려준다.
-function fareBreakdownHtml(p, isActual){
+// actualAmount를 넘기면 실제 택시비 입력 후 화면에서 쓰는 것 — breakdown은 "예상 요금" 기준이라
+// 그대로 보여주면 위에 표시된 실제 정산액과 합계가 안 맞는다. 실제 정산액(actualAmount)에 맞춰
+// 구간별 금액을 같은 비율로 환산해서 보여주고, 마지막 구간에서 반올림 나머지를 맞춘다.
+// <details>/<summary>라 JS 없이 클릭으로 펼쳐진다.
+function fareBreakdownHtml(p, actualAmount){
   if (!p.breakdown || !p.breakdown.length) return '';
-  const rows = p.breakdown.map(b =>
-    `<p class="fine-note" style="margin:2px 0;">${escapeHtml(b.from)} → ${escapeHtml(b.to)} 구간: ${won(b.segmentFare)} ÷ ${b.riders}명 = <strong>${won(b.share)}</strong></p>`
-  ).join('') + (isActual ? '<p class="fine-note" style="margin:4px 0 0; color:var(--muted);">※ 아래는 예상 요금 기준 나눔 비율이에요. 실제 금액은 위 총액에 맞춰 같은 비율로 조정돼요.</p>' : '');
+  const isActual = typeof actualAmount === 'number' && actualAmount > 0;
+  const expected = p.breakdown.reduce((a, b) => a + b.share, 0);
+  const k = isActual && expected > 0 ? actualAmount / expected : 1;
+  let rows = p.breakdown.map((b, i) => {
+    let share = Math.round(b.share * k);
+    if (isActual && i === p.breakdown.length - 1) {
+      share = actualAmount - p.breakdown.slice(0, -1).reduce((a, x) => a + Math.round(x.share * k), 0);
+    }
+    return `<p class="fine-note" style="margin:2px 0;">${escapeHtml(b.from)} → ${escapeHtml(b.to)} 구간: ${won(b.segmentFare * k)} ÷ ${b.riders}명 = <strong>${won(share)}</strong></p>`;
+  }).join('');
+  if (isActual) rows += `<p class="fine-note" style="margin:4px 0 0; color:var(--muted);">※ 예상 요금(${won(expected)})과 실제 택시비가 달라서, 실제 택시비에 맞춰 구간별 금액을 같은 비율로 조정했어요.</p>`;
   return `<details style="margin:2px 0 6px;"><summary style="cursor:pointer; color:var(--primary-dark); font-size:13px;">왜 이 금액이에요?</summary>${rows}</details>`;
 }
 // 닉네임·계좌번호처럼 사용자가 직접 입력한 문자열을 템플릿 리터럴로 innerHTML에 꽂을 때 반드시
@@ -1498,7 +1508,6 @@ const ICON_PIN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" st
 const ICON_WALK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.6" fill="currentColor" stroke="none"/><path d="M14 8 10 9l-1 5 2 6M10 9l3 3-1 5M6 22l3-4 2-2"/></svg>';
 const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
 const ICON_CHEVRON_R = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
-const ICON_SPARK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"/><path d="M19 15l.7 1.8L21.5 17.5 19.7 18.2 19 20l-.7-1.8L16.5 17.5l1.8-.7L19 15Z"/></svg>';
 const ICON_CAR = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16C5.67 16 5 15.33 5 14.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
 const ICON_GROUP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z"/></svg>';
 const POPULAR_ORIGINS = ['포항역', '포항터미널', '죽도시장', '영일대해수욕장', '포항공과대학교', '한동대학교', '한동대 버스 정류장', '한동대 현동', 'CU 장성그랜드점', '커피 유야', '한동대 오석', '그레이스더테이블'];
@@ -1988,8 +1997,15 @@ trainScheduleBtn.addEventListener('click', async () => {
         note.textContent = data.referenceNote || '이 날짜는 정확한 시간표가 없어요. 평소 비슷한 시간대예요.';
         trainScheduleList.appendChild(note);
       }
+      // 이동 날짜가 오늘이면 이미 지나간 열차는 목록에서 뺀다 — 못 타는 열차를 고르게 하면 안 된다.
+      const now = new Date();
+      const isToday = (dateInput.value || localDateStr(now)) === localDateStr(now);
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      let shown = 0;
       trains.forEach(t => {
         const time = ctx.direction === 'arrival' ? t.arrivalTime : t.departureTime;
+        if (isToday && timeToMin(time) < nowMin) return;
+        shown++;
         const counterpart = ctx.direction === 'arrival' ? t.departureStation : t.arrivalStation;
         const label = ctx.direction === 'arrival' ? `${counterpart} 출발` : `${counterpart} 방향`;
         const btn = document.createElement('button');
@@ -2006,6 +2022,12 @@ trainScheduleBtn.addEventListener('click', async () => {
         });
         trainScheduleList.appendChild(btn);
       });
+      if (!shown) {
+        const empty = document.createElement('p');
+        empty.className = 'train-schedule-note';
+        empty.textContent = '오늘 남은 열차가 없어요. 날짜를 바꾸거나 시간을 직접 입력해주세요.';
+        trainScheduleList.appendChild(empty);
+      }
     }
   } catch (e) {
     trainScheduleList.innerHTML = '<p class="train-schedule-note">지금 시간표를 불러올 수 없어요. 직접 입력해주세요.</p>';
@@ -2381,7 +2403,6 @@ function renderPodList(){
       <div class="pod-card-top">
         <strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong>
         <div class="pod-card-badges">
-          <span class="badge badge--match">${ICON_SPARK} ${prev.matchScore.total}점</span>
           ${trainBadge}
           <span class="pod-card-leader">${leaderNickname} 팟장</span>
         </div>
@@ -2764,7 +2785,16 @@ async function renderPodChat(podId){
     </div>
     <div class="chat-box" id="chat-messages"></div>`;
 
-  document.getElementById('chat-body').innerHTML = html;
+  // 스크롤은 #chat-body가 맡는다. 아래에서 innerHTML을 통째로 갈아끼우면 scrollTop이 0으로 리셋돼서
+  // 메시지를 보낼 때마다(내 전송·실시간 갱신 모두) 화면이 맨 위로 튄다 — 갈아끼우기 전에 위치를 저장했다가 복원한다.
+  // 맨 아래 근처에 있었거나 방금 들어온 방이면 맨 아래로, 위쪽 대화를 읽던 중이면 읽던 자리를 유지한다.
+  const chatBody = document.getElementById('chat-body');
+  const sameRoom = chatBody.dataset.podId === String(podId);
+  const wasNearBottom = chatBody.scrollHeight - chatBody.scrollTop - chatBody.clientHeight < 80;
+  const keepScrollTop = sameRoom && !wasNearBottom ? chatBody.scrollTop : null;
+  chatBody.innerHTML = html;
+  chatBody.dataset.podId = String(podId);
+  const scrollChatToBottom = () => { chatBody.scrollTop = chatBody.scrollHeight; };
 
   // 아바타 한 줄 = "누가, 몇 명" 즉시 훑기용. 사람별 상세(성별·하차지·요금)는 아래 카드 하나에
   // 몰아서, 빈자리마다 "아직 빈자리예요" 문장을 반복해 세로 공간을 잡아먹지 않게 한다.
@@ -2893,7 +2923,7 @@ async function renderPodChat(podId){
     botDiv.innerHTML = buildBotSummaryHtml(pod, result, podSummaryIntro[podId]);
     msgWrap.appendChild(botDiv);
   }
-  msgWrap.scrollTop = msgWrap.scrollHeight;
+  if (keepScrollTop !== null) chatBody.scrollTop = keepScrollTop; else scrollChatToBottom();
 
   const chatInput = document.getElementById('chat-input');
   const sendBtn = document.getElementById('btn-chat-send');
@@ -2960,7 +2990,7 @@ async function renderPodChat(podId){
   summaryBtn.addEventListener('click', async () => {
     // 이미 열어둔 상태면 다시 안 받아온다 — 아래로 스크롤만 해서 보여준다.
     if (podSummaryIntro[podId] !== undefined) {
-      msgWrap.scrollTop = msgWrap.scrollHeight;
+      scrollChatToBottom();
       return;
     }
     summaryBtn.disabled = true;
@@ -2987,7 +3017,7 @@ async function renderPodChat(podId){
       div.className = 'chat-msg bot';
       div.innerHTML = buildBotSummaryHtml(pod, result, intro);
       msgWrap.appendChild(div);
-      msgWrap.scrollTop = msgWrap.scrollHeight;
+      scrollChatToBottom();
     } catch (e) {
       showError('팟 정보를 못 가져왔어요. 잠시 후 다시 시도해보세요.');
     } finally {
@@ -3309,7 +3339,7 @@ function renderDoneSummary(pod){
       <p class="done-summary-meta">${pod.departTime} 출발 · ${pod.settlement.length}명 정산</p>
       ${pod.settlement.map(s => {
         const p = pod.finalResult && pod.finalResult.perPerson.find(x => x.nickname === s.nickname);
-        return `<div class="done-summary-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></div>${p ? fareBreakdownHtml(p, true) : ''}`;
+        return `<div class="done-summary-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></div>${p ? fareBreakdownHtml(p, s.amount) : ''}`;
       }).join('')}
       <div class="done-summary-total"><span>실제 택시비 합계</span><strong>${won(total)}</strong></div>
     </div>
@@ -3434,7 +3464,7 @@ function renderSettlement(podId){
     listEl.innerHTML = `<p class="callout">총 ${won(total)}</p>` +
       pod.settlement.map(s => {
         const p = result.perPerson.find(x => x.nickname === s.nickname);
-        return `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${p ? fareBreakdownHtml(p, true) : ''}`;
+        return `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${p ? fareBreakdownHtml(p, s.amount) : ''}`;
       }).join('');
     document.getElementById('settlement-result').hidden = false;
     document.getElementById('account-field').hidden = false;
@@ -3525,7 +3555,7 @@ function renderSettlement(podId){
     const listEl = document.getElementById('settlement-list');
     listEl.innerHTML = `<p class="callout">총 ${won(actual)}</p>`;
     pod.settlement.forEach((s, i) => {
-      listEl.innerHTML += `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${fareBreakdownHtml(result.perPerson[i], true)}`;
+      listEl.innerHTML += `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${fareBreakdownHtml(result.perPerson[i], s.amount)}`;
     });
     document.getElementById('settlement-result').hidden = false;
     document.getElementById('account-field').hidden = false;
