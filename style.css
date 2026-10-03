@@ -393,6 +393,9 @@
   /* 팟 취소는 파괴적 동작이라 확정하기보다 눈에 덜 띄게 텍스트 링크로 둔다 */
   .btn--text-danger{ background:none; color:var(--danger); height:auto; padding:10px; font-size:13px; font-weight:600; text-decoration:underline; text-underline-offset:3px; }
   .cta-hint{ text-align:center; font-size:12.5px; color:var(--ink-soft); margin:0 0 10px; }
+  .paid-banner{ display:flex; flex-direction:column; gap:4px; align-items:center; text-align:center; background:var(--green-soft); color:var(--green); border-radius:14px; padding:16px 14px; margin:0 0 12px; }
+  .paid-banner strong{ font-size:18px; font-weight:800; }
+  .paid-banner span{ font-size:14px; font-weight:600; }
 
   .stop-row{ display:flex; gap:12px; padding:12px 0; }
   .stop-row + .stop-row{ border-top:1px dashed var(--line); }

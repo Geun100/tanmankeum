@@ -1463,6 +1463,13 @@ function isMyPodStale(pod){
   return new Date(`${date}T${pod.departTime}`).getTime() + 30 * 60000 < Date.now();
 }
 
+// 장소 검색 결과를 포항역 기준 가까운 순으로 정렬한다(서비스 지역이 포항이라 전국 동명 장소보다
+// 포항 안 장소가 먼저 나오게). 카카오 SDK가 비동기 로드라 호출 시점에 만든다.
+function nearStationSearchOpts(){
+  const c = PLACE_COORDS['포항역'];
+  return { location: new kakao.maps.LatLng(c.lat, c.lng), sort: kakao.maps.services.SortBy.DISTANCE };
+}
+
 /* ============ 8. 화면 1: 온보딩 ============ */
 // 카카오 Places 키워드검색으로 자동완성 목록을 띄우고, 고르면 실좌표를 PLACE_REGISTRY에 등록한다.
 async function setupPlaceAutocomplete(inputId, listId){
@@ -1491,7 +1498,7 @@ async function setupPlaceAutocomplete(inputId, listId){
           list.appendChild(li);
         });
         list.hidden = false;
-      });
+      }, nearStationSearchOpts());
     }, 250);
   });
   document.addEventListener('click', (e) => { if (e.target !== input) list.hidden = true; });
@@ -1684,7 +1691,7 @@ document.getElementById('ob-dest-map-btn').addEventListener('click', () => mapPi
           list.appendChild(li);
         });
         list.hidden = false;
-      });
+      }, nearStationSearchOpts());
     }, 250);
   });
   document.addEventListener('click', (e) => { if (e.target !== input) list.hidden = true; });
@@ -3082,7 +3089,7 @@ async function renderPodChat(podId){
       ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-decline-pod">거절하기</button>`;
     } else if (me && me.paid) {
       // 확정 후 이탈은 팟장이 정산 화면에서 내 입금을 체크해줘야만 가능하다.
-      ctaHtml += `<p class="cta-hint">팟장이 입금을 확인했어요. 이제 나가도 돼요.</p>`;
+      ctaHtml += `<div class="paid-banner" role="status"><strong>✅ 입금 확인 완료</strong><span>팟장이 입금을 확인했어요. 이제 팟에서 나가도 돼요.</span></div>`;
       ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">팟 나가기</button>`;
     } else {
       ctaHtml += `<p class="cta-hint">팟장이 채팅방에서 정산 안내를 보내면 입금해주세요. 팟장이 입금 확인하면 여기서 나갈 수 있어요.</p>`;
