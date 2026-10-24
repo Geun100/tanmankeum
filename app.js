@@ -2329,15 +2329,15 @@ function statusLabel(){
 function renderPodList(){
   const u = STATE.user;
   let list = STATE.pods.filter(p => p.id !== STATE.myPodId);
-  // 시드/더미 팟(is_seed 계정)도 날짜 만료 필터를 똑같이 적용한다 — 출발 시각이 지나면 안 보인다.
-  // seedLeaderIds는 정렬(실제 사용자 우선)에만 쓰며, 로드되는 대로 다시 그린다.
+  // 시드/더미 팟(is_seed 계정)은 날짜 만료 필터에서 뺀다 — 시연용이라 날짜가 지나도 계속 보여야 한다.
+  // seedLeaderIds가 아직 안 로드됐으면(첫 렌더) 만료 필터를 그대로 적용하고, 로드되는 대로 다시 그린다.
   if (!seedLeaderIds) loadSeedProfileIds().then(() => renderPodList());
   const isSeedPod = pod => !!(seedLeaderIds && seedLeaderIds.has(pod.leaderId));
   // 출발 시각이 이미 지난 팟은 뺀다 — 이미 떠난 택시팟을 추천하면 안 된다.
   // (한때 데모용으로 꺼둔 적이 있었는데, 그러면 죽은 옛날 팟이 계속 목록에 남아 진짜 매칭을
   // 방해한다 — 시간 매칭 계산에도 혼선을 준다. enterHome()이 내 팟의 낡은 시각은 재접속 시
   // 자동으로 새로고침해주므로, 여기서 걸러지는 건 정말로 방치된 팟뿐이다.)
-  list = list.filter(p => !isPodExpired(p));
+  list = list.filter(p => isSeedPod(p) || !isPodExpired(p));
   // 정원이 찬 팟과 이미 확정/진행/완료된 팟은 참가할 수 없으니 목록에서 뺀다.
   list = list.filter(p => p.participants.length < p.desiredSize && p.status === 'recruiting');
   if (sameDestFilter) list = list.filter(p => p.leaderDest === u.dest);
