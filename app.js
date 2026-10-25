@@ -981,7 +981,7 @@ document.querySelectorAll('[data-back]').forEach(btn => {
   });
 });
 document.getElementById('home-logo').addEventListener('click', async () => {
-  if (!STATE.user) return;
+  if (!STATE.user || STATE.guest) return;
   await renderHome();
   showScreen('screen-home');
 });
@@ -1841,6 +1841,7 @@ async function postJson(url, body){
   return { ok: r.ok, status: r.status, data };
 }
 function finishVerification(){
+  leaveGuest();
   setVerifiedLocal();
   if (codeTick) { clearInterval(codeTick); codeTick = null; }
   const cb = emailDoneCb;
@@ -1901,7 +1902,8 @@ btnEmailResend.addEventListener('click', sendEmailCode);
 btnEmailVerify.addEventListener('click', verifyEmailCode);
 syncEmailButtons();
 
-// --- 로그인 없이 둘러보기: 지금 모집 중인 팟을 읽기만 한다(참가·팟 만들기는 로그인 후) ---
+// --- 로그인 없이 둘러보기: 같은 홈 화면에서 지금 모집 중인 팟을 읽기만 한다 ---
+// 개인 매칭(내 목적지 기준 요금 등)과 내 팟은 로그인한 뒤에만 있어서 숨기고, 팟을 누르면 로그인을 안내한다.
 function browseDayLabel(dateStr){
   if (!dateStr) return '';
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -1912,16 +1914,29 @@ function browseDayLabel(dateStr){
   if (diff === 2) return '모레';
   return `${d.getMonth() + 1}월 ${d.getDate()}일(${'일월화수목금토'[d.getDay()]})`;
 }
+function leaveGuest(){
+  STATE.guest = false;
+  document.getElementById('screen-home').classList.remove('is-guest');
+  document.getElementById('pod-list-title').textContent = '추천 팟';
+}
+function goLoginFromGuest(){
+  leaveGuest();
+  showScreen('screen-ob-email');
+}
 async function openBrowse(){
-  const ul = document.getElementById('browse-list');
+  STATE.guest = true;
+  document.getElementById('screen-home').classList.add('is-guest');
+  document.getElementById('pod-list-title').textContent = '모집 중인 팟';
+  const ul = document.getElementById('pod-list');
   ul.innerHTML = '<li class="empty-hero"><p class="page-sub">불러오는 중…</p></li>';
-  showScreen('screen-browse');
+  showScreen('screen-home');
   try {
     const pods = SUPA_ENABLED ? await loadOpenPods() : seedPods();
     // 출발 시각이 지난 팟·정원이 찬 팟·모집이 끝난 팟은 뺀다.
     const open = pods
       .filter(p => p.status === 'recruiting' && p.participants.length < p.desiredSize && !isPodExpired(p))
       .sort((a, b) => new Date(`${a.departDate}T${a.departTime}`) - new Date(`${b.departDate}T${b.departTime}`));
+    if (!STATE.guest) return; // 불러오는 동안 로그인 쪽으로 나갔다
     ul.innerHTML = '';
     if (!open.length) {
       ul.innerHTML = '<li class="empty-hero"><p class="page-sub">지금 모집 중인 팟이 없어요. 로그인하고 직접 만들어 보세요.</p></li>';
@@ -1930,11 +1945,15 @@ async function openBrowse(){
     open.forEach(pod => {
       const li = document.createElement('li');
       li.className = 'pod-card';
-      li.style.cursor = 'default';
       li.innerHTML = `
         <div class="pod-card-top"><strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong></div>
-        <p class="pod-meta">${browseDayLabel(pod.departDate)} · ${pod.departTime} 출발</p>
-        <p class="pod-meta">현재 ${pod.participants.length}/${pod.desiredSize}명 · 남은 자리 ${pod.desiredSize - pod.participants.length}명</p>`;
+        <p class="pod-meta">${browseDayLabel(pod.departDate)} · ${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명 · 남은 자리 ${pod.desiredSize - pod.participants.length}명</p>`;
+      li.addEventListener('click', () => openModal({
+        title: '로그인이 필요해요',
+        body: '한동대 메일로 로그인하면 이 팟에 참가하고, 직접 팟도 만들 수 있어요.',
+        confirmLabel: '로그인하기',
+        onConfirm: goLoginFromGuest,
+      }));
       ul.appendChild(li);
     });
   } catch (e) {
@@ -1942,7 +1961,7 @@ async function openBrowse(){
   }
 }
 document.getElementById('btn-browse').addEventListener('click', openBrowse);
-document.getElementById('btn-browse-login').addEventListener('click', () => showScreen('screen-ob-email'));
+document.getElementById('btn-guest-login').addEventListener('click', goLoginFromGuest);
 
 // --- 1단계: 닉네임 + 성별 ---
 let obMode = 'onboarding'; // 'onboarding' | 'settings' — screen-ob-route를 두 용도로 재사용
