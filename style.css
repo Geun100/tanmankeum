@@ -469,3 +469,14 @@
   .toast{ position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%); z-index:1000; max-width:calc(100% - 32px);
     background:var(--ink, #222); color:#fff; padding:12px 18px; border-radius:14px; font-size:14px; font-weight:600; box-shadow:0 6px 20px rgba(0,0,0,.25); animation:toast-in .25s ease-out; }
   @keyframes toast-in{ from{ opacity:0; transform:translate(-50%, 12px); } to{ opacity:1; transform:translate(-50%, 0); } }
+
+  /* ===== 학교 메일 인증 ===== */
+  .email-code-box{ display:flex; flex-direction:column; gap:10px; }
+  .email-code-box[hidden]{ display:none; }
+  #email-msg.is-error{ color:var(--danger); }
+
+  /* 학교 메일: 도메인은 고정으로 보여주고 아이디만 입력받는다 */
+  .input-suffix{ display:flex; align-items:center; height:48px; border-radius:var(--radius-input); border:1px solid var(--line); background:var(--surface); }
+  .input-suffix:focus-within{ border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+  .field .input-suffix input{ flex:1 1 auto; min-width:0; height:100%; border:0; box-shadow:none; background:transparent; padding:0 4px 0 14px; }
+  .input-suffix-text{ flex:none; padding-right:14px; font-size:16px; color:var(--ink-soft); }

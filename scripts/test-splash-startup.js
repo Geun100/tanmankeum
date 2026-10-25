@@ -10,7 +10,7 @@ const cutoff = source.indexOf('// --- 1단계: 닉네임 + 성별 ---');
 if (cutoff < 0) throw new Error('startup cutoff marker not found');
 
 function makeElement(id) {
-  const classes = new Set(id === 'screen-splash' ? ['screen', 'active'] : id === 'screen-ob-profile' ? ['screen'] : []);
+  const classes = new Set(id === 'screen-splash' ? ['screen', 'active'] : id === 'screen-ob-profile' || id === 'screen-ob-email' ? ['screen'] : []);
   const target = {
     id,
     value: '',
@@ -45,12 +45,13 @@ const getElement = id => {
 };
 getElement('screen-splash');
 getElement('screen-ob-profile');
+getElement('screen-ob-email');
 
 const scheduled = [];
 const document = {
   getElementById: getElement,
   querySelectorAll(selector) {
-    if (selector === '.screen') return [getElement('screen-splash'), getElement('screen-ob-profile')];
+    if (selector === '.screen') return [getElement('screen-splash'), getElement('screen-ob-profile'), getElement('screen-ob-email')];
     return [];
   },
   querySelector() { return null; },
@@ -99,7 +100,14 @@ vm.runInContext(source.slice(0, cutoff), context, { filename: 'app.js' });
 const splashTimer = scheduled.find(x => x.ms === 1750);
 if (!splashTimer) throw new Error('FAIL: splash transition timer was not scheduled');
 splashTimer.fn();
-if (!getElement('screen-ob-profile').classList.contains('active')) {
-  throw new Error('FAIL: splash did not transition to onboarding profile');
-}
-console.log('PASS: splash exits when Supabase SDK CDN is unavailable');
+// 새 사용자는 인증 서버에서 "인증됨"을 확인받기 전까지 학교 메일 인증 화면으로 간다(여기선 fetch가 실패한다).
+// 스플래시에 갇히면 안 되고, 인증 없이 프로필 화면으로 새어 들어가도 안 된다.
+setImmediate(() => {
+  if (getElement('screen-ob-profile').classList.contains('active')) {
+    throw new Error('FAIL: unverified new user must not reach the profile screen');
+  }
+  if (!getElement('screen-ob-email').classList.contains('active')) {
+    throw new Error('FAIL: splash did not transition to school email verification');
+  }
+  console.log('PASS: splash exits to school email verification when Supabase SDK CDN is unavailable');
+});

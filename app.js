@@ -88,6 +88,11 @@ const SUPA_ENABLED = !!(
   && typeof window.supabase.createClient === 'function'
 );
 const supa = SUPA_ENABLED ? window.supabase.createClient(window.SUPABASE_KEYS.url, window.SUPABASE_KEYS.anonKey) : null;
+// 학교 메일 인증번호 확인 전용 클라이언트. 메인 supa가 "로그인 상태"가 되면 DB 접근 규칙(anon 기준)이
+// 어긋나 앱이 깨진다 — 그래서 세션을 저장하지 않는 별도 클라이언트로만 확인하고, 결과는 서버가 UUID에 연결한다.
+const supaAuth = SUPA_ENABLED
+  ? window.supabase.createClient(window.SUPABASE_KEYS.url, window.SUPABASE_KEYS.anonKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })
+  : null;
 
 function getOrCreateUserId(){
   const KEY = 'tanmankeum_uid';
@@ -1715,13 +1720,40 @@ document.getElementById('ob-dest-map-btn').addEventListener('click', () => mapPi
 
 /* ============ 8-0. 온보딩: 스플래시 → 닉네임/성별 → 경로/시간/인원 ============ */
 
+// --- 학교 메일 인증: 인증을 마친 사람만 들어올 수 있다 ---
+// 서버(verified_users)가 진짜 기준이고, localStorage 표시는 매번 서버에 안 묻기 위한 캐시다.
+// ※ 이 문은 화면 흐름 차원이다 — DB를 anon 키로 직접 두드리는 건 막지 못한다(서버 쪽 강제는 별도 과제).
+const SCHOOL_DOMAIN = '@handong.ac.kr';
+const VERIFIED_KEY = 'tanmankeum_verified_v1';
+function isVerifiedLocal(){ try { return localStorage.getItem(VERIFIED_KEY) === '1'; } catch { return false; } }
+function setVerifiedLocal(){ try { localStorage.setItem(VERIFIED_KEY, '1'); } catch {} }
+let emailDoneCb = null;
+// 인증됐으면 onDone, 아니면 메일 인증 화면을 띄운다. 이미 쓰던 사용자는 인증 서버가 안 돼도
+// 들여보낸다 — 인증 서버 장애가 기존 사용자를 막으면 안 된다. 새 사용자는 서버 확인이 안 되면 못 들어온다.
+async function requireVerification(onDone, isExistingUser){
+  if (isVerifiedLocal()) { onDone(); return; }
+  try {
+    const r = await fetch(`/api/verify-status?userId=${encodeURIComponent(getOrCreateUserId())}`);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.verified) { setVerifiedLocal(); onDone(); return; }
+      emailDoneCb = onDone;
+      showScreen('screen-ob-email');
+      return;
+    }
+  } catch (_) { /* 아래에서 처리 */ }
+  if (isExistingUser) { onDone(); return; }
+  emailDoneCb = onDone;
+  showScreen('screen-ob-email');
+}
+
 // 스플래시는 로고 애니메이션이 끝나면 자동으로 넘어간다(약 1.6초). 화면을 누르면 바로 건너뛴다.
 const SPLASH_MS = 1750;
 let splashDone = false;
 function leaveSplash(){
   if (splashDone) return;
   splashDone = true;
-  showScreen('screen-ob-profile');
+  requireVerification(() => showScreen('screen-ob-profile'), false);
 }
 const cachedOnboarding = loadOnboardingCache();
 if (cachedOnboarding) {
@@ -1740,7 +1772,7 @@ if (cachedOnboarding) {
   identifyUser(STATE.user.id);
   // 마이크로태스크로 미룬다 — enterHome()이 쓰는 아래쪽 const들은 스크립트가 끝까지 실행돼야
   // 초기화된다(TDZ). 여기서 바로 부르면 "Cannot access before initialization".
-  Promise.resolve().then(enterHome)
+  const bootExisting = () => Promise.resolve().then(enterHome)
     .then(async () => {
       // 내 팟(팟장이든 참가자든)의 출발 시각이 30분 넘게 지났으면 그 팟은 이제 의미가 없다 —
       // 조용히 홈으로 보내는 대신 정리하고 다시 경로/시간을 고르게 한다.
@@ -1754,14 +1786,163 @@ if (cachedOnboarding) {
       openPodFromUrl();
     })
     .catch(e => { showError(friendlyDbError(e)); showScreen('screen-ob-profile'); });
+  Promise.resolve().then(() => requireVerification(bootExisting, true));
 } else {
   // 크롬이 autocomplete="off"를 무시하고 예전에 이 브라우저에서 입력했던 값을 멋대로
   // 채워넣는 경우가 있다 — 새 온보딩인데 출발지/목적지가 미리 채워져 보이는 원인.
   // 스크립트가 명시적으로 비워서 덮어쓴다.
-  ['ob-nickname', 'ob-origin', 'ob-dest'].forEach(id => { document.getElementById(id).value = ''; });
+  ['ob-nickname', 'ob-origin', 'ob-dest', 'ob-email'].forEach(id => { document.getElementById(id).value = ''; });
   setTimeout(leaveSplash, SPLASH_MS);
   document.getElementById('screen-splash').addEventListener('click', leaveSplash);
 }
+
+// --- 0단계: 학교 메일 인증 화면 ---
+// 인증번호 발급·메일 발송은 서버(/api/auth-otp)가 Supabase 로그인에 요청하고, 번호 확인은 브라우저가
+// Supabase로 직접 한 뒤(verifyOtp) 그 결과를 서버(/api/auth-link)가 이 사용자(UUID)에 연결한다.
+const emailInput = document.getElementById('ob-email');
+const codeInput = document.getElementById('ob-code');
+const codeBox = document.getElementById('email-code-box');
+const emailMsg = document.getElementById('email-msg');
+const codeTimerEl = document.getElementById('email-code-timer');
+const btnEmailSend = document.getElementById('btn-email-send');
+const btnEmailResend = document.getElementById('btn-email-resend');
+const btnEmailVerify = document.getElementById('btn-email-verify');
+let emailBusy = false, codeExpiresAt = 0, resendAt = 0, codeTick = null;
+
+// 입력칸에는 아이디만 받고 @handong.ac.kr은 화면에 고정으로 붙어 있다. 전체 주소를 붙여넣어도 도메인은 한 번만 쓴다.
+// 아이디 꼴이 아니면 빈 문자열.
+function schoolEmail(){
+  let local = emailInput.value.trim().toLowerCase();
+  if (local.endsWith(SCHOOL_DOMAIN)) local = local.slice(0, -SCHOOL_DOMAIN.length);
+  return local && !/[\s@]/.test(local) ? local + SCHOOL_DOMAIN : '';
+}
+function setEmailMsg(text, isError){
+  emailMsg.textContent = text || '';
+  emailMsg.classList.toggle('is-error', !!(text && isError));
+}
+function syncEmailButtons(){
+  btnEmailSend.hidden = !codeBox.hidden;
+  btnEmailSend.disabled = emailBusy || !schoolEmail();
+  btnEmailResend.disabled = emailBusy || !schoolEmail() || Date.now() < resendAt;
+  btnEmailVerify.disabled = emailBusy || !/^\d{6}$/.test(codeInput.value.trim());
+}
+function tickCode(){
+  const left = codeExpiresAt - Date.now();
+  codeTimerEl.textContent = left > 0
+    ? `남은 시간 ${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}`
+    : '인증번호 유효시간이 지났어요. 다시 받아주세요';
+  if (left <= 0 && Date.now() >= resendAt) { clearInterval(codeTick); codeTick = null; }
+  syncEmailButtons();
+}
+async function postJson(url, body){
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  let data = {};
+  try { data = await r.json(); } catch (_) {}
+  return { ok: r.ok, status: r.status, data };
+}
+function finishVerification(){
+  setVerifiedLocal();
+  if (codeTick) { clearInterval(codeTick); codeTick = null; }
+  const cb = emailDoneCb;
+  emailDoneCb = null;
+  if (cb) cb(); else showScreen('screen-ob-profile');
+}
+async function sendEmailCode(){
+  const email = schoolEmail();
+  if (emailBusy || !email) return;
+  emailBusy = true; setEmailMsg(''); syncEmailButtons();
+  try {
+    const r = await postJson('/api/auth-otp', { userId: getOrCreateUserId(), email });
+    if (r.ok && r.data.alreadyVerified) { finishVerification(); return; }
+    if (!r.ok) {
+      if (r.status === 429 && r.data.retryAfter) resendAt = Date.now() + r.data.retryAfter * 1000;
+      setEmailMsg(r.data.error || '인증번호를 보내지 못했어요. 잠시 뒤 다시 시도해 주세요', true);
+      return;
+    }
+    codeBox.hidden = false;
+    codeInput.value = '';
+    codeExpiresAt = Date.now() + 10 * 60 * 1000; // Supabase 대시보드의 메일 OTP 유효시간을 10분(600초)으로 맞춰둔다
+    resendAt = Date.now() + 60 * 1000;
+    if (codeTick) clearInterval(codeTick);
+    codeTick = setInterval(tickCode, 1000);
+    tickCode();
+    codeInput.focus();
+    setEmailMsg(`${email}으로 인증번호를 보냈어요. 메일함을 확인해 주세요`);
+    track('email_code_sent');
+  } catch (_) {
+    setEmailMsg('네트워크 문제로 보내지 못했어요. 다시 시도해 주세요', true);
+  } finally {
+    emailBusy = false; syncEmailButtons();
+  }
+}
+async function verifyEmailCode(){
+  const email = schoolEmail();
+  if (emailBusy || !email || !/^\d{6}$/.test(codeInput.value.trim())) return;
+  if (!supaAuth) { setEmailMsg('인증 서버에 연결되지 않았어요', true); return; }
+  emailBusy = true; setEmailMsg(''); syncEmailButtons();
+  try {
+    const { data, error } = await supaAuth.auth.verifyOtp({ email, token: codeInput.value.trim(), type: 'email' });
+    if (error || !data || !data.session) { setEmailMsg('인증번호가 맞지 않거나 만료됐어요', true); return; }
+    const r = await postJson('/api/auth-link', { userId: getOrCreateUserId(), accessToken: data.session.access_token });
+    if (r.ok && r.data.verified) { track('email_verified'); finishVerification(); return; }
+    setEmailMsg(r.data.error || '인증하지 못했어요. 다시 시도해 주세요', true);
+  } catch (_) {
+    setEmailMsg('네트워크 문제로 확인하지 못했어요. 다시 시도해 주세요', true);
+  } finally {
+    emailBusy = false; syncEmailButtons();
+  }
+}
+emailInput.addEventListener('input', () => { setEmailMsg(''); syncEmailButtons(); });
+codeInput.addEventListener('input', () => { codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6); syncEmailButtons(); });
+codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') verifyEmailCode(); });
+emailInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && codeBox.hidden) sendEmailCode(); });
+btnEmailSend.addEventListener('click', sendEmailCode);
+btnEmailResend.addEventListener('click', sendEmailCode);
+btnEmailVerify.addEventListener('click', verifyEmailCode);
+syncEmailButtons();
+
+// --- 로그인 없이 둘러보기: 지금 모집 중인 팟을 읽기만 한다(참가·팟 만들기는 로그인 후) ---
+function browseDayLabel(dateStr){
+  if (!dateStr) return '';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(`${dateStr}T00:00:00`);
+  const diff = Math.round((d - today) / 86400000);
+  if (diff === 0) return '오늘';
+  if (diff === 1) return '내일';
+  if (diff === 2) return '모레';
+  return `${d.getMonth() + 1}월 ${d.getDate()}일(${'일월화수목금토'[d.getDay()]})`;
+}
+async function openBrowse(){
+  const ul = document.getElementById('browse-list');
+  ul.innerHTML = '<li class="empty-hero"><p class="page-sub">불러오는 중…</p></li>';
+  showScreen('screen-browse');
+  try {
+    const pods = SUPA_ENABLED ? await loadOpenPods() : seedPods();
+    // 출발 시각이 지난 팟·정원이 찬 팟·모집이 끝난 팟은 뺀다.
+    const open = pods
+      .filter(p => p.status === 'recruiting' && p.participants.length < p.desiredSize && !isPodExpired(p))
+      .sort((a, b) => new Date(`${a.departDate}T${a.departTime}`) - new Date(`${b.departDate}T${b.departTime}`));
+    ul.innerHTML = '';
+    if (!open.length) {
+      ul.innerHTML = '<li class="empty-hero"><p class="page-sub">지금 모집 중인 팟이 없어요. 로그인하고 직접 만들어 보세요.</p></li>';
+      return;
+    }
+    open.forEach(pod => {
+      const li = document.createElement('li');
+      li.className = 'pod-card';
+      li.style.cursor = 'default';
+      li.innerHTML = `
+        <div class="pod-card-top"><strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong></div>
+        <p class="pod-meta">${browseDayLabel(pod.departDate)} · ${pod.departTime} 출발</p>
+        <p class="pod-meta">현재 ${pod.participants.length}/${pod.desiredSize}명 · 남은 자리 ${pod.desiredSize - pod.participants.length}명</p>`;
+      ul.appendChild(li);
+    });
+  } catch (e) {
+    ul.innerHTML = '<li class="empty-hero"><p class="page-sub">목록을 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.</p></li>';
+  }
+}
+document.getElementById('btn-browse').addEventListener('click', openBrowse);
+document.getElementById('btn-browse-login').addEventListener('click', () => showScreen('screen-ob-email'));
 
 // --- 1단계: 닉네임 + 성별 ---
 let obMode = 'onboarding'; // 'onboarding' | 'settings' — screen-ob-route를 두 용도로 재사용
