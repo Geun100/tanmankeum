@@ -1807,6 +1807,11 @@ const codeTimerEl = document.getElementById('email-code-timer');
 const btnEmailSend = document.getElementById('btn-email-send');
 const btnEmailResend = document.getElementById('btn-email-resend');
 const btnEmailVerify = document.getElementById('btn-email-verify');
+// 보내는 번호 길이와 받는 칸 길이는 같아야 한다. Supabase 대시보드의
+// Authentication > Sign In / Providers > Email > Email OTP Length와 똑같이 맞춰둘 것(지금 8자리).
+// 대시보드 값을 바꾸면 여기와 index.html의 ob-code(maxlength, placeholder)도 같이 바꾼다.
+const CODE_LENGTH = 8;
+const CODE_RE = new RegExp(`^\\d{${CODE_LENGTH}}$`);
 let emailBusy = false, codeExpiresAt = 0, resendAt = 0, codeTick = null;
 
 // 입력칸에는 아이디만 받고 @handong.ac.kr은 화면에 고정으로 붙어 있다. 전체 주소를 붙여넣어도 도메인은 한 번만 쓴다.
@@ -1824,7 +1829,7 @@ function syncEmailButtons(){
   btnEmailSend.hidden = !codeBox.hidden;
   btnEmailSend.disabled = emailBusy || !schoolEmail();
   btnEmailResend.disabled = emailBusy || !schoolEmail() || Date.now() < resendAt;
-  btnEmailVerify.disabled = emailBusy || !/^\d{6}$/.test(codeInput.value.trim());
+  btnEmailVerify.disabled = emailBusy || !CODE_RE.test(codeInput.value.trim());
 }
 function tickCode(){
   const left = codeExpiresAt - Date.now();
@@ -1878,7 +1883,7 @@ async function sendEmailCode(){
 }
 async function verifyEmailCode(){
   const email = schoolEmail();
-  if (emailBusy || !email || !/^\d{6}$/.test(codeInput.value.trim())) return;
+  if (emailBusy || !email || !CODE_RE.test(codeInput.value.trim())) return;
   if (!supaAuth) { setEmailMsg('인증 서버에 연결되지 않았어요', true); return; }
   emailBusy = true; setEmailMsg(''); syncEmailButtons();
   try {
@@ -1894,7 +1899,7 @@ async function verifyEmailCode(){
   }
 }
 emailInput.addEventListener('input', () => { setEmailMsg(''); syncEmailButtons(); });
-codeInput.addEventListener('input', () => { codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6); syncEmailButtons(); });
+codeInput.addEventListener('input', () => { codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, CODE_LENGTH); syncEmailButtons(); });
 codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') verifyEmailCode(); });
 emailInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && codeBox.hidden) sendEmailCode(); });
 btnEmailSend.addEventListener('click', sendEmailCode);
