@@ -158,20 +158,21 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="topbar-title"><strong id="ob-route-title">이동 정보</strong></div>
-        <div style="margin-left:auto;">
-          <button class="icon-btn" id="ob-route-home-btn" data-back="screen-home" aria-label="홈으로" hidden>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v10h14V10"/></svg>
-          </button>
-        </div>
       </header>
       <div class="screen-body">
         <div class="step-dots" aria-hidden="true"><span></span><span class="on"></span></div>
         <p class="page-title">어디로 이동하세요?</p>
         <p class="page-sub">경로와 시간을 알려주면 딱 맞는 동승자를 찾아드려요</p>
-        <p class="hint-box" style="display:flex; align-items:center; gap:6px; margin:0 0 18px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M5 17h14M6 17v-5l1.5-5h9L18 12v5M9 17v2M15 17v2"/><circle cx="7.5" cy="14.5" r="1"/><circle cx="16.5" cy="14.5" r="1"/></svg>
-          가맹 택시가 아니에요. 길에서 잡거나 평소 쓰던 앱으로 부른 택시, 아무거나 같이 타면 돼요
-        </p>
+        <button type="button" class="profile-row" id="ob-profile-row" aria-label="닉네임·성별 변경" hidden>
+          <span class="profile-row-avatar" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+          </span>
+          <span class="profile-row-text">
+            <strong id="ob-profile-row-nick"></strong>
+            <span id="ob-profile-row-gender"></span>
+          </span>
+          <svg class="profile-row-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
 
         <span class="field-label">경로</span>
         <div class="route-row">
@@ -235,6 +236,10 @@ window.__kakaoReady = new Promise((resolve, reject) => {
             <button type="button" class="chip" data-luggage="large" aria-pressed="false">🛄 대형 캐리어</button>
           </div>
         </div>
+        <p class="hint-box" style="display:flex; align-items:center; gap:6px; margin:18px 0 0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M5 17h14M6 17v-5l1.5-5h9L18 12v5M9 17v2M15 17v2"/><circle cx="7.5" cy="14.5" r="1"/><circle cx="16.5" cy="14.5" r="1"/></svg>
+          가맹 택시가 아니에요. 길에서 잡거나 평소 쓰던 앱으로 부른 택시, 아무거나 같이 타면 돼요
+        </p>
       </div>
       <div class="cta-dock">
         <button class="btn btn--primary btn--block" id="btn-find-pod" disabled>등록하기</button>

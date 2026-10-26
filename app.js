@@ -2072,7 +2072,8 @@ nicknameInput.addEventListener('input', syncNextBtn);
 syncNextBtn();
 nextBtn.addEventListener('click', () => {
   if (nextBtn.disabled) return;
-  document.getElementById('ob-route-home-btn').hidden = true; // 최초 온보딩 중엔 아직 홈이 없다
+  if (profileEditing) { endProfileEdit(true); return; }
+  showProfileRow(false);
   showScreen('screen-ob-route');
   // 휠은 화면이 보인 뒤에야 scrollTop이 적용된다(숨겨진 요소는 스크롤 높이가 0이다).
   setWheelTime(clockFromNow(30).time);
@@ -2407,9 +2408,9 @@ function openSettings(){
   if (lock) { renderMyInfoLocked(myPod, lock); showScreen('screen-my-info'); return; }
   settingsPodId = STATE.myPodId;
   obMode = 'settings';
-  document.getElementById('ob-route-home-btn').hidden = false;
-  document.getElementById('ob-route-back-btn').dataset.back = 'screen-ob-profile';
-  document.getElementById('ob-route-title').textContent = '이동 정보 수정';
+  // 뒤로가기는 닉네임 입력(온보딩 1단계)이 아니라 홈으로 간다 — 닉네임·성별은 아래 행에서 따로 고친다.
+  document.getElementById('ob-route-back-btn').dataset.back = 'screen-home';
+  document.getElementById('ob-route-title').textContent = '내 정보';
   document.getElementById('ob-nickname').value = u.nickname;
   setGenderSelection(u.gender);
   document.getElementById('ob-origin').value = u.origin;
@@ -2425,6 +2426,7 @@ function openSettings(){
   syncTrainScheduleButtonLabel();
   document.getElementById('btn-find-pod').disabled = false;
   document.getElementById('btn-find-pod').textContent = '저장하기';
+  showProfileRow(true);
   showScreen('screen-ob-route');
 }
 /* ============ 하단 바 + 기록 ============ */
@@ -2580,9 +2582,54 @@ function promptRescheduleAfterExpiry(){
   syncTrainScheduleButton();
   document.getElementById('btn-find-pod').disabled = false;
   document.getElementById('btn-find-pod').textContent = '저장하기';
+  showProfileRow(false);
   showScreen('screen-ob-route');
 }
-document.getElementById('ob-profile-back-btn').addEventListener('click', () => { obMode = 'onboarding'; });
+// 이동 정보 수정 화면 맨 위의 "닉네임·성별" 행 — 누르면 닉네임 화면이 "프로필 변경"으로 열리고,
+// 확인/뒤로가기를 누르면 이 수정 화면으로 돌아온다(온보딩 1단계로 되돌아가지 않는다).
+let profileEditing = false;
+let profileBackup = null;
+function showProfileRow(show){
+  const row = document.getElementById('ob-profile-row');
+  row.hidden = !show;
+  // 온보딩 진행 점(1/2, 2/2)은 수정 화면에선 의미가 없어서 같이 숨긴다.
+  document.querySelector('#screen-ob-route .step-dots').hidden = show;
+  if (show) {
+    document.getElementById('ob-profile-row-nick').textContent = document.getElementById('ob-nickname').value.trim();
+    document.getElementById('ob-profile-row-gender').textContent = obGender || '';
+  }
+}
+function endProfileEdit(confirmed){
+  profileEditing = false;
+  if (!confirmed && profileBackup) { nicknameInput.value = profileBackup.nickname; setGenderSelection(profileBackup.gender); syncNextBtn(); }
+  const screen = document.getElementById('screen-ob-profile');
+  screen.querySelector('.step-dots').hidden = false;
+  screen.querySelector('.page-title').textContent = '만나서 반가워요';
+  screen.querySelector('.page-sub').textContent = '닉네임과 성별을 알려주세요';
+  nextBtn.textContent = '다음';
+  const back = document.getElementById('ob-profile-back-btn');
+  back.hidden = true;
+  back.dataset.back = 'screen-home';
+  showProfileRow(true);
+  showScreen('screen-ob-route');
+}
+document.getElementById('ob-profile-row').addEventListener('click', () => {
+  profileEditing = true;
+  profileBackup = { nickname: nicknameInput.value, gender: obGender };
+  const screen = document.getElementById('screen-ob-profile');
+  screen.querySelector('.step-dots').hidden = true;
+  screen.querySelector('.page-title').textContent = '프로필 변경';
+  screen.querySelector('.page-sub').textContent = '닉네임과 성별을 바꿀 수 있어요';
+  nextBtn.textContent = '확인';
+  const back = document.getElementById('ob-profile-back-btn');
+  back.dataset.back = 'screen-ob-route'; // 공용 [data-back] 핸들러가 홈이 아니라 수정 화면으로 보내게 한다
+  back.hidden = false;
+  showScreen('screen-ob-profile');
+});
+document.getElementById('ob-profile-back-btn').addEventListener('click', () => {
+  if (!profileEditing) { obMode = 'onboarding'; return; }
+  endProfileEdit(false);
+});
 
 document.getElementById('btn-find-pod').addEventListener('click', async () => {
   const nickname = document.getElementById('ob-nickname').value.trim();
@@ -4139,7 +4186,6 @@ function openNewPodInput({ backTo, keepPlaces }){
   STATE.committed = false;
   STATE.userState = '대기';
   obMode = 'onboarding';
-  document.getElementById('ob-route-home-btn').hidden = true;
   document.getElementById('ob-route-back-btn').dataset.back = backTo;
   document.getElementById('ob-route-title').textContent = '새 팟 만들기';
   document.getElementById('ob-nickname').value = u.nickname;
@@ -4156,6 +4202,7 @@ function openNewPodInput({ backTo, keepPlaces }){
   const findBtn = document.getElementById('btn-find-pod');
   findBtn.disabled = false;
   findBtn.textContent = '등록하기';
+  showProfileRow(false);
   showScreen('screen-ob-route');
   // 휠은 화면이 보인 뒤에야 scrollTop이 적용된다.
   setWheelTime(clockFromNow(30).time);
