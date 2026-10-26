@@ -16,6 +16,13 @@ module.exports = async (req, res) => {
   }
 
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  // 다른 기기에서 계정을 되찾는 건 메일함 주인이라는 증명이다. 그 계정의 옛 알림 구독을 지워서 새 기기에서
+  // 알림을 켤 수 있게 하고(한 계정 = 한 기기) 누가 먼저 차지해 둔 구독도 정리한다.
+  // 알림은 부가 기능이라 실패해도 계정 복구는 계속 진행한다.
+  // 한계: 정리 뒤 빈 자리를 사용자 번호만 아는 사람이 다시 먼저 차지할 수 있다(로그인 없는 신원 모델의 한계).
+  // 근본 해결은 알림 구독을 서버가 확인할 수 있는 로그인·비밀값에 묶는 것이다.
+  const clearPush = async (uid) => { try { await admin.from('push_subscriptions').delete().eq('user_id', uid); } catch (_) {} };
+
   try {
     const { data, error } = await admin.auth.getUser(accessToken);
     const user = data && data.user;
@@ -30,10 +37,7 @@ module.exports = async (req, res) => {
     const { data: owner } = await admin.from('verified_users').select('user_id').eq('email_hash', emailHash).maybeSingle();
     if (owner) {
       const recovered = owner.user_id !== userId;
-      // 다른 기기에서 계정을 되찾는 건 메일함 주인이라는 증명이다. 그 계정의 옛 알림 구독을 지워서,
-      // 새 기기에서 알림을 켤 수 있게 하고(한 계정 = 한 기기) 누가 먼저 차지해 둔 구독도 정리한다.
-      // 알림은 부가 기능이라 실패해도 계정 복구는 계속 진행한다.
-      if (recovered) { try { await admin.from('push_subscriptions').delete().eq('user_id', owner.user_id); } catch (_) {} }
+      if (recovered) await clearPush(owner.user_id);
       res.status(200).json({ ok: true, verified: true, userId: owner.user_id, recovered });
       return;
     }
@@ -43,7 +47,12 @@ module.exports = async (req, res) => {
       if (insErr.code === '23505') {
         // 동시에 같은 메일로 인증이 겹쳤거나, 이 사용자가 이미 (다른 메일로) 인증돼 있는 경우.
         const { data: again } = await admin.from('verified_users').select('user_id').eq('email_hash', emailHash).maybeSingle();
-        if (again) { res.status(200).json({ ok: true, verified: true, userId: again.user_id, recovered: again.user_id !== userId }); return; }
+        if (again) {
+          const recovered = again.user_id !== userId;
+          if (recovered) await clearPush(again.user_id); // 동시 인증이 겹친 경로도 같은 정리를 한다
+          res.status(200).json({ ok: true, verified: true, userId: again.user_id, recovered });
+          return;
+        }
         const { data: me } = await admin.from('verified_users').select('user_id').eq('user_id', userId).maybeSingle();
         if (me) { res.status(200).json({ ok: true, verified: true, userId, recovered: false }); return; }
       }
