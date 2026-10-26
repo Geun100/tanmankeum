@@ -322,32 +322,64 @@ function urlBase64ToUint8Array(base64String){
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
-// 지원 안 하는 환경(사파리 일반 탭, 구형 브라우저 등)이거나 VAPID 키가 없으면 버튼 자체를 숨긴다 —
-// 눌러도 안 되는 버튼을 보여주는 것보다 아예 안 보여주는 게 낫다.
+// 홈 상단의 종 모양 버튼 하나로 켜고 끈다. 켜짐은 파란 종, 꺼짐은 회색 종에 사선이다.
+// 지원 안 하는 환경이거나 브라우저가 차단한 경우에도 버튼은 그대로 보이고(꺼짐 상태),
+// 누르면 왜 안 켜지는지 안내만 한다 — 버튼이 사라지면 켜고 끄는 방법을 알 수 없다.
+// 사용자가 직접 끈 건 localStorage에 기억해서, 권한이 이미 허용돼 있어도 다시 몰래 구독하지 않는다.
+const PUSH_OFF_KEY = 'tanmankeum_push_off';
+function pushOffByUser(){ try { return localStorage.getItem(PUSH_OFF_KEY) === '1'; } catch { return false; } }
+function setPushOffByUser(off){ try { off ? localStorage.setItem(PUSH_OFF_KEY, '1') : localStorage.removeItem(PUSH_OFF_KEY); } catch {} }
+function renderPushBtn(on){
+  const btn = document.getElementById('btn-enable-push');
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on));
+  btn.setAttribute('aria-label', on ? '알림 켜짐' : '알림 꺼짐');
+}
 function initPushUI(){
   const btn = document.getElementById('btn-enable-push');
   if (!btn) return;
   const supported = 'serviceWorker' in navigator && 'PushManager' in window && window.VAPID_PUBLIC_KEY && SUPA_ENABLED;
-  if (!supported || Notification.permission === 'denied') { btn.style.display = 'none'; return; }
-  if (Notification.permission === 'granted') {
-    // 이미 켜져 있으면 버튼을 굳이 보여줄 필요 없다 — 다만 구독이 로컬에서만 날아갔을 수 있어
-    // (기기 변경, 브라우저 데이터 삭제 등) 조용히 한 번 더 구독을 갱신해둔다.
-    btn.style.display = 'none';
-    subscribeToPush().catch(() => {});
+  if (!supported || Notification.permission === 'denied') {
+    renderPushBtn(false);
+    btn.onclick = () => showToast(!supported ? '이 환경에서는 알림을 쓸 수 없어요' : '브라우저 설정에서 알림을 허용해주세요');
     return;
   }
-  btn.style.display = 'inline-flex';
+  if (Notification.permission === 'granted' && !pushOffByUser()) {
+    // 이미 켜져 있다 — 다만 구독이 로컬에서만 날아갔을 수 있어(기기 변경, 브라우저 데이터 삭제 등)
+    // 조용히 한 번 더 구독을 갱신해둔다.
+    renderPushBtn(true);
+    subscribeToPush().catch(() => {});
+  } else {
+    renderPushBtn(false);
+  }
   btn.onclick = async () => {
     btn.disabled = true;
     try {
-      await subscribeToPush();
-      btn.style.display = 'none';
+      if (btn.classList.contains('on')) {
+        await unsubscribeFromPush();
+        setPushOffByUser(true);
+        renderPushBtn(false);
+        showToast('알림을 껐어요');
+      } else {
+        await subscribeToPush();
+        setPushOffByUser(false);
+        renderPushBtn(true);
+        showToast('알림을 켰어요');
+      }
     } catch (e) {
-      showError('알림을 켜지 못했어요. 브라우저 설정에서 알림 권한을 확인해주세요.');
+      showError('알림을 바꾸지 못했어요. 브라우저 설정에서 알림 권한을 확인해주세요.');
     } finally {
       btn.disabled = false;
     }
   };
+}
+
+async function unsubscribeFromPush(){
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) await sub.unsubscribe();
+  const { error } = await supa.from('push_subscriptions').delete().eq('user_id', STATE.user.id);
+  if (error) throw error;
 }
 
 async function subscribeToPush(){
@@ -2304,9 +2336,43 @@ function dropNameFor(userDest, walkDist){
 // (정산 종료 버튼과 같은 문제였다: 화면을 연 뒤 이 값이 바뀌면 저장 시점 조회가 엉뚱한/빈 값을
 // 가리킬 수 있다.)
 let settingsPodId = null;
+// 내 정보(경로·시간·프로필 수정)는 아직 아무도 안 들어온 모집 중인 내 팟에서만 열린다.
+// 다른 사람이 들어왔거나 확정·정산이 시작된 뒤엔 바꾸면 이미 맞춘 약속이 뒤집힌다.
+// 잠겼으면 이유를 말해주는 값을, 열려 있으면 null을 돌려준다.
+function settingsLockReason(pod, userId){
+  if (!pod) return '팟 정보를 찾을 수 없어요. 채팅방에서 다시 확인해주세요.';
+  if (pod.leaderId !== userId) return '참가 중인 팟이 있어서 바꿀 수 없어요. 바꾸려면 채팅방에서 참가를 취소해주세요.';
+  if (pod.status === 'in_progress') return '이동·정산 중인 팟이라 바꿀 수 없어요. 정산을 마치면 새 팟을 만들 수 있어요.';
+  if (pod.status === 'confirmed') return '팟이 확정돼서 바꿀 수 없어요. 바꾸려면 채팅방에서 팟을 취소하고 새로 만들어주세요.';
+  if (pod.participants.length > 1) return '이미 다른 사람이 참가한 팟이라 바꿀 수 없어요. 바꾸려면 채팅방에서 팟을 취소하고 새로 만들어주세요.';
+  return null;
+}
+function renderMyInfoLocked(pod, reason){
+  const u = STATE.user;
+  const date = pod.departDate || u.date;
+  const rows = [
+    ['닉네임', escapeHtml(u.nickname)],
+    ['경로', `${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}`],
+    ['출발', `${date ? dateHeading(date) + ' ' : ''}${pod.departTime}`],
+    ['인원', `${pod.participants.length}/${pod.desiredSize}명`],
+  ];
+  document.getElementById('my-info-body').innerHTML = `
+    <div class="info-box"><p style="margin:0; font-size:14px; line-height:1.55;">${reason}</p></div>
+    <div class="done-summary-card" style="margin-top:0;">
+      ${rows.map(([k, v]) => `<div class="done-summary-row"><span>${k}</span><strong>${v}</strong></div>`).join('')}
+    </div>
+    <button type="button" class="btn btn--ghost btn--block" id="btn-info-chat" style="margin-top:16px;">채팅방 가기</button>`;
+  document.getElementById('btn-info-chat').addEventListener('click', () => {
+    renderPodChat(pod.id);
+    showScreen('screen-pod-chat');
+  });
+}
 function openSettings(){
   const u = STATE.user;
   if (!u) return;
+  const myPod = findPod(STATE.myPodId);
+  const lock = settingsLockReason(myPod, u.id);
+  if (lock) { renderMyInfoLocked(myPod, lock); showScreen('screen-my-info'); return; }
   settingsPodId = STATE.myPodId;
   obMode = 'settings';
   document.getElementById('ob-route-home-btn').hidden = false;
@@ -2329,7 +2395,136 @@ function openSettings(){
   document.getElementById('btn-find-pod').textContent = '저장하기';
   showScreen('screen-ob-route');
 }
-document.getElementById('btn-open-settings').addEventListener('click', openSettings);
+/* ============ 하단 바 + 기록 ============ */
+// 하단 바는 홈·기록 화면에 같은 모양으로 들어간다. 마크업을 한 곳에서 만들어 두 화면에 채운다.
+const TAB_ICONS = {
+  home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
+  pod: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+  history: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  profile: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
+};
+const TABS = [
+  { key: 'home', label: '홈', screen: 'screen-home' },
+  { key: 'pod', label: '내 팟' },
+  { key: 'history', label: '기록', screen: 'screen-history' },
+  { key: 'profile', label: '내 정보', screen: 'screen-my-info' },
+];
+document.querySelectorAll('.tabbar').forEach(bar => {
+  const here = bar.closest('.screen').id;
+  bar.innerHTML = TABS.map(t => `
+    <button type="button" class="tab${t.screen === here ? ' active' : ''}" data-tab="${t.key}"${t.screen === here ? ' aria-current="page"' : ''}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_ICONS[t.key]}</svg>
+      <span>${t.label}</span>
+    </button>`).join('');
+  bar.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.tab');
+    if (!btn) return;
+    const key = btn.dataset.tab;
+    if (key === 'home') { await renderHome(); showScreen('screen-home'); }
+    else if (key === 'history') { renderHistory(); showScreen('screen-history'); }
+    else if (key === 'profile') openSettings();
+    else if (key === 'pod') {
+      // 홈 카드의 채팅방 버튼과 같은 곳으로 간다.
+      const myPod = findPod(STATE.myPodId);
+      if (!myPod) return;
+      renderPodChat(myPod.id);
+      showScreen('screen-pod-chat');
+    }
+  });
+});
+
+// 이용 기록은 서버에 없고(정산이 끝나면 팟과 채팅이 삭제된다) 이 기기 localStorage에만 쌓는다.
+// 신원이 localStorage uuid라서(위 STATE.user.id 참고) 사용자 id로 걸러서 읽는다.
+const HISTORY_KEY = 'tanmankeum_history_v1';
+function loadHistory(){
+  try {
+    const all = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return Array.isArray(all) ? all : [];
+  } catch { return []; }
+}
+// 팟이 지워지거나 내가 나가기 전에 호출해 그 시점의 정보를 기록 한 건으로 만든다.
+// amount: 팟장은 정산 화면에서 계산해 둔 실제 금액, 참가자는 최종 요금 계산값(예상)이다.
+function buildRideRecord(pod){
+  const u = STATE.user;
+  const isLeader = pod.leaderId === u.id;
+  const settled = (pod.settlement || []).find(s => s.nickname === u.nickname);
+  let amount = settled ? settled.amount : null, estimated = !settled;
+  let solo = null; // 혼자 같은 경로를 탔다면 냈을 금액(추정) — 기록 화면에서 절약 금액을 낼 때 쓴다
+  try {
+    const result = pod.finalResult || calcFinalRouteAndFare(pod);
+    const mine = result && result.perPerson.find(p => p.id === u.id);
+    if (mine) {
+      if (amount == null) amount = mine.fare;
+      // 내가 탄 구간의 요금 전체(=혼자 탔을 때)와 같이 나눈 내 몫의 비율을 실제 내 금액에 맞춰 환산한다.
+      const expected = mine.breakdown.reduce((a, b) => a + b.share, 0);
+      const gross = mine.breakdown.reduce((a, b) => a + b.segmentFare, 0);
+      if (expected > 0 && amount != null) solo = Math.round(gross * (amount / expected));
+    }
+  } catch { /* 요금 계산이 안 되면 금액 없이 남긴다 */ }
+  const me = pod.participants.find(p => p.id === u.id);
+  return {
+    id: `${pod.id}:${u.id}`, userId: u.id,
+    date: pod.departDate || u.date || localDateStr(new Date()), time: pod.departTime,
+    origin: pod.originName, dest: (me && me.dest) || pod.leaderDest,
+    people: pod.participants.length, role: isLeader ? 'leader' : 'member',
+    amount, estimated, solo, savedAt: Date.now(),
+  };
+}
+function saveRideRecord(rec){
+  try {
+    const all = loadHistory().filter(r => r.id !== rec.id);
+    all.push(rec);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+  } catch { /* 저장이 막혀도(사생활 보호 모드 등) 팟 종료 자체는 막지 않는다 */ }
+}
+function dateHeading(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  const wd = '일월화수목금토'[d.getDay()];
+  const label = `${d.getMonth() + 1}월 ${d.getDate()}일 (${wd})`;
+  const today = localDateStr(new Date());
+  return dateStr === today ? `오늘 · ${label}` : label;
+}
+function renderHistory(){
+  const u = STATE.user;
+  const rows = loadHistory().filter(r => r.userId === u.id).map(r => ({ ...r, kind: 'done' }));
+  // 지금 진행 중인 팟도 같은 날짜 목록에 같이 보여준다(누르면 채팅방으로).
+  const cur = findPod(STATE.myPodId);
+  if (cur) {
+    const statusText = { recruiting: '모집 중', confirmed: '확정', in_progress: '이동·정산 중' }[cur.status] || '진행 중';
+    rows.push({ kind: 'current', podId: cur.id, statusText, date: cur.departDate || u.date || localDateStr(new Date()),
+      time: cur.departTime, origin: cur.originName, dest: cur.leaderDest, people: cur.participants.length });
+  }
+  const body = document.getElementById('history-body');
+  if (!rows.length) {
+    body.innerHTML = '<p class="hist-empty">아직 기록이 없어요.<br>팟을 마치면 날짜별로 여기에 쌓여요.</p>';
+    return;
+  }
+  rows.sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+  const month = localDateStr(new Date()).slice(0, 7);
+  const thisMonth = rows.filter(r => r.kind === 'done' && r.date.startsWith(month));
+  // 절약 금액 = 혼자 탔다면 냈을 금액 − 실제 내 몫. 같이 타서 줄어든 만큼이다(추정이라 "약"으로 표기).
+  const savedOf = r => (r.solo != null && r.amount != null) ? Math.max(0, r.solo - r.amount) : 0;
+  const saved = thisMonth.reduce((s, r) => s + savedOf(r), 0);
+  let html = thisMonth.length
+    ? `<p class="hist-summary">이번 달 ${thisMonth.length}번 탔어요${saved ? ` · 약 ${won(saved)} 아꼈어요` : ''}</p>` : '';
+  let lastDate = null;
+  rows.forEach(r => {
+    if (r.date !== lastDate) { html += `<p class="hist-date">${dateHeading(r.date)}</p>`; lastDate = r.date; }
+    const tag = r.kind === 'current' ? `<span class="hist-tag">${r.statusText}</span>` : '<span class="hist-tag hist-tag--done">완료</span>';
+    const amount = r.kind === 'done' && r.amount != null ? `<span class="hist-amount">${r.estimated ? '약 ' : ''}${won(r.amount)}</span>` : '';
+    const inner = `
+      <div class="hist-row"><span class="hist-route">${escapeHtml(r.origin)} → ${escapeHtml(r.dest)}</span>${amount}</div>
+      <p class="hist-meta">${r.time} 출발 · ${r.people}명${r.kind === 'done' && savedOf(r) ? ` · ${won(savedOf(r))} 절약` : ''}${tag}</p>`;
+    html += r.kind === 'current'
+      ? `<button type="button" class="hist-card" data-pod="${r.podId}">${inner}</button>`
+      : `<div class="hist-card hist-card--done">${inner}</div>`;
+  });
+  body.innerHTML = html;
+  body.querySelectorAll('[data-pod]').forEach(el => el.addEventListener('click', () => {
+    renderPodChat(el.dataset.pod);
+    showScreen('screen-pod-chat');
+  }));
+}
 
 // 재접속 시 내 팟이 이미 지나 자동으로 정리된 경우, 옛 시각/날짜 그대로 홈에 보내는 대신
 // 새 시각/날짜를 고르게 한다(openSettings와 달리 STATE.user의 낡은 time/date는 안 쓴다).
@@ -2390,6 +2585,11 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
         // 팟장이 아니라 참가자로 남의 팟에 들어가 있는 상태 — 여기서 "이동 정보"를 바꾸는 건
         // 애초에 불가능한 일이라 왜 안 되는지, 어떻게 하면 되는지를 바로 알려준다.
         showError('이미 참가 중인 팟이 있어요. 채팅방에서 참가를 취소하면 이동 정보를 새로 등록할 수 있어요.');
+        return;
+      }
+      if (mine.status !== 'recruiting') {
+        // 화면을 열어둔 사이에 팟이 확정·정산으로 넘어간 경우 — 열 때 막았어도 저장 시점에 한 번 더 본다.
+        showError(settingsLockReason(mine, STATE.user.id));
         return;
       }
       if (mine.participants.length > 1) {
@@ -3434,8 +3634,11 @@ async function renderPodChat(podId){
       confirmLabel: isPostConfirm ? '나가기' : '참가 취소하기',
       danger: true,
       onConfirm: async () => {
+        // 확정 뒤에 나가는 건 정산까지 마친 이용이라 기록에 남긴다(확정 전 취소는 이용이 아니다).
+        const rideRec = isPostConfirm ? buildRideRecord(pod) : null;
         try {
           await leavePod(pod);
+          if (rideRec) saveRideRecord(rideRec);
           renderHome();
           showScreen('screen-home');
         } catch (e) {
@@ -3542,6 +3745,7 @@ function confirmFinishPod(pod){
     confirmLabel: '팟 종료하기',
     danger: true,
     onConfirm: async () => {
+      const rideRec = buildRideRecord(pod); // 팟이 지워지기 전에 기록용 값을 먼저 뽑는다
       try {
         if (SUPA_ENABLED) {
           // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
@@ -3552,6 +3756,7 @@ function confirmFinishPod(pod){
         }
         STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
         delete STATE.chatMessages[pod.id];
+        saveRideRecord(rideRec);
         STATE.userState = '완료';
         track('pod_completed', { pod_id: pod.id, party_size: pod.participants.length });
         renderDoneSummary(pod); // STATE.pods에선 방금 빠졌지만 pod 객체 자체(경로·정산 내역)는 그대로 살아있다
