@@ -335,10 +335,13 @@ function renderPushBtn(on){
   btn.setAttribute('aria-pressed', String(on));
   btn.setAttribute('aria-label', on ? '알림 켜짐' : '알림 꺼짐');
 }
+function pushSupported(){
+  return !!('serviceWorker' in navigator && 'PushManager' in window && window.VAPID_PUBLIC_KEY && SUPA_ENABLED);
+}
 function initPushUI(){
   const btn = document.getElementById('btn-enable-push');
   if (!btn) return;
-  const supported = 'serviceWorker' in navigator && 'PushManager' in window && window.VAPID_PUBLIC_KEY && SUPA_ENABLED;
+  const supported = pushSupported();
   if (!supported || Notification.permission === 'denied') {
     renderPushBtn(false);
     btn.onclick = () => showToast(!supported ? '이 환경에서는 알림을 쓸 수 없어요' : '브라우저 설정에서 알림을 허용해주세요');
@@ -442,6 +445,39 @@ function bearing(a, b){
 }
 function angleDiff(b1, b2){ const d = Math.abs(b1 - b2) % 360; return d > 180 ? 360 - d : d; }
 function won(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
+
+// 이모티콘 대신 쓰는 선 아이콘(앱 전체의 다른 아이콘과 같은 stroke 스타일). innerHTML 문자열에 그대로 끼워 쓴다.
+const ICON_PATHS = {
+  'train': '<rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 11h14"/><path d="M9 21l2-4M15 21l-2-4"/><path d="M9 14h.01M15 14h.01"/>',
+  'backpack': '<path d="M8 21h8a2 2 0 0 0 2-2v-7a5 5 0 0 0-5-5h-2a5 5 0 0 0-5 5v7a2 2 0 0 0 2 2z"/><path d="M9.5 7V5.5a2.5 2.5 0 0 1 5 0V7"/><path d="M9 15h6"/>',
+  'carryon': '<rect x="6" y="8" width="12" height="12" rx="2"/><path d="M9.5 8V5.5A1.5 1.5 0 0 1 11 4h2a1.5 1.5 0 0 1 1.5 1.5V8"/>',
+  'suitcase': '<rect x="4" y="7" width="16" height="14" rx="2"/><path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/><path d="M9 11v6M15 11v6"/>',
+  'info': '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  'check-circle': '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
+  'camera': '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/>',
+  'check': '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+};
+// 홈 추천 팟이 비었을 때 쓰는 택시 일러스트 — 하늘색·흰색 면 몇 개로만 그린 납작한 세단(외곽선 없음).
+const TAXI_ILLUST = `<svg class="empty-art" width="140" height="88" viewBox="0 0 140 88" fill="none" aria-hidden="true">
+  <ellipse cx="70" cy="83" rx="44" ry="3.5" fill="#e6f2ff"/>
+  <rect x="60" y="15" width="20" height="7" rx="2.5" fill="#0078ff"/>
+  <rect x="66" y="22" width="8" height="2" fill="#6db3ff"/>
+  <path d="M35 47L45 27Q46.5 24 50 24H90Q93.5 24 95 27L106 47Z" fill="#dcecff"/>
+  <path d="M44.5 45L51 30.5Q51.7 29 53.5 29H67V45ZM73 29H86.5Q88.3 29 89 30.5L96 45H73Z" fill="#ffffff"/>
+  <rect x="10" y="45" width="120" height="29" rx="7" fill="#b7d8ff"/>
+  <rect x="18" y="49" width="104" height="3" rx="1.5" fill="#d6e9ff"/>
+  <path d="M70 54v15" stroke="#9cc9ff" stroke-width="2" stroke-linecap="round"/>
+  <rect x="54" y="58" width="7" height="2.5" rx="1.25" fill="#9cc9ff"/><rect x="85" y="58" width="7" height="2.5" rx="1.25" fill="#9cc9ff"/>
+  <rect x="122" y="54" width="5" height="5" rx="1.5" fill="#fff6cf"/>
+  <rect x="13" y="54" width="3.5" height="5" rx="1.5" fill="#ffc9bd"/>
+  <circle cx="37" cy="74" r="12" fill="#ffffff"/><circle cx="103" cy="74" r="12" fill="#ffffff"/>
+  <circle cx="37" cy="74" r="9.5" fill="#354153"/><circle cx="37" cy="74" r="3.8" fill="#e6f2ff"/>
+  <circle cx="103" cy="74" r="9.5" fill="#354153"/><circle cx="103" cy="74" r="3.8" fill="#e6f2ff"/>
+</svg>`;
+
+function iconSvg(name, size = 16){
+  return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON_PATHS[name]}</svg>`;
+}
 
 // "왜 이 금액이에요?" 펼치기 — calcFinalRouteAndFare가 perPerson[i].breakdown에 넣어준
 // 구간별 내역(이 구간 요금 ÷ 그때 같이 타고 있던 인원수)을 그대로 문장으로 보여준다.
@@ -2149,7 +2185,7 @@ syncSize();
 
 // --- 2단계: 짐 종류(없음/작은 짐/큰 짐) + 자유 메모 — 평소엔 칩 한 번 탭이면 끝나고,
 // 트렁크 용량 계산 같은 건 안 한다. 특이사항 있는 사람만 메모에 직접 적게 둔다. ---
-const LUGGAGE_LABEL = { small: '🎒 백팩·소형', carryon: '🧳 기내용 캐리어', large: '🛄 대형 캐리어' }; // none은 표시 안 함
+const LUGGAGE_LABEL = { small: `${iconSvg('backpack', 14)}백팩·소형`, carryon: `${iconSvg('carryon', 14)}기내용 캐리어`, large: `${iconSvg('suitcase', 14)}대형 캐리어` }; // none은 표시 안 함
 let luggageType = 'none';
 const luggageChipsEl = document.getElementById('luggage-chips');
 function syncLuggageChips(){
@@ -2764,7 +2800,6 @@ async function renderHome(){
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${escapeHtml(myPod.originName)} → ${escapeHtml(myPod.leaderDest)}</strong>
     <p>${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명</p>
-    <p class="status-members">${myPod.participants.map(p => escapeHtml(p.nickname) + (p.id === u.id ? '(나)' : '')).join(', ')}</p>
     <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
@@ -2792,7 +2827,7 @@ function showToast(msg){
   t.setAttribute('role', 'status');
   t.textContent = msg;
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 4000);
+  setTimeout(() => t.remove(), 2500);
 }
 
 function statusLabel(){
@@ -2865,10 +2900,17 @@ function renderPodList(){
   ul.innerHTML = '';
   if (!withPreview.length) {
     // 팟이 아예 없는 것과, 팟은 있는데 내 경로와 안 맞는 것은 사용자가 할 수 있는 행동이 다르다.
-    const msg = blockedCount
-      ? `내 목적지(${escapeHtml(u.dest)})가 지금 모집 중인 팟 ${blockedCount}개의 경로 안에 없어요. 내 팟에 다른 사람이 들어올 때까지 기다려 보세요.`
-      : '아직 추천 팟이 없어요. 다른 사람이 팟을 만들면 여기에 보여요.';
-    ul.innerHTML = `<li class="empty-hero"><p class="page-sub">${msg}</p><button class="btn btn--ghost btn--sm" id="btn-refresh-pods">${ICON_REFRESH}새로고침</button></li>`;
+    // 추천 팟은 "남이 만든 팟 중 내 목적지가 그 경로 안에 있는 팟"이다 — 내 팟에 사람이 들어오는 얘기와는 별개다.
+    const title = blockedCount ? '지금 내 경로에 맞는 팟이 없어요' : '아직 모집 중인 팟이 없어요';
+    const sub = blockedCount
+      ? `모집 중인 팟 ${blockedCount}개 중에 내 목적지(${escapeHtml(u.dest)})를 지나가는 팟이 없어요.`
+      : '다른 사람이 팟을 만들면 여기에 보여요.';
+    ul.innerHTML = `<li class="empty-hero">
+      ${TAXI_ILLUST}
+      <p class="empty-title">${title}</p>
+      <p class="empty-sub">${sub}</p>
+      <button type="button" class="btn btn--ghost btn--sm" id="btn-refresh-pods">${ICON_REFRESH}새로고침</button>
+    </li>`;
     const refreshBtn = document.getElementById('btn-refresh-pods');
     if (refreshBtn) refreshBtn.addEventListener('click', async () => {
       refreshBtn.disabled = true; refreshBtn.textContent = '불러오는 중…';
@@ -2890,15 +2932,15 @@ function renderPodList(){
     const withLuggage = pod.participants.filter(p => p.luggageType && p.luggageType !== 'none').length;
     const luggageNote = withLuggage > 0 ? ` · 짐 있는 인원 ${withLuggage}명` : '';
     const leaderNickname = (pod.participants.find(p => p.isLeader) || {}).nickname || '알 수 없음';
-    const trainBadge = prev.matchScore.trainMatch === 'exact' ? `<span class="badge badge--train">🚄 같은 열차</span>`
-      : prev.matchScore.trainMatch === 'near' ? `<span class="badge badge--train">🚄 비슷한 시간 열차</span>` : '';
+    const trainBadge = prev.matchScore.trainMatch === 'exact' ? `<span class="badge badge--train">${iconSvg('train', 12)}같은 열차</span>`
+      : prev.matchScore.trainMatch === 'near' ? `<span class="badge badge--train">${iconSvg('train', 12)}비슷한 시간 열차</span>` : '';
     // 배지만으론 "무슨 열차인지"가 안 보이니, 실제로 매칭된 상대방의 열차 정보를 한 줄 더 보여준다.
     const matchedTrainP = prev.matchScore.trainMatch && u.train
       ? pod.participants.find(p => p.train && p.train.date === u.train.date &&
           (p.train.trainNo === u.train.trainNo || Math.abs(timeToMin(p.train.time) - timeToMin(u.train.time)) <= TRAIN_TIME_TOLERANCE_MINUTES))
       : null;
     const trainInfoHtml = matchedTrainP
-      ? `<p class="pod-meta pod-meta--train">🚄 ${escapeHtml(matchedTrainP.train.trainType || 'KTX')} · ${escapeHtml(matchedTrainP.train.time)} 기준${matchedTrainP.train.trainNo === u.train.trainNo ? ' · 같은 열차번호' : ' · 비슷한 시간대'}</p>`
+      ? `<p class="pod-meta pod-meta--train">${iconSvg('train', 14)}${escapeHtml(matchedTrainP.train.trainType || 'KTX')} · ${escapeHtml(matchedTrainP.train.time)} 기준${matchedTrainP.train.trainNo === u.train.trainNo ? ' · 같은 열차번호' : ' · 비슷한 시간대'}</p>`
       : '';
     const savingsHtml = prev.savings
       ? `<div class="pod-savings">${SAVE_ICON} 혼자 탈 때보다 ${won(prev.savings)} 절약</div>`
@@ -3149,7 +3191,7 @@ function buildBotSummaryHtml(pod, result, intro){
   // 본다 — 남의 하차지점까지 낀 경로를 보여주면 오히려 헷갈린다.
   const leaderRouteHref = kakaoMapMultiRouteUrl(result.stops);
   return `
-    <span class="chat-name">🤖 택시팟 매니저</span>
+    <span class="chat-name">택시팟 매니저</span>
     ${intro ? `<p class="bot-intro">${intro}</p>` : ''}
     <div class="bot-route-row">${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)} · ${pod.departTime} 출발 · 약 ${result.totalMins}분 · 도착 약 ${arrival}</div>
     <div class="bot-person-list">
@@ -3284,7 +3326,7 @@ async function renderPodChat(podId){
       <span class="section-label">채팅</span>
       <div class="chat-section-head-btns">
         ${kakaoRouteHref ? `<a class="btn btn--ghost btn--sm" target="_blank" rel="noopener" href="${kakaoRouteHref}">${ICON_PIN} 카카오맵</a>` : ''}
-        <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-summary">🤖 팟 정보</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-summary">${iconSvg('info', 15)}팟 정보</button>
       </div>
     </div>
     <div class="chat-box" id="chat-messages"></div>`;
@@ -3526,7 +3568,7 @@ async function renderPodChat(podId){
       showError('팟 정보를 못 가져왔어요. 잠시 후 다시 시도해보세요.');
     } finally {
       summaryBtn.disabled = false;
-      summaryBtn.textContent = '🤖 팟 정보';
+      summaryBtn.innerHTML = `${iconSvg('info', 15)}팟 정보`;
     }
   });
 
@@ -3586,7 +3628,7 @@ async function renderPodChat(podId){
       ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-decline-pod">거절하기</button>`;
     } else if (me && me.paid) {
       // 확정 후 이탈은 팟장이 정산 화면에서 내 입금을 체크해줘야만 가능하다.
-      ctaHtml += `<div class="paid-banner" role="status"><strong>✅ 입금 확인 완료</strong><span>팟장이 입금을 확인했어요. 이제 팟에서 나가도 돼요.</span></div>`;
+      ctaHtml += `<div class="paid-banner" role="status"><strong>${iconSvg('check-circle', 20)}입금 확인 완료</strong><span>팟장이 입금을 확인했어요. 이제 팟에서 나가도 돼요.</span></div>`;
       ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">팟 나가기</button>`;
     } else {
       ctaHtml += `<p class="cta-hint">팟장이 채팅방에서 정산 안내를 보내면 입금해주세요. 팟장이 입금 확인하면 여기서 나갈 수 있어요.</p>`;
@@ -3925,7 +3967,7 @@ function renderSettlement(podId){
     <div class="field">
       <label for="actual-fare">실제 택시비(원)</label>
       <label class="file-picker" for="fare-photo" style="margin-bottom:8px;">
-        <span class="file-picker-btn">📷 사진으로 읽기</span>
+        <span class="file-picker-btn">${iconSvg('camera', 16)}사진으로 읽기</span>
         <span class="file-picker-name" id="fare-photo-name">영수증·미터기를 찍으면 금액이 자동 입력돼요</span>
       </label>
       <input type="file" id="fare-photo" accept="image/*" capture="environment" class="file-picker-input">
@@ -3948,7 +3990,7 @@ function renderSettlement(podId){
     </div>
     <div class="field" id="receipt-field" hidden>
       <label for="receipt-photo">택시 영수증 사진 (필수, 실제 결제 확인용)</label>
-      <p class="fine-note" id="receipt-have-photo" style="display:none; color:var(--primary-dark);">✓ 위에서 찍은 사진이 영수증으로 함께 공유돼요.</p>
+      <p class="fine-note" id="receipt-have-photo" style="display:none; color:var(--primary-dark);">${iconSvg('check', 14)}위에서 찍은 사진이 영수증으로 함께 공유돼요.</p>
       <label class="file-picker" for="receipt-photo" id="receipt-picker">
         <span class="file-picker-btn">사진 선택</span>
         <span class="file-picker-name" id="receipt-photo-name">선택된 사진 없음</span>
