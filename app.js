@@ -378,8 +378,10 @@ async function unsubscribeFromPush(){
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
   if (sub) await sub.unsubscribe();
-  const { error } = await supa.from('push_subscriptions').delete().eq('user_id', STATE.user.id);
-  if (error) throw error;
+  // 구독 저장·삭제는 서버가 한다 — 브라우저(anon)는 이 표를 읽을 수 없어서, 조건이 붙은 삭제는 0줄만 지우고
+  // 오류 없이 끝나고, 갱신(upsert)은 42501로 실패한다(api/push-subscription.js 설명 참고).
+  const r = await postJson('/api/push-subscription', { action: 'unsubscribe', userId: STATE.user.id });
+  if (!r.ok) throw new Error(r.data.error || '알림 구독을 지우지 못했어요');
 }
 
 async function subscribeToPush(){
@@ -394,10 +396,10 @@ async function subscribeToPush(){
     });
   }
   const json = sub.toJSON();
-  const { error } = await supa.from('push_subscriptions').upsert({
-    user_id: STATE.user.id, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
+  const r = await postJson('/api/push-subscription', {
+    action: 'subscribe', userId: STATE.user.id, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
   });
-  if (error) throw error;
+  if (!r.ok) throw new Error(r.data.error || '알림 구독을 저장하지 못했어요');
 }
 
 // 새 팟 생성/참가 직후 서버에 알려서 푸시를 쏘게 한다. 실패해도(네트워크 문제, VAPID 미설정 등)
