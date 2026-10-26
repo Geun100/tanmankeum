@@ -228,10 +228,16 @@ function podFromRow(podRow){
 // index.html의 .gender-note 문구도 "법률상 같은 성별끼리만 매칭돼요"로 복구할 것.
 const BETA_ANY_GENDER = true;
 
+// 테스트용: true면 시드/더미(is_seed 팟장) 팟은 출발 날짜·시각이 지나도 만료로 거르지 않는다.
+// 실제 사용자 팟은 그대로 만료된다. 출시 전에 false로 되돌린다.
+const SEED_IGNORE_DATE = true;
+
 // 팟장이 시드/더미 계정인지. supabase/add-seed-flag.sql을 아직 안 돌렸으면 profiles.is_seed
 // 컬럼 자체가 없어서 이 조회가 통째로 실패할 수 있다 — 그러면 그냥 "구분 안 함"으로 넘어간다.
 // 정렬 우선순위(실제 사용자 먼저)와 시연용 더미 팟의 날짜 만료 예외에 쓴다.
 let seedLeaderIds = null;
+// 테스트용 더미 팟이 날짜·시각 필터(isPodExpired, calcMatchScore의 timeOk)를 건너뛰는지.
+function seedIgnoresDate(pod){ return SEED_IGNORE_DATE && !!(seedLeaderIds && seedLeaderIds.has(pod.leaderId)); }
 async function loadSeedProfileIds(){
   if (seedLeaderIds) return seedLeaderIds;
   try {
@@ -781,7 +787,7 @@ function calcMatchScore(user, pod, allowConditional = false){
 
   // 내가 고른 시간보다 1시간 넘게 일찍 출발한 팟은 이미 놓친 팟이라 안 보여준다.
   // 내 시간보다 늦게 출발하는 팟은 얼마나 늦든 상관없다 — 기다렸다 타면 되니까.
-  const timeOk = timeToMin(pod.departTime) >= timeToMin(user.time) - 60;
+  const timeOk = seedIgnoresDate(pod) || timeToMin(pod.departTime) >= timeToMin(user.time) - 60;
 
   const eligible = nearOrigin && sameGender && timeOk && allWalkable(hypoPod);
   const routeScore = eligible ? 25 : 0;
@@ -1552,6 +1558,7 @@ function findPod(id){ return STATE.pods.find(p => p.id === id); }
 
 // 출발 시각이 지났으면 만료된 팟이다. 팟에 날짜가 따로 없으면 사용자가 고른 날짜를 쓴다.
 function isPodExpired(pod){
+  if (seedIgnoresDate(pod)) return false;
   const date = pod.departDate || (STATE.user && STATE.user.date);
   if (!date || !pod.departTime) return false;
   return new Date(`${date}T${pod.departTime}`) < new Date();
@@ -2037,6 +2044,7 @@ async function openBrowse(){
   showScreen('screen-home');
   try {
     const pods = SUPA_ENABLED ? await loadOpenPods() : seedPods();
+    if (SUPA_ENABLED) await loadSeedProfileIds(); // isPodExpired가 더미 팟 예외를 판단하려면 필요하다
     // 출발 시각이 지난 팟·정원이 찬 팟·모집이 끝난 팟은 뺀다.
     const open = pods
       .filter(p => p.status === 'recruiting' && p.participants.length < p.desiredSize && !isPodExpired(p))
@@ -2851,8 +2859,8 @@ function statusLabel(){
 function renderPodList(){
   const u = STATE.user;
   let list = STATE.pods.filter(p => p.id !== STATE.myPodId);
-  // 시드/더미 팟(is_seed 계정)도 날짜 만료 필터를 똑같이 적용한다 — 출발 시각이 지나면 안 보인다.
-  // seedLeaderIds는 정렬(실제 사용자 우선)에만 쓰며, 로드되는 대로 다시 그린다.
+  // 시드/더미 팟(is_seed 계정)은 SEED_IGNORE_DATE가 true인 동안 날짜 만료 필터를 건너뛴다(isPodExpired).
+  // seedLeaderIds는 그 예외와 정렬(실제 사용자 우선)에 쓰며, 로드되는 대로 다시 그린다.
   if (!seedLeaderIds) loadSeedProfileIds().then(() => renderPodList());
   const isSeedPod = pod => !!(seedLeaderIds && seedLeaderIds.has(pod.leaderId));
   // 출발 시각이 이미 지난 팟은 뺀다 — 이미 떠난 택시팟을 추천하면 안 된다.
