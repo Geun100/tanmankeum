@@ -215,7 +215,7 @@ function podFromRow(podRow){
     });
   const pod = {
     id: podRow.id, leaderId: podRow.leader_id, originName: podRow.origin_name,
-    departTime: podRow.depart_time.slice(0, 5), departDate: podRow.depart_date,
+    departTime: /^\d{2}:\d{2}/.test(String(podRow.depart_time)) ? String(podRow.depart_time).slice(0, 5) : '00:00', departDate: podRow.depart_date,
     desiredSize: podRow.desired_size, participants,
     status: podRow.status === 'open' ? 'recruiting' : podRow.status,
   };
@@ -2533,9 +2533,9 @@ function renderHistory(){
     const amount = r.kind === 'done' && r.amount != null ? `<span class="hist-amount">${r.estimated ? '약 ' : ''}${won(r.amount)}</span>` : '';
     const inner = `
       <div class="hist-row"><span class="hist-route">${escapeHtml(r.origin)} → ${escapeHtml(r.dest)}</span>${amount}</div>
-      <p class="hist-meta">${r.time} 출발 · ${r.people}명${r.kind === 'done' && savedOf(r) ? ` · ${won(savedOf(r))} 절약` : ''}${tag}</p>`;
+      <p class="hist-meta">${escapeHtml(r.time)} 출발 · ${escapeHtml(r.people)}명${r.kind === 'done' && savedOf(r) ? ` · ${won(savedOf(r))} 절약` : ''}${tag}</p>`;
     html += r.kind === 'current'
-      ? `<button type="button" class="hist-card" data-pod="${r.podId}">${inner}</button>`
+      ? `<button type="button" class="hist-card" data-pod="${escapeHtml(r.podId)}">${inner}</button>`
       : `<div class="hist-card hist-card--done">${inner}</div>`;
   });
   body.innerHTML = html;
