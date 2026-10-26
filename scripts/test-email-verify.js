@@ -123,13 +123,21 @@ function issueToken(email, confirmed = true) {
   assert.ok(!JSON.stringify(tables.verified_users).includes('@'), '우리 테이블엔 메일 원문이 없다');
   assert.equal((await link(U1, good)).statusCode, 200, '같은 사용자가 다시 연결해도 성공');
 
-  // ----- 한 메일 = 한 계정 -----
+  // ----- 한 메일 = 한 계정: 막지 않고 원래 계정을 이어받게 한다 -----
+  // 브라우저를 바꾸거나 저장소를 지우면 앱이 새 임의 번호(U2)를 만든다. 같은 메일함의 주인이면 번호를 받을 수 있고,
+  // 인증을 마치면 서버가 원래 계정(U1)을 돌려준다. 새 계정(U2)은 인증된 걸로 기록되지 않는다.
   const sentBefore = auth.otpSent.length;
-  assert.equal((await otp(U2, '2020001@handong.ac.kr')).statusCode, 409, '이미 인증된 메일은 다른 계정에 번호 안 보냄');
-  assert.equal(auth.otpSent.length, sentBefore);
-  assert.equal((await link(U2, issueToken('2020001@handong.ac.kr'))).statusCode, 409, '다른 계정의 연결 시도도 거절');
+  assert.equal((await otp(U2, '2020001@handong.ac.kr')).statusCode, 200, '이미 인증된 메일도 번호를 보낸다(계정 복구)');
+  assert.equal(auth.otpSent.length, sentBefore + 1);
+  r = await link(U2, issueToken('2020001@handong.ac.kr'));
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body.recovered, true, '다른 기기의 같은 메일은 복구로 처리');
+  assert.equal(r.body.userId, U1, '원래 계정 번호를 돌려준다');
+  assert.equal(tables.verified_users.length, 1, '새 계정이 인증 기록에 늘어나지 않는다');
+  assert.equal((await status(U2)).body.verified, false, '임시 번호(U2) 자체는 인증된 게 아니다');
+  r = await link(U1, issueToken('2020001@handong.ac.kr'));
+  assert.equal(r.body.recovered, false, '같은 계정이 다시 인증하면 복구가 아니다');
   assert.equal((await otp(U1, '2020001@handong.ac.kr')).body.alreadyVerified, true, '이미 인증된 사용자는 바로 통과');
-  assert.equal(auth.otpSent.length, sentBefore, '이미 인증된 사용자에겐 번호를 안 보낸다');
 
   // ----- 기존 사용자 면제(email_hash null)도 인증된 것으로 본다 -----
   tables.verified_users.push({ user_id: U2, email_hash: null });

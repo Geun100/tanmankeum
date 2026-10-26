@@ -21,9 +21,9 @@ module.exports = async (req, res) => {
     const { data: already } = await admin.from('verified_users').select('user_id').eq('user_id', userId).maybeSingle();
     if (already) { res.status(200).json({ ok: true, alreadyVerified: true }); return; }
 
-    // 이미 다른 계정으로 인증된 메일이면 번호를 보내지 않는다(한 메일 = 한 계정).
-    const { data: taken } = await admin.from('verified_users').select('user_id').eq('email_hash', V.hashEmail(email)).maybeSingle();
-    if (taken) { res.status(409).json({ error: '이미 다른 계정으로 인증된 메일이에요' }); return; }
+    // 이미 다른 계정으로 인증된 메일이어도 번호는 보낸다. 번호를 맞히면 그 메일함의 주인이라는 뜻이라,
+    // auth-link가 "원래 계정"으로 되돌려준다(브라우저를 바꾸거나 저장소를 지운 사람이 계정을 되찾는 길).
+    // 한 메일 = 한 계정 규칙은 그대로다 — 새 계정이 생기는 대신 기존 계정을 이어받는다.
 
     // 학교 메일 계정이 없으면 만든다(이미 있으면 "이미 등록됨" 오류가 나는데, 그건 정상이라 넘어간다).
     const { error: createErr } = await admin.auth.admin.createUser({ email, email_confirm: true });
