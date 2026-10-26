@@ -1853,6 +1853,19 @@ function finishVerification(){
   emailDoneCb = null;
   if (cb) cb(); else showScreen('screen-ob-profile');
 }
+// 다른 브라우저·기기에서 같은 학교 메일로 인증하면, 이 기기의 새 임의 번호를 버리고 원래 계정 번호를 이어받는다.
+// 닉네임·성별이 서버에 있으면 불러와 프로필 입력을 건너뛰고, 상태를 새로 만들기 위해 페이지를 다시 연다.
+async function adoptAccount(accountId){
+  try { localStorage.setItem('tanmankeum_uid', accountId); } catch (_) {}
+  setVerifiedLocal();
+  try {
+    if (supa) {
+      const { data } = await supa.from('profiles').select('nickname, gender').eq('id', accountId).maybeSingle();
+      if (data && data.nickname && data.gender) saveOnboardingCache({ nickname: data.nickname, gender: data.gender });
+    }
+  } catch (_) { /* 프로필을 못 불러와도 새로 입력하면 된다 */ }
+  location.reload();
+}
 async function sendEmailCode(){
   const email = schoolEmail();
   if (emailBusy || !email) return;
@@ -1890,7 +1903,13 @@ async function verifyEmailCode(){
     const { data, error } = await supaAuth.auth.verifyOtp({ email, token: codeInput.value.trim(), type: 'email' });
     if (error || !data || !data.session) { setEmailMsg('인증번호가 맞지 않거나 만료됐어요', true); return; }
     const r = await postJson('/api/auth-link', { userId: getOrCreateUserId(), accessToken: data.session.access_token });
-    if (r.ok && r.data.verified) { track('email_verified'); finishVerification(); return; }
+    if (r.ok && r.data.verified) {
+      track('email_verified');
+      // 이미 인증된 메일이면 서버가 원래 계정 번호를 돌려준다 — 그 계정을 이어받는다.
+      if (r.data.recovered && r.data.userId) { await adoptAccount(r.data.userId); return; }
+      finishVerification();
+      return;
+    }
     setEmailMsg(r.data.error || '인증하지 못했어요. 다시 시도해 주세요', true);
   } catch (_) {
     setEmailMsg('네트워크 문제로 확인하지 못했어요. 다시 시도해 주세요', true);

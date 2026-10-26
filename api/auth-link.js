@@ -24,18 +24,27 @@ module.exports = async (req, res) => {
     if (!email || !(user.email_confirmed_at || user.confirmed_at)) { res.status(403).json({ error: '학교 메일 인증이 확인되지 않았어요' }); return; }
     const emailHash = V.hashEmail(email);
 
+    // 이 메일이 이미 어떤 계정으로 인증돼 있으면, 새 계정을 만들지 않고 그 계정을 이어받게 한다.
+    // 인증번호를 맞혔다는 건 이 메일함의 주인이라는 증명이다. 브라우저를 바꾸거나 저장소를 지우면
+    // 앱이 새 임의 번호를 만들기 때문에, 이렇게 해야 정상 이용자가 자기 계정(닉네임·팟)을 되찾는다.
+    const { data: owner } = await admin.from('verified_users').select('user_id').eq('email_hash', emailHash).maybeSingle();
+    if (owner) {
+      res.status(200).json({ ok: true, verified: true, userId: owner.user_id, recovered: owner.user_id !== userId });
+      return;
+    }
+
     const { error: insErr } = await admin.from('verified_users').insert({ user_id: userId, email_hash: emailHash });
     if (insErr) {
       if (insErr.code === '23505') {
-        // 같은 사용자가 이미 인증돼 있으면 성공으로 본다. 아니면 그 메일은 다른 계정이 먼저 인증한 것이다.
+        // 동시에 같은 메일로 인증이 겹쳤거나, 이 사용자가 이미 (다른 메일로) 인증돼 있는 경우.
+        const { data: again } = await admin.from('verified_users').select('user_id').eq('email_hash', emailHash).maybeSingle();
+        if (again) { res.status(200).json({ ok: true, verified: true, userId: again.user_id, recovered: again.user_id !== userId }); return; }
         const { data: me } = await admin.from('verified_users').select('user_id').eq('user_id', userId).maybeSingle();
-        if (me) { res.status(200).json({ ok: true, verified: true }); return; }
-        res.status(409).json({ error: '이미 다른 계정으로 인증된 메일이에요' });
-        return;
+        if (me) { res.status(200).json({ ok: true, verified: true, userId, recovered: false }); return; }
       }
       throw insErr;
     }
-    res.status(200).json({ ok: true, verified: true });
+    res.status(200).json({ ok: true, verified: true, userId, recovered: false });
   } catch (e) {
     res.status(500).json({ error: '인증을 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요' });
   }
