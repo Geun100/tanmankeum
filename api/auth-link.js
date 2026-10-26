@@ -29,7 +29,12 @@ module.exports = async (req, res) => {
     // 앱이 새 임의 번호를 만들기 때문에, 이렇게 해야 정상 이용자가 자기 계정(닉네임·팟)을 되찾는다.
     const { data: owner } = await admin.from('verified_users').select('user_id').eq('email_hash', emailHash).maybeSingle();
     if (owner) {
-      res.status(200).json({ ok: true, verified: true, userId: owner.user_id, recovered: owner.user_id !== userId });
+      const recovered = owner.user_id !== userId;
+      // 다른 기기에서 계정을 되찾는 건 메일함 주인이라는 증명이다. 그 계정의 옛 알림 구독을 지워서,
+      // 새 기기에서 알림을 켤 수 있게 하고(한 계정 = 한 기기) 누가 먼저 차지해 둔 구독도 정리한다.
+      // 알림은 부가 기능이라 실패해도 계정 복구는 계속 진행한다.
+      if (recovered) { try { await admin.from('push_subscriptions').delete().eq('user_id', owner.user_id); } catch (_) {} }
+      res.status(200).json({ ok: true, verified: true, userId: owner.user_id, recovered });
       return;
     }
 
