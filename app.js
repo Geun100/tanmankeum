@@ -3967,27 +3967,36 @@ function resizeImageToDataUrl(file, maxPx, quality){
   });
 }
 
+// 정산 화면 맨 위 "예상 요약" 카드를 접어서 결과 카드(인당 정산금)와 내용이 겹쳐 보이지 않게 한다. 누르면 다시 펼쳐진다.
+function collapseEstimate(){
+  const el = document.getElementById('est-summary');
+  if (el) el.open = false;
+}
 function renderSettlement(podId){
   const pod = findPod(podId);
   const result = pod.finalResult || calcFinalRouteAndFare(pod);
   pod.finalResult = result;
   let html = `
-    <div class="info-box">
-      <h3>참여자별 예상 정산 요약</h3>
+    <details class="info-box est-box" id="est-summary" open>
+      <summary><h3>참여자별 예상 정산 요약</h3><span class="est-total">예상 총액 ${won(result.totalFare)}</span></summary>
       ${result.perPerson.map(p => `<p class="info-row"><span>${escapeHtml(p.nickname)}</span><strong>${won(p.fare)}</strong></p>${fareBreakdownHtml(p)}`).join('')}
       <p class="info-row info-row--highlight" style="border-top:1px solid var(--line); margin-top:8px; padding-top:8px;"><span>예상 총액 (참고)</span><strong>${won(result.totalFare)}</strong></p>
+    </details>
+    <div class="info-box fare-box">
+      <div class="fare-head">
+        <h3><label for="actual-fare">실제 택시비(원)</label></h3>
+        <label class="photo-read-btn" for="fare-photo">${iconSvg('camera', 15)}사진으로 읽기</label>
+      </div>
+      <div class="field">
+        <input type="file" id="fare-photo" accept="image/*" capture="environment" class="file-picker-input">
+        <div class="fare-input-row">
+          <input type="number" id="actual-fare" min="0" step="100" placeholder="예: ${result.totalFare}">
+          <button type="button" class="calc-btn" id="btn-calc-settlement">계산하기</button>
+        </div>
+        <p class="fare-hint" id="fare-photo-name">영수증·미터기를 찍으면 금액이 자동 입력돼요</p>
+        <p class="fine-note" id="fare-ocr-note" style="display:none;"></p>
+      </div>
     </div>
-    <div class="field">
-      <label for="actual-fare">실제 택시비(원)</label>
-      <label class="file-picker" for="fare-photo" style="margin-bottom:8px;">
-        <span class="file-picker-btn">${iconSvg('camera', 16)}사진으로 읽기</span>
-        <span class="file-picker-name" id="fare-photo-name">영수증·미터기를 찍으면 금액이 자동 입력돼요</span>
-      </label>
-      <input type="file" id="fare-photo" accept="image/*" capture="environment" class="file-picker-input">
-      <input type="number" id="actual-fare" min="0" step="100" placeholder="예: ${result.totalFare}">
-      <p class="fine-note" id="fare-ocr-note" style="display:none;"></p>
-    </div>
-    <button class="btn btn--ghost btn--block" id="btn-calc-settlement" style="margin:12px 0 18px;">정산금액 계산하기</button>
     <div class="info-box" id="settlement-result" hidden>
       <h3>인당 정산금</h3>
       <div id="settlement-list"></div>
@@ -3997,21 +4006,21 @@ function renderSettlement(podId){
       <p class="fine-note" style="margin:0 0 10px;">체크하면 그 사람은 채팅방에서 팟을 나갈 수 있어요.</p>
       <div id="paid-list"></div>
     </div>
-    <div class="field" id="account-field" hidden>
-      <label for="account-number">입금 계좌번호</label>
-      <input type="text" id="account-number" placeholder="은행명 계좌번호 (예: 탄만은행 123-4567)">
+    <div class="info-box share-box" id="share-box" hidden>
+      <div class="fare-head">
+        <h3><label for="account-number">입금 안내 공유</label></h3>
+        <label class="photo-read-btn" for="receipt-photo" id="receipt-picker">${iconSvg('camera', 15)}영수증 사진</label>
+      </div>
+      <div class="field" id="account-field">
+        <input type="text" id="account-number" placeholder="은행명 계좌번호 (예: 탄만은행 123-4567)">
+        <div id="receipt-field">
+          <p class="fare-hint" id="receipt-photo-name">택시 영수증 사진은 꼭 올려야 해요(실제 결제 확인용)</p>
+          <p class="fine-note" id="receipt-have-photo" style="display:none; color:var(--primary-dark); margin:0;">${iconSvg('check', 14)}위에서 찍은 사진이 영수증으로 함께 공유돼요.</p>
+          <input type="file" id="receipt-photo" accept="image/*" class="file-picker-input">
+        </div>
+      </div>
+      <button type="button" class="calc-btn calc-btn--block" id="btn-share-account">계좌번호 공유하기</button>
     </div>
-    <div class="field" id="receipt-field" hidden>
-      <label for="receipt-photo">택시 영수증 사진 (필수, 실제 결제 확인용)</label>
-      <p class="fine-note" id="receipt-have-photo" style="display:none; color:var(--primary-dark);">${iconSvg('check', 14)}위에서 찍은 사진이 영수증으로 함께 공유돼요.</p>
-      <label class="file-picker" for="receipt-photo" id="receipt-picker">
-        <span class="file-picker-btn">사진 선택</span>
-        <span class="file-picker-name" id="receipt-photo-name">선택된 사진 없음</span>
-      </label>
-      <input type="file" id="receipt-photo" accept="image/*" class="file-picker-input">
-      <p class="fine-note" id="receipt-required-note" style="color:var(--danger); display:none;">영수증 사진을 올려야 계좌번호를 공유할 수 있어요.</p>
-    </div>
-    <button class="btn btn--ghost btn--block" id="btn-share-account" hidden>계좌번호 공유하기</button>
     <p class="fine-note" id="share-confirm-note" style="margin-top:10px;"></p>
   `;
   document.getElementById('settlement-body').innerHTML = html;
@@ -4030,6 +4039,8 @@ function renderSettlement(podId){
         return `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${p ? fareBreakdownHtml(p, s.amount) : ''}`;
       }).join('');
     document.getElementById('settlement-result').hidden = false;
+    collapseEstimate(); // 실제 금액이 나오면 예상 요약은 한 줄로 접는다(사람별 금액이 두 번 보이지 않게)
+    document.getElementById('share-box').hidden = false;
     document.getElementById('account-field').hidden = false;
     document.getElementById('receipt-field').hidden = false;
     document.getElementById('btn-share-account').hidden = false;
@@ -4039,9 +4050,9 @@ function renderSettlement(podId){
   document.getElementById('receipt-photo').addEventListener('change', (e) => {
     const nameEl = document.getElementById('receipt-photo-name');
     const f = e.target.files[0];
-    nameEl.textContent = f ? f.name : '선택된 사진 없음';
+    nameEl.textContent = f ? f.name : '택시 영수증 사진은 꼭 올려야 해요(실제 결제 확인용)';
     nameEl.classList.toggle('is-set', !!f);
-    if (f) document.getElementById('receipt-required-note').style.display = 'none';
+    if (f) nameEl.classList.remove('is-error');
   });
 
   // 화면 1에서 찍은 사진이 있으면 화면 2의 영수증 선택 UI를 숨기고 "이미 첨부됨" 문구로 바꾼다.
@@ -4049,7 +4060,7 @@ function renderSettlement(podId){
     const have = !!(settlementPhoto[podId] && settlementPhoto[podId].file);
     document.getElementById('receipt-have-photo').style.display = have ? 'block' : 'none';
     document.getElementById('receipt-picker').style.display = have ? 'none' : 'flex';
-    if (have) document.getElementById('receipt-required-note').style.display = 'none';
+    if (have) document.getElementById('receipt-photo-name').classList.remove('is-error');
   }
   syncReceiptField();
 
@@ -4121,6 +4132,8 @@ function renderSettlement(podId){
       listEl.innerHTML += `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${fareBreakdownHtml(result.perPerson[i], s.amount)}`;
     });
     document.getElementById('settlement-result').hidden = false;
+    collapseEstimate(); // 실제 금액이 나오면 예상 요약은 한 줄로 접는다(사람별 금액이 두 번 보이지 않게)
+    document.getElementById('share-box').hidden = false;
     document.getElementById('account-field').hidden = false;
     document.getElementById('receipt-field').hidden = false;
     document.getElementById('btn-share-account').hidden = false;
@@ -4152,13 +4165,16 @@ function renderSettlement(podId){
     // 화면 1에서 찍은 사진이 있으면 그걸 영수증으로 쓴다. 없으면 화면 2에서 고른 사진.
     const file = (settlementPhoto[podId] && settlementPhoto[podId].file) || document.getElementById('receipt-photo').files[0] || null;
     if (!file) {
-      document.getElementById('receipt-required-note').style.display = 'block';
+      document.getElementById('receipt-photo-name').classList.add('is-error'); // 안내 문구가 그대로 빨갛게 바뀐다(문구를 두 번 쓰지 않는다)
       document.getElementById('receipt-photo').focus();
       return;
     }
     openModal({
       title: '계좌번호를 공유할까요?',
-      body: `채팅방에 "${acc}" 계좌로 각자 정산금을 입금해달라고 안내해요. 영수증 사진도 같이 올라가요.`,
+      icon: iconSvg('info', 22),
+      cardClass: 'modal-card--rich modal-card--share',
+      bodyHtml: `
+        <p class="share-confirm-acc">입금 계좌: ${escapeHtml(acc)}</p>`,
       confirmLabel: '공유하기',
       onConfirm: async () => {
         const btn = document.getElementById('btn-share-account');
