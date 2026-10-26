@@ -3,13 +3,14 @@
 const assert = require('node:assert/strict');
 const Module = require('node:module');
 
-const tables = { verified_users: [] };
-const KEYS = { verified_users: ['user_id', 'email_hash'] };
+const tables = { verified_users: [], push_subscriptions: [] };
+const KEYS = { verified_users: ['user_id', 'email_hash'], push_subscriptions: ['user_id'] };
 function fakeFrom(name) {
   const rows = tables[name];
   let op = 'select', payload, filters = [];
   const matches = () => rows.filter(r => filters.every(f => f(r)));
   function run(single) {
+    if (op === 'delete') { matches().forEach(r => rows.splice(rows.indexOf(r), 1)); return { error: null }; }
     if (op === 'insert') {
       if (rows.some(r => KEYS[name].some(k => payload[k] != null && r[k] === payload[k]))) return { error: { code: '23505' } };
       rows.push({ ...payload });
@@ -22,6 +23,7 @@ function fakeFrom(name) {
     select() { return b; },
     eq(k, v) { filters.push(r => r[k] === v); return b; },
     insert(p) { op = 'insert'; payload = p; return b; },
+    delete() { op = 'delete'; return b; },
     maybeSingle() { return Promise.resolve(run(true)); },
     then(res, rej) { return Promise.resolve(run(false)).then(res, rej); },
   };
@@ -126,6 +128,7 @@ function issueToken(email, confirmed = true) {
   // ----- 한 메일 = 한 계정: 막지 않고 원래 계정을 이어받게 한다 -----
   // 브라우저를 바꾸거나 저장소를 지우면 앱이 새 임의 번호(U2)를 만든다. 같은 메일함의 주인이면 번호를 받을 수 있고,
   // 인증을 마치면 서버가 원래 계정(U1)을 돌려준다. 새 계정(U2)은 인증된 걸로 기록되지 않는다.
+  tables.push_subscriptions.push({ user_id: U1, endpoint: 'https://fcm.googleapis.com/fcm/send/old' }); // 먼저 차지돼 있던(또는 옛 기기의) 구독
   const sentBefore = auth.otpSent.length;
   assert.equal((await otp(U2, '2020001@handong.ac.kr')).statusCode, 200, '이미 인증된 메일도 번호를 보낸다(계정 복구)');
   assert.equal(auth.otpSent.length, sentBefore + 1);
@@ -133,6 +136,7 @@ function issueToken(email, confirmed = true) {
   assert.equal(r.statusCode, 200);
   assert.equal(r.body.recovered, true, '다른 기기의 같은 메일은 복구로 처리');
   assert.equal(r.body.userId, U1, '원래 계정 번호를 돌려준다');
+  assert.equal(tables.push_subscriptions.length, 0, '복구하면 그 계정의 옛 알림 구독이 지워진다');
   assert.equal(tables.verified_users.length, 1, '새 계정이 인증 기록에 늘어나지 않는다');
   assert.equal((await status(U2)).body.verified, false, '임시 번호(U2) 자체는 인증된 게 아니다');
   r = await link(U1, issueToken('2020001@handong.ac.kr'));

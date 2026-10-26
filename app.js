@@ -329,6 +329,10 @@ function urlBase64ToUint8Array(base64String){
 const PUSH_OFF_KEY = 'tanmankeum_push_off';
 function pushOffByUser(){ try { return localStorage.getItem(PUSH_OFF_KEY) === '1'; } catch { return false; } }
 function setPushOffByUser(off){ try { off ? localStorage.setItem(PUSH_OFF_KEY, '1') : localStorage.removeItem(PUSH_OFF_KEY); } catch {} }
+// 서버에 마지막으로 저장한 구독 주소. 서버가 "내 구독이 맞다"를 확인하는 데 쓴다.
+const PUSH_EP_KEY = 'tanmankeum_push_ep';
+function pushSavedEndpoint(){ try { return localStorage.getItem(PUSH_EP_KEY) || undefined; } catch { return undefined; } }
+function setPushSavedEndpoint(ep){ try { ep ? localStorage.setItem(PUSH_EP_KEY, ep) : localStorage.removeItem(PUSH_EP_KEY); } catch {} }
 function renderPushBtn(on){
   const btn = document.getElementById('btn-enable-push');
   btn.classList.toggle('on', on);
@@ -380,9 +384,16 @@ function initPushUI(){
 async function unsubscribeFromPush(){
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
+  // 서버는 "내 구독이 맞다"를 endpoint로 확인한다 — 브라우저 구독을 지우기 전에 endpoint를 챙겨둔다.
+  const endpoint = sub ? sub.endpoint : pushSavedEndpoint();
   if (sub) await sub.unsubscribe();
-  const { error } = await supa.from('push_subscriptions').delete().eq('user_id', STATE.user.id);
-  if (error) throw error;
+  // 구독 저장·삭제는 서버가 한다 — 브라우저(anon)는 이 표를 읽을 수 없어서, 조건이 붙은 삭제는 0줄만 지우고
+  // 오류 없이 끝나고, 갱신(upsert)은 42501로 실패한다(api/push-subscription.js 설명 참고).
+  if (endpoint) {
+    const r = await postJson('/api/push-subscription', { action: 'unsubscribe', userId: STATE.user.id, endpoint });
+    if (!r.ok) throw new Error(r.data.error || '알림 구독을 지우지 못했어요');
+  }
+  setPushSavedEndpoint(null);
 }
 
 async function subscribeToPush(){
@@ -397,10 +408,12 @@ async function subscribeToPush(){
     });
   }
   const json = sub.toJSON();
-  const { error } = await supa.from('push_subscriptions').upsert({
-    user_id: STATE.user.id, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
+  const r = await postJson('/api/push-subscription', {
+    action: 'subscribe', userId: STATE.user.id, endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
+    previousEndpoint: pushSavedEndpoint(), // 브라우저가 구독 주소를 바꾼 경우에도 내 구독임을 증명한다
   });
-  if (error) throw error;
+  if (!r.ok) throw new Error(r.data.error || '알림 구독을 저장하지 못했어요');
+  setPushSavedEndpoint(json.endpoint);
 }
 
 // 새 팟 생성/참가 직후 서버에 알려서 푸시를 쏘게 한다. 실패해도(네트워크 문제, VAPID 미설정 등)
