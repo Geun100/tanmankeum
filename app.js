@@ -2533,6 +2533,9 @@ function announceJoiners(pod, myId){
   if (seenJoiners && seenJoiners.podId === pod.id) {
     const added = names.filter(n => !seenJoiners.names.includes(n));
     if (added.length) showToast(`${added.join(', ')}님이 내 팟에 들어왔어요`);
+    // 참가자가 취소하거나 나가면 팟장에게도 알려준다(팟장만 — 참가자 입장에선 다른 참가자 이탈이 아니라 내 일이다).
+    const left = seenJoiners.names.filter(n => !names.includes(n));
+    if (left.length && pod.leaderId === myId) showToast(`${left.join(', ')}님이 팟에서 나갔어요`);
   }
   seenJoiners = { podId: pod.id, names };
 }
@@ -3388,8 +3391,7 @@ async function renderPodChat(podId){
       onConfirm: async () => {
         try {
           await dissolvePod(pod);
-          renderHome();
-          showScreen('screen-home');
+          openNewPodInput({ backTo: 'screen-home', keepPlaces: true });
         } catch (e) {
           showError(friendlyDbError(e));
         }
@@ -3911,11 +3913,37 @@ function renderSettlement(podId){
 }
 
 /* ============ 14. 화면 7: 완료 → 재매칭 ============ */
-document.getElementById('btn-rematch').addEventListener('click', async () => {
-  STATE.myPodId = null;
+// 팟이 끝나거나 취소된 뒤엔 홈의 빈 카드로 보내지 않고 처음처럼 경로·시간 입력부터 다시 받는다.
+// 닉네임·성별은 STATE.user 그대로 두고, 등록하면 온보딩 경로(enterHome)가 새 팟을 만든다.
+// backTo: 뒤로가기가 갈 화면. keepPlaces: 직전 출발지·목적지를 채워둘지(취소 직후엔 같은 경로로 다시 찾는 경우가 많다).
+function openNewPodInput({ backTo, keepPlaces }){
+  const u = STATE.user;
   STATE.committed = false;
-  await createOwnPod();
   STATE.userState = '대기';
-  renderHome();
-  showScreen('screen-home');
+  obMode = 'onboarding';
+  document.getElementById('ob-route-home-btn').hidden = true;
+  document.getElementById('ob-route-back-btn').dataset.back = backTo;
+  document.getElementById('ob-route-title').textContent = '새 팟 만들기';
+  document.getElementById('ob-nickname').value = u.nickname;
+  setGenderSelection(u.gender);
+  document.getElementById('ob-origin').value = keepPlaces ? u.origin : '';
+  document.getElementById('ob-dest').value = keepPlaces ? u.dest : '';
+  partySize = u.partySize;
+  syncSize();
+  luggageType = 'none';
+  syncLuggageChips();
+  selectedTrain = null;
+  syncTrainScheduleButton();
+  syncTrainScheduleButtonLabel();
+  const findBtn = document.getElementById('btn-find-pod');
+  findBtn.disabled = false;
+  findBtn.textContent = '등록하기';
+  showScreen('screen-ob-route');
+  // 휠은 화면이 보인 뒤에야 scrollTop이 적용된다.
+  setWheelTime(clockFromNow(30).time);
+  setObDate(localDateStr(new Date()));
+}
+document.getElementById('btn-rematch').addEventListener('click', () => {
+  STATE.myPodId = null; // 끝난 팟은 이미 지워졌다
+  openNewPodInput({ backTo: 'screen-done', keepPlaces: false });
 });
