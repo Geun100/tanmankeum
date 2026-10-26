@@ -8,13 +8,20 @@ const fakeClient = {
   from: (table) => {
     assert.equal(table, 'push_subscriptions');
     return {
+      select: () => ({ eq: (col, val) => ({ maybeSingle: async () => { assert.equal(col, 'user_id'); return { data: rows.get(val) ? { ...rows.get(val) } : null }; } }) }),
       upsert: async (row, opts) => {
         if (forceError) return { error: forceError };
         assert.equal(opts && opts.onConflict, 'user_id', 'user_id 기준으로 갱신한다');
         rows.set(row.user_id, { ...row });
         return { error: null };
       },
-      delete: () => ({ eq: async (col, val) => { assert.equal(col, 'user_id'); rows.delete(val); return { error: null }; } }),
+      // 삭제는 user_id와 endpoint가 "둘 다" 맞아야 지워진다
+      delete: () => ({ eq: (c1, v1) => ({ eq: async (c2, v2) => {
+        assert.equal(c1, 'user_id'); assert.equal(c2, 'endpoint');
+        const r = rows.get(v1);
+        if (r && r.endpoint === v2) rows.delete(v1);
+        return { error: null };
+      } }) }),
     };
   },
 };
@@ -41,18 +48,38 @@ const sub = (over = {}) => ({ action: 'subscribe', userId: U1, endpoint: 'https:
   assert.equal((await call({ action: 'nope', userId: U1 })).statusCode, 400, '모르는 동작 거절');
   assert.equal(rows.size, 0, '거절된 요청은 아무것도 저장하지 않는다');
 
+  const E1 = 'https://fcm.googleapis.com/fcm/send/abc';
+  const E2 = 'https://fcm.googleapis.com/fcm/send/other-device';
+  const E3 = 'https://fcm.googleapis.com/fcm/send/rotated';
+
   // 끄고 다시 켜는 흐름: 켜기 → 끄기 → 다시 켜기가 모두 성공해야 한다(예전엔 마지막이 42501로 실패)
   assert.equal((await call(sub())).statusCode, 200);
-  assert.equal(rows.get(U1).endpoint, 'https://fcm.googleapis.com/fcm/send/abc');
-  assert.equal((await call({ action: 'unsubscribe', userId: U1 })).statusCode, 200);
-  assert.equal(rows.size, 0, '끄면 구독이 실제로 지워진다');
-  assert.equal((await call(sub({ endpoint: 'https://fcm.googleapis.com/fcm/send/new' }))).statusCode, 200);
-  assert.equal(rows.get(U1).endpoint, 'https://fcm.googleapis.com/fcm/send/new', '다시 켜면 새 구독이 저장된다');
-  assert.equal((await call(sub({ endpoint: 'https://fcm.googleapis.com/fcm/send/again' }))).statusCode, 200);
+  assert.equal(rows.get(U1).endpoint, E1);
+  assert.equal((await call({ action: 'unsubscribe', userId: U1, endpoint: E1 })).statusCode, 200);
+  assert.equal(rows.size, 0, '내 구독 주소를 대면 구독이 실제로 지워진다');
+  assert.equal((await call(sub({ endpoint: E3 }))).statusCode, 200);
+  assert.equal(rows.get(U1).endpoint, E3, '다시 켜면 새 구독이 저장된다');
+
+  // 같은 기기가 다시 저장(앱을 열 때의 조용한 갱신)하는 건 된다
+  assert.equal((await call(sub({ endpoint: E3 }))).statusCode, 200);
+  // 브라우저가 구독 주소를 바꾼 경우: 직전에 저장한 주소를 대면 바꿀 수 있다
+  assert.equal((await call(sub({ endpoint: E1, previousEndpoint: E3 }))).statusCode, 200);
+  assert.equal(rows.get(U1).endpoint, E1);
   assert.equal(rows.size, 1, '같은 사용자는 한 줄만 유지');
 
+  // 남이 userId만 알고 덮어쓰거나 지우려는 경우: 막힌다
+  let r = await call(sub({ endpoint: E2 }));
+  assert.equal(r.statusCode, 409, '증명 없이 다른 주소로 덮어쓰기 거절');
+  assert.equal(rows.get(U1).endpoint, E1, '남의 시도로 구독이 바뀌지 않는다');
+  r = await call(sub({ endpoint: E2, previousEndpoint: 'https://fcm.googleapis.com/fcm/send/guess' }));
+  assert.equal(r.statusCode, 409, '엉뚱한 직전 주소로도 거절');
+  assert.equal((await call({ action: 'unsubscribe', userId: U1, endpoint: E2 })).statusCode, 200);
+  assert.equal(rows.get(U1).endpoint, E1, '내 주소가 아니면 지워지지 않는다');
+  assert.equal((await call({ action: 'unsubscribe', userId: U1 })).statusCode, 400, '주소 없이는 끌 수 없다');
+
   forceError = { code: '42501', message: 'x' };
-  const r = await call(sub());
+  rows.clear();
+  r = await call(sub());
   assert.equal(r.statusCode, 500);
   assert.ok(!JSON.stringify(r.body).includes('42501'), '내부 오류 내용은 응답에 새지 않는다');
 
