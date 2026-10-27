@@ -283,12 +283,14 @@
   .status-card{ position:relative; }
   .status-share-btn{ position:absolute; top:10px; right:10px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:0; border-radius:50%; background:none; color:var(--muted); cursor:pointer; }
   .status-share-btn:active{ background:rgba(0,120,255,.1); }
-  .status-card .status-tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:9px; }
+  .status-card .status-tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:13px; }
   .status-dot{ width:7px; height:7px; border-radius:50%; background:var(--primary); animation:pulse 1.4s ease-in-out infinite; }
   @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
-  .status-card strong{ display:block; font-size:18px; font-weight:800; margin-bottom:5px; }
+  .status-card strong{ display:block; font-size:18px; font-weight:800; margin-bottom:9px; }
   .status-card p{ font-size:13px; color:var(--ink-soft); margin:0 0 20px; line-height:1.5; }
-  .status-card p.status-meta{ margin-bottom:6px; }
+  .status-card p.status-meta{ margin-bottom:20px; }
+  .status-card p.status-meta .pod-luggage{ vertical-align:-2px; gap:0; }
+  .status-card p.status-meta .pod-luggage svg{ margin-right:2px; }
 
   /* 홈 상단 알림 종 — 눈에 띄지 않게 테두리·배경 없이 아이콘 색만 바꾼다(꺼짐: 연한 회색+사선, 켜짐: 파랑) */
   .bell-btn{ border-color:transparent; background:transparent; color:var(--placeholder); }

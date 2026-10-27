@@ -2392,8 +2392,7 @@ function carrierCount(pod){
 }
 function carrierBadgeHtml(pod){
   const n = carrierCount(pod);
-  const small = pod.participants.filter(p => p.luggageType === 'small').length;
-  return `<span class="pod-luggage${n >= CARRIER_CAPACITY ? ' is-full' : ''}">${iconSvg('suitcase', 13)}캐리어 ${n}/${CARRIER_CAPACITY}개</span>${small ? ` · 소형 짐 ${small}명` : ''}`;
+  return `<span class="pod-luggage${n >= CARRIER_CAPACITY ? ' is-full' : ''}">${iconSvg('suitcase', 13)}캐리어 ${n}/${CARRIER_CAPACITY}개</span>`;
 }
 let luggageType = 'none';
 const luggageChipsEl = document.getElementById('luggage-chips');
@@ -3015,8 +3014,7 @@ async function renderHome(){
   card.innerHTML = `
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${escapeHtml(myPod.originName)} → ${escapeHtml(myPod.leaderDest)}</strong>
-    <p class="status-meta">${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명</p>
-    <p class="status-luggage">${carrierBadgeHtml(myPod)}</p>
+    <p class="status-meta">${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명 · ${carrierBadgeHtml(myPod)}</p>
     <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
