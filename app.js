@@ -3027,10 +3027,10 @@ async function renderHome(){
   if (SUPA_ENABLED) {
     const shareBtn = document.createElement('button');
     shareBtn.type = 'button';
-    shareBtn.className = 'btn btn--ghost btn--block';
+    shareBtn.className = 'status-share-btn';
     shareBtn.id = 'btn-my-pod-share';
-    shareBtn.style.cssText = 'color:var(--primary-dark); font-size:14px; margin-top:8px;';
-    shareBtn.innerHTML = `${iconSvg('share', 16)}팟 링크 공유하기`;
+    shareBtn.setAttribute('aria-label', '팟 링크 공유하기');
+    shareBtn.innerHTML = iconSvg('share', 18);
     shareBtn.addEventListener('click', () => sharePod(myPod));
     card.appendChild(shareBtn);
   }
