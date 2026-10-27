@@ -1626,8 +1626,9 @@ const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none
 const ICON_CHEVRON_R = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
 const ICON_CAR = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16C5.67 16 5 15.33 5 14.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
 const ICON_GROUP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z"/></svg>';
-// 추천 칩은 한동대(캠퍼스)와 자취방 동네(장성동) 장소만 둔다. 그 밖의 장소는 검색창에 직접 입력하면 된다.
-const POPULAR_ORIGINS = ['한동대학교', '한동대 버스 정류장', '한동대 현동', '한동대 오석', '그레이스더테이블', 'CU 장성그랜드점', '커피 유야'];
+// 추천 칩은 포항역·포항터미널(열차 시간 연계 진입로)과 한동대(캠퍼스)·자취방 동네(장성동) 장소만 둔다.
+// 그 밖의 장소는 검색창에 직접 입력하면 된다.
+const POPULAR_ORIGINS = ['포항역', '포항터미널', '한동대학교', '한동대 버스 정류장', '한동대 현동', '한동대 오석', '그레이스더테이블', 'CU 장성그랜드점', '커피 유야'];
 const POPULAR_DESTS = POPULAR_ORIGINS;
 
 function setupPlaceChips(chipsId, inputId, names){

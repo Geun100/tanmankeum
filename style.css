@@ -374,6 +374,22 @@
   .callout{ font-size:15px; font-weight:700; line-height:1.5; margin:0 0 8px; }
   .fine-note{ font-size:12px; color:var(--muted); line-height:1.5; margin:0; }
 
+  /* 학교 메일 인증 화면 아래: 서비스약관·개인정보처리방침(접이식) */
+  .legal{ margin-top:28px; border-top:1px solid var(--line); }
+  .legal-doc{ border-bottom:1px solid var(--line); }
+  .legal-doc > summary{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:14px 2px; font-size:14px; font-weight:600; color:var(--ink); cursor:pointer; list-style:none; }
+  .legal-doc > summary::-webkit-details-marker{ display:none; }
+  .legal-doc > summary::after{ content:''; width:7px; height:7px; border-right:2px solid var(--placeholder); border-bottom:2px solid var(--placeholder); transform:rotate(45deg); margin:-3px 4px 0 2px; flex-shrink:0; }
+  .legal-doc[open] > summary::after{ transform:rotate(225deg); margin-top:3px; }
+  .legal-body{ padding:0 2px 18px; font-size:13px; line-height:1.65; color:var(--ink-soft); }
+  .legal-body h4{ font-size:13px; font-weight:700; color:var(--ink); margin:18px 0 4px; }
+  .legal-body p{ margin:0 0 8px; }
+  .legal-body ul{ margin:0 0 8px; padding-left:18px; }
+  .legal-body li{ margin-bottom:6px; }
+  .legal-body b{ color:var(--ink); font-weight:600; }
+  .legal-meta{ font-size:12px; color:var(--muted); }
+  .legal-body a{ color:var(--primary-dark); text-decoration:underline; }
+
   .avatar{ width:34px; height:34px; border-radius:50%; background:var(--primary-soft); color:var(--primary-dark); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
 
   /* 채팅방 상단: 인원 현황을 아바타 한 줄로 즉시 훑을 수 있게 하고, 사람별 상세(하차지·요금)는
