@@ -2062,7 +2062,8 @@ async function openBrowse(){
       li.className = 'pod-card';
       li.innerHTML = `
         <div class="pod-card-top"><strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong></div>
-        <p class="pod-meta">${browseDayLabel(pod.departDate)} · ${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명 · 남은 자리 ${pod.desiredSize - pod.participants.length}명</p>`;
+        <p class="pod-meta">${browseDayLabel(pod.departDate)} · ${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명 · 남은 자리 ${pod.desiredSize - pod.participants.length}명</p>
+        <p class="pod-meta pod-meta--luggage">${carrierBadgeHtml(pod)}</p>`;
       li.addEventListener('click', () => openModal({
         title: '로그인이 필요해요',
         body: '한동대 메일로 로그인하면 이 팟에 참가하고, 직접 팟도 만들 수 있어요.',
@@ -2207,8 +2208,19 @@ plusBtn.addEventListener('click', () => { if (partySize < SIZE_MAX) { partySize+
 syncSize();
 
 // --- 2단계: 짐 종류(없음/작은 짐/큰 짐) + 자유 메모 — 평소엔 칩 한 번 탭이면 끝나고,
-// 트렁크 용량 계산 같은 건 안 한다. 특이사항 있는 사람만 메모에 직접 적게 둔다. ---
+// 캐리어 수는 아래 CARRIER_CAPACITY 대비로 보여주기만 하고 참가를 막지는 않는다. 특이사항 있는 사람만 메모에 직접 적게 둔다. ---
 const LUGGAGE_LABEL = { small: `${iconSvg('backpack', 14)}백팩·소형`, carryon: `${iconSvg('carryon', 14)}기내용 캐리어`, large: `${iconSvg('suitcase', 14)}대형 캐리어` }; // none은 표시 안 함
+// 택시 트렁크에 실을 수 있는 캐리어 수(일반 택시 기준). 기내용·대형 캐리어를 1개로 센다.
+// 백팩·소형은 세지 않고 인원수로만 알린다. 목록·채팅방에 "캐리어 n/2개"로 보여주기만 하고 참가를 막지는 않는다.
+const CARRIER_CAPACITY = 2;
+function carrierCount(pod){
+  return pod.participants.filter(p => p.luggageType === 'carryon' || p.luggageType === 'large').length;
+}
+function carrierBadgeHtml(pod){
+  const n = carrierCount(pod);
+  const small = pod.participants.filter(p => p.luggageType === 'small').length;
+  return `<span class="pod-luggage${n >= CARRIER_CAPACITY ? ' is-full' : ''}">${iconSvg('suitcase', 13)}캐리어 ${n}/${CARRIER_CAPACITY}개</span>${small ? ` · 소형 짐 ${small}명` : ''}`;
+}
 let luggageType = 'none';
 const luggageChipsEl = document.getElementById('luggage-chips');
 function syncLuggageChips(){
@@ -2822,7 +2834,8 @@ async function renderHome(){
   card.innerHTML = `
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${escapeHtml(myPod.originName)} → ${escapeHtml(myPod.leaderDest)}</strong>
-    <p>${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명</p>
+    <p class="status-meta">${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명</p>
+    <p class="status-luggage">${carrierBadgeHtml(myPod)}</p>
     <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
@@ -2952,8 +2965,6 @@ function renderPodList(){
     const walkNote = prev.dropOff.walkTime > 0
       ? ` · ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분`
       : ` · ${prev.dropOff.point}에서 바로 하차`;
-    const withLuggage = pod.participants.filter(p => p.luggageType && p.luggageType !== 'none').length;
-    const luggageNote = withLuggage > 0 ? ` · 짐 있는 인원 ${withLuggage}명` : '';
     const leaderNickname = (pod.participants.find(p => p.isLeader) || {}).nickname || '알 수 없음';
     const trainBadge = prev.matchScore.trainMatch === 'exact' ? `<span class="badge badge--train">${iconSvg('train', 12)}같은 열차</span>`
       : prev.matchScore.trainMatch === 'near' ? `<span class="badge badge--train">${iconSvg('train', 12)}비슷한 시간 열차</span>` : '';
@@ -2976,7 +2987,8 @@ function renderPodList(){
           <span class="pod-card-leader">${leaderNickname} 팟장</span>
         </div>
       </div>
-      <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}${luggageNote}</p>
+      <p class="pod-meta">${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명${walkNote}</p>
+      <p class="pod-meta pod-meta--luggage">${carrierBadgeHtml(pod)}</p>
       ${trainInfoHtml}
       ${savingsHtml}
       <div class="pod-stats">
@@ -3323,6 +3335,7 @@ async function renderPodChat(podId){
     <div class="chat-status">
       <p class="chat-status-line"><span class="chat-status-left"><span class="status-dot"></span>${statusText}</span><span class="muted">${pod.departTime} 출발 예정</span></p>
       <div class="avatar-strip" id="chat-avatar-strip"></div>
+      <p class="chat-luggage">${carrierBadgeHtml(pod)}</p>
     </div>
     <div class="route-summary">
       <div class="route-flow"><strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong><span>약 ${result.totalMins}분</span></div>
