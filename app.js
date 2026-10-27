@@ -22,8 +22,6 @@ const PLACE_COORDS = {
   'CU 장성그랜드점':      { lat: 36.0791188,         lng: 129.3943544,        isStop: true },
   '커피 유야':           { lat: 36.0805468,         lng: 129.3996132,        isStop: true },
   '한동대 오석':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
-  // 오흡. 오석 흡연장 — 정확한 위치를 아직 몰라 오석과 같은 좌표를 임시로 쓴다(위치를 받으면 교체).
-  '한동대 오석 흡연장':    { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   '한동대 현동':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   '그레이스더테이블':      { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   // 택정. 카카오맵의 "한동 대학교 버스정류장" 위치(택시 정류장과 거의 같은 곳 — 학생 확인).
@@ -1675,22 +1673,11 @@ const ICON_CAR = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentC
 const ICON_GROUP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z"/></svg>';
 // 추천 칩은 포항역·포항시외버스터미널(열차 시간 연계 진입로)과 한동대(캠퍼스)·자취방 동네(장성동) 장소만 둔다.
 // 그 밖의 장소는 검색창에 직접 입력하면 된다.
-const POPULAR_ORIGINS = ['포항역', '포항시외버스터미널', '한동대학교', '한동대 택시 정류장', '한동대 비전관 벤치', '한동대 느헤미야홀', '한동대 현동', '한동대 오석 흡연장', '한동대 오석', '그레이스더테이블', 'CU 장성그랜드점', '커피 유야'];
+const POPULAR_ORIGINS = ['포항역', '포항시외버스터미널', '한동대학교', '한동대 택시 정류장', '한동대 비전관 벤치', '한동대 느헤미야홀', '한동대 현동', '한동대 오석', '그레이스더테이블', 'CU 장성그랜드점', '커피 유야', '궁물촌'];
 const POPULAR_DESTS = POPULAR_ORIGINS;
 
-// 칩에는 카톡방에서 쓰는 은어를 앞에, 풀네임을 괄호로 보여준다. 입력창에 들어가고 저장되는 값은
-// 앱 장소 이름(PLACE_COORDS 키) 그대로다 — 좌표 조회와 기존 팟 데이터가 그 이름을 기준으로 한다.
-const PLACE_LABELS = {
-  '한동대 택시 정류장': '택정(택시정류장)',
-  '한동대 비전관 벤치': '비벤(비전벤치)',
-  '한동대 느헤미야홀': '느헴(느헤미야홀)',
-  '한동대 현동': '현동(현동홀)',
-  '한동대 오석 흡연장': '오흡(오석 흡연장)',
-  'CU 장성그랜드점': '그할마(CU 장성그랜드점)',
-  '커피 유야': '유야(커피 유야)',
-};
-function placeLabel(name){ return PLACE_LABELS[name] || name; }
-
+// 칩에는 앱 장소 이름을 그대로 보여준다(은어·풀네임 병기는 하지 않는다).
+// 궁물촌의 좌표는 카카오맵 궁물촌 양덕점(천마로 49)이다.
 function setupPlaceChips(chipsId, inputId, names){
   const wrap = document.getElementById(chipsId);
   const input = document.getElementById(inputId);
@@ -1702,7 +1689,7 @@ function setupPlaceChips(chipsId, inputId, names){
     chip.type = 'button';
     chip.className = 'chip';
     chip.dataset.place = name;
-    chip.textContent = placeLabel(name);
+    chip.textContent = name;
     chip.addEventListener('click', () => {
       input.value = name;
       document.getElementById(inputId + '-list').hidden = true; // 자동완성 목록이 떠 있으면 닫는다
@@ -2100,7 +2087,7 @@ function goLoginFromGuest(){
 }
 // 둘러보기 "자주 가는 경로". 한동 카풀 카톡방에서 가장 많이 올라온 경로이고, 건수는 보여주지 않는다.
 // from/to는 앱 장소 이름이다. 캠퍼스는 한동대 안 어느 곳이든(옛 이름 포함) 한동대로 묶고,
-// 오석 흡연장·택시 정류장은 같은 자리를 쓰던 옛 이름(오석, 버스 정류장)의 팟도 함께 보여준다.
+// 택시 정류장은 같은 자리를 쓰던 옛 이름(버스 정류장)의 팟도, 시외버스터미널은 옛 이름(포항터미널)의 팟도 함께 보여준다.
 const inCampus = n => n.startsWith('한동대') || n === '그레이스더테이블';
 const TERMINAL_NAMES = ['포항시외버스터미널', '포항터미널'];
 // 출발지별로 묶어 보여준다(group이 작은 제목). 묶음 안은 카톡방 모집 글이 많은 순서다.
