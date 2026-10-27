@@ -1093,6 +1093,8 @@ function showScreen(id){
   if (id !== 'screen-pod-detail' && id !== 'screen-pod-chat') unsubscribePod();
   // 홈 카드 실시간 구독은 홈에서만 유지한다.
   if (id !== 'screen-home') unsubscribeHome();
+  // 경로 화면에 들어올 때마다(온보딩·내 정보 수정) 경로 선택 줄을 지금 입력값에 맞춰 다시 그린다.
+  if (id === 'screen-ob-route') renderRoutePick();
 }
 // 뒤로가기로 홈에 돌아갈 땐 항상 renderHome()을 다시 돌린다 — 안 그러면 그새 팟에 참가/탈퇴해도
 // 홈 카드가 마지막으로 renderHome()이 실제로 실행됐던 시점 그대로 멈춰있는다(예: 다른 팟 참가하고
@@ -1692,12 +1694,14 @@ function setupPlaceChips(chipsId, inputId, names){
     chip.textContent = name;
     chip.addEventListener('click', () => {
       input.value = name;
+      input.dispatchEvent(new Event('place-set')); // 경로 선택 줄 등이 값이 바뀐 걸 알아채게 한다
       document.getElementById(inputId + '-list').hidden = true; // 자동완성 목록이 떠 있으면 닫는다
       sync();
     });
     wrap.appendChild(chip);
   });
   input.addEventListener('input', sync);
+  input.addEventListener('place-set', sync);
   sync();
 }
 setupPlaceChips('ob-origin-chips', 'ob-origin', POPULAR_ORIGINS);
@@ -2094,6 +2098,7 @@ const TERMINAL_NAMES = ['포항시외버스터미널', '포항터미널'];
 const FREQUENT_ROUTES = [
   { group: '한동대', label: '한동대 → 포항역', from: inCampus, to: ['포항역'] },
   { group: '한동대', label: '한동대 → 유야(커피 유야)', from: inCampus, to: ['커피 유야'] },
+  { group: '한동대', label: '한동대 → 궁물촌', from: inCampus, to: ['궁물촌'] },
   { group: '한동대', label: '한동대 → 그할마(CU 장성그랜드점)', from: inCampus, to: ['CU 장성그랜드점'] },
   { group: '한동대', label: '한동대 → 시외버스터미널', from: inCampus, to: TERMINAL_NAMES },
   { group: '포항역', label: '포항역 → 한동대', from: ['포항역'], to: inCampus },
@@ -2110,14 +2115,15 @@ let browseOpen = [];  // 마지막으로 불러온 모집 중 팟
 let browseRoute = -1; // FREQUENT_ROUTES 인덱스, -1이면 전체
 
 // 평소엔 한 줄("자주 가는 경로 · 전체")로 접어두고, 누르면 경로가 한 줄씩 펼쳐진다. 고르면 다시 접힌다.
-function renderRouteFilter(){
-  const wrap = document.getElementById('route-filter-chips');
-  const labels = ['전체', ...FREQUENT_ROUTES.map(r => r.label)];
-  document.getElementById('route-filter-current').textContent = labels[browseRoute + 1];
+// 경로 목록(출발지별 묶음)을 그린다. 둘러보기 필터와 온보딩 경로 선택이 같이 쓴다.
+// onPick에는 FREQUENT_ROUTES 인덱스가 넘어간다(withAll이면 "전체" 줄이 -1).
+function buildRouteRows(wrap, withAll, selected, onPick){
+  const labels = withAll ? ['전체', ...FREQUENT_ROUTES.map(r => r.label)] : FREQUENT_ROUTES.map(r => r.label);
   wrap.innerHTML = '';
   let lastGroup = null;
   labels.forEach((label, i) => {
-    const group = i > 0 ? FREQUENT_ROUTES[i - 1].group : null;
+    const idx = withAll ? i - 1 : i;
+    const group = idx >= 0 ? FREQUENT_ROUTES[idx].group : null;
     if (group && group !== lastGroup) { // 출발지가 바뀌는 곳마다 작은 제목을 넣는다
       const head = document.createElement('li');
       head.className = 'route-group';
@@ -2130,16 +2136,58 @@ function renderRouteFilter(){
     row.type = 'button';
     row.className = 'route-row';
     row.textContent = label;
-    row.setAttribute('aria-pressed', String(i - 1 === browseRoute));
-    row.addEventListener('click', () => {
-      browseRoute = i - 1;
-      document.getElementById('route-filter').open = false;
-      renderRouteFilter();
-      renderBrowseList();
-    });
+    row.setAttribute('aria-pressed', String(idx === selected));
+    row.addEventListener('click', () => onPick(idx));
     li.appendChild(row);
     wrap.appendChild(li);
   });
+  return labels;
+}
+function renderRouteFilter(){
+  const labels = buildRouteRows(document.getElementById('route-filter-chips'), true, browseRoute, idx => {
+    browseRoute = idx;
+    document.getElementById('route-filter').open = false;
+    renderRouteFilter();
+    renderBrowseList();
+  });
+  document.getElementById('route-filter-current').textContent = labels[browseRoute + 1];
+}
+
+// 온보딩 경로 화면: 자주 가는 경로를 고르면 출발지·목적지 입력창이 한 번에 채워진다.
+// 한동대는 캠퍼스 대표(한동대학교)로 채우고, 택시 정류장·현동 등은 아래 칩으로 바꾸면 된다.
+const ROUTE_FILL = {
+  '한동대 → 포항역': ['한동대학교', '포항역'],
+  '한동대 → 유야(커피 유야)': ['한동대학교', '커피 유야'],
+  '한동대 → 궁물촌': ['한동대학교', '궁물촌'],
+  '한동대 → 그할마(CU 장성그랜드점)': ['한동대학교', 'CU 장성그랜드점'],
+  '한동대 → 시외버스터미널': ['한동대학교', '포항시외버스터미널'],
+  '포항역 → 한동대': ['포항역', '한동대학교'],
+  '포항역 → 유야(커피 유야)': ['포항역', '커피 유야'],
+  '포항역 → 그할마(CU 장성그랜드점)': ['포항역', 'CU 장성그랜드점'],
+  '그할마(CU 장성그랜드점) → 현동홀': ['CU 장성그랜드점', '한동대 현동'],
+  '그할마(CU 장성그랜드점) → 느헤미야홀': ['CU 장성그랜드점', '한동대 느헤미야홀'],
+  '유야(커피 유야) → 느헤미야홀': ['커피 유야', '한동대 느헤미야홀'],
+  '유야(커피 유야) → 현동홀': ['커피 유야', '한동대 현동'],
+  '시외버스터미널 → 한동대': ['포항시외버스터미널', '한동대학교'],
+};
+// 지금 입력창 값과 정확히 같은 경로가 있으면 그 인덱스, 없으면 -1(직접 입력한 경우).
+function currentPickedRoute(){
+  const o = document.getElementById('ob-origin').value.trim(), d = document.getElementById('ob-dest').value.trim();
+  return FREQUENT_ROUTES.findIndex(r => { const f = ROUTE_FILL[r.label]; return f && f[0] === o && f[1] === d; });
+}
+function renderRoutePick(){
+  const picked = currentPickedRoute();
+  const labels = buildRouteRows(document.getElementById('route-pick-list'), false, picked, idx => {
+    const [from, to] = ROUTE_FILL[FREQUENT_ROUTES[idx].label];
+    const o = document.getElementById('ob-origin'), d = document.getElementById('ob-dest');
+    o.value = from; d.value = to;
+    document.getElementById('ob-origin-list').hidden = true; // 자동완성 목록이 떠 있으면 닫는다
+    document.getElementById('ob-dest-list').hidden = true;
+    [o, d].forEach(el => { el.dispatchEvent(new Event('place-set')); el.dispatchEvent(new Event('change')); }); // 칩·등록 버튼·열차 안내를 갱신
+    document.getElementById('route-pick').open = false;
+    renderRoutePick();
+  });
+  document.getElementById('route-pick-current').textContent = picked >= 0 ? labels[picked] : '고르기';
 }
 function renderBrowseList(){
   const ul = document.getElementById('pod-list');
@@ -2428,6 +2476,12 @@ function syncTrainScheduleButtonLabel(){
 });
 document.getElementById('ob-origin-chips').addEventListener('click', syncTrainScheduleButton);
 document.getElementById('ob-dest-chips').addEventListener('click', syncTrainScheduleButton);
+// 입력창 값이 바뀌면(타이핑·칩·자동완성) 경로 선택 줄의 표시도 함께 갱신한다.
+[originInputEl, destInputEl].forEach(el => {
+  el.addEventListener('input', renderRoutePick);
+  el.addEventListener('place-set', renderRoutePick);
+  el.addEventListener('change', renderRoutePick);
+});
 document.getElementById('ob-origin-list').addEventListener('click', () => setTimeout(syncTrainScheduleButton, 0));
 document.getElementById('ob-dest-list').addEventListener('click', () => setTimeout(syncTrainScheduleButton, 0));
 syncTrainScheduleButton();

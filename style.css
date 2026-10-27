@@ -599,6 +599,8 @@
   /* 둘러보기의 자주 가는 경로: 로그인 전에만 보인다. 경로 이름이 길어 칩 안에서 줄바꿈을 허용한다. */
   .route-filter{ display:none; margin-bottom:18px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); }
   #screen-home.is-guest .route-filter{ display:block; }
+  /* 온보딩 경로 화면의 경로 선택: 같은 모양을 항상 보여주되 입력창과 붙어 보이게 간격을 줄인다. */
+  .route-pick{ display:block; margin:0 0 10px; }
   .route-filter > summary{ display:flex; align-items:center; gap:10px; padding:14px 16px; cursor:pointer; list-style:none; font-size:14px; font-weight:600; color:var(--ink-soft); }
   .route-filter > summary::-webkit-details-marker{ display:none; }
   .route-filter > summary strong{ flex:1; min-width:0; text-align:right; font-weight:700; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
