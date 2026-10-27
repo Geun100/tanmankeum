@@ -2102,15 +2102,21 @@ function goLoginFromGuest(){
 // from/to는 앱 장소 이름이다. 캠퍼스는 한동대 안 어느 곳이든(옛 이름 포함) 한동대로 묶고,
 // 오석 흡연장·택시 정류장은 같은 자리를 쓰던 옛 이름(오석, 버스 정류장)의 팟도 함께 보여준다.
 const inCampus = n => n.startsWith('한동대') || n === '그레이스더테이블';
+const TERMINAL_NAMES = ['포항시외버스터미널', '포항터미널'];
+// 출발지별로 묶어 보여준다(group이 작은 제목). 묶음 안은 카톡방 모집 글이 많은 순서다.
 const FREQUENT_ROUTES = [
-  { label: '한동대 → 포항역', from: inCampus, to: ['포항역'] },
-  { label: '포항역 → 한동대', from: ['포항역'], to: inCampus },
-  { label: '그할마(CU 장성그랜드점) → 현동홀', from: ['CU 장성그랜드점'], to: ['한동대 현동'] },
-  { label: '유야(커피 유야) → 느헤미야홀', from: ['커피 유야'], to: ['한동대 느헤미야홀'] },
-  { label: '오석 흡연장 → 유야(커피 유야)', from: ['한동대 오석 흡연장', '한동대 오석'], to: ['커피 유야'] },
-  { label: '택시정류장 → 유야(커피 유야)', from: ['한동대 택시 정류장', '한동대 버스 정류장'], to: ['커피 유야'] },
-  { label: '포항역 → 그할마(CU 장성그랜드점)', from: ['포항역'], to: ['CU 장성그랜드점'] },
-  { label: '시외버스터미널 → 한동대', from: ['포항시외버스터미널', '포항터미널'], to: inCampus },
+  { group: '한동대', label: '한동대 → 포항역', from: inCampus, to: ['포항역'] },
+  { group: '한동대', label: '한동대 → 유야(커피 유야)', from: inCampus, to: ['커피 유야'] },
+  { group: '한동대', label: '한동대 → 그할마(CU 장성그랜드점)', from: inCampus, to: ['CU 장성그랜드점'] },
+  { group: '한동대', label: '한동대 → 시외버스터미널', from: inCampus, to: TERMINAL_NAMES },
+  { group: '포항역', label: '포항역 → 한동대', from: ['포항역'], to: inCampus },
+  { group: '포항역', label: '포항역 → 유야(커피 유야)', from: ['포항역'], to: ['커피 유야'] },
+  { group: '포항역', label: '포항역 → 그할마(CU 장성그랜드점)', from: ['포항역'], to: ['CU 장성그랜드점'] },
+  { group: '그할마', label: '그할마(CU 장성그랜드점) → 현동홀', from: ['CU 장성그랜드점'], to: ['한동대 현동'] },
+  { group: '그할마', label: '그할마(CU 장성그랜드점) → 느헤미야홀', from: ['CU 장성그랜드점'], to: ['한동대 느헤미야홀'] },
+  { group: '유야', label: '유야(커피 유야) → 느헤미야홀', from: ['커피 유야'], to: ['한동대 느헤미야홀'] },
+  { group: '유야', label: '유야(커피 유야) → 현동홀', from: ['커피 유야'], to: ['한동대 현동'] },
+  { group: '시외버스터미널', label: '시외버스터미널 → 한동대', from: TERMINAL_NAMES, to: inCampus },
 ];
 const inPlaces = (spec, name) => typeof spec === 'function' ? spec(name) : spec.includes(name);
 let browseOpen = [];  // 마지막으로 불러온 모집 중 팟
@@ -2122,7 +2128,16 @@ function renderRouteFilter(){
   const labels = ['전체', ...FREQUENT_ROUTES.map(r => r.label)];
   document.getElementById('route-filter-current').textContent = labels[browseRoute + 1];
   wrap.innerHTML = '';
+  let lastGroup = null;
   labels.forEach((label, i) => {
+    const group = i > 0 ? FREQUENT_ROUTES[i - 1].group : null;
+    if (group && group !== lastGroup) { // 출발지가 바뀌는 곳마다 작은 제목을 넣는다
+      const head = document.createElement('li');
+      head.className = 'route-group';
+      head.textContent = group;
+      wrap.appendChild(head);
+      lastGroup = group;
+    }
     const li = document.createElement('li');
     const row = document.createElement('button');
     row.type = 'button';
