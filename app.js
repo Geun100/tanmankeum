@@ -441,6 +441,17 @@ function notifyLeaderOfJoin(podId, joinerNickname){
   if (!SUPA_ENABLED) return;
   fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ podId, joinerNickname }) }).catch(() => {});
 }
+// 팟장이 팟을 취소하면 참가자들에게, 참가자가 팟에서 나가면 팟장에게 알린다. 서버가 DB 상태를 확인하고 보낸다.
+// 사용자가 직접 누른 버튼(팟 취소·거절·나가기)에서만 부른다. dissolvePod/leavePod 안에서 부르지 않는 이유는
+// 그 함수들이 재접속 때 만료된 팟을 정리하거나 혼자 있던 내 팟을 다시 만들 때도 쓰여서, 거기서는 알림이 나가면 안 되기 때문이다.
+function notifyPodCancelled(podId){
+  if (!SUPA_ENABLED) return;
+  fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'cancelled', podId }) }).catch(() => {});
+}
+function notifyLeaderOfLeave(podId){
+  if (!SUPA_ENABLED) return;
+  fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'left', podId, userId: STATE.user.id }) }).catch(() => {});
+}
 
 // 푸시 알림(notificationclick)이 /?pod=<id>로 열었을 때, 홈에 도착한 뒤 바로 그 팟으로 들어간다.
 // 내 팟이면 채팅방(알림 대상이 팟장이니까), 남의 팟이면 상세(참가를 검토하러 온 거니까)로 보낸다.
@@ -3900,6 +3911,7 @@ async function renderPodChat(podId){
       onConfirm: async () => {
         try {
           await dissolvePod(pod);
+          notifyPodCancelled(pod.id); // 참가자들에게 "팟이 취소됐어요" 푸시
           openNewPodInput({ backTo: 'screen-home', keepPlaces: true });
         } catch (e) {
           showError(friendlyDbError(e));
@@ -3944,6 +3956,7 @@ async function renderPodChat(podId){
       onConfirm: async () => {
         try {
           await leavePod(pod);
+          notifyLeaderOfLeave(pod.id); // 팟장에게 "팟원이 나갔어요" 푸시
           renderHome();
           showScreen('screen-home');
         } catch (e) {
@@ -3966,6 +3979,7 @@ async function renderPodChat(podId){
         const rideRec = isPostConfirm ? buildRideRecord(pod) : null;
         try {
           await leavePod(pod);
+          notifyLeaderOfLeave(pod.id); // 팟장에게 "팟원이 나갔어요" 푸시
           if (rideRec) saveRideRecord(rideRec);
           renderHome();
           showScreen('screen-home');
