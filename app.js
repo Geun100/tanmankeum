@@ -441,9 +441,48 @@ function openPodFromUrl(){
   if (!podId) return;
   history.replaceState(null, '', location.pathname); // 뒤로가기·새로고침에서 재진입 안 되게 정리
   const pod = findPod(podId);
-  if (!pod) return;
+  // 공유 링크로 들어왔는데 그새 팟이 마감·해체됐으면 조용히 홈에 두지 말고 이유를 알려준다.
+  if (!pod) { showToast('이 팟은 마감됐거나 사라졌어요. 다른 팟을 찾아보세요'); return; }
   if (podId === STATE.myPodId) { renderPodChat(podId); showScreen('screen-pod-chat'); }
   else { renderPodDetail(podId); showScreen('screen-pod-detail'); }
+}
+
+// 팟 공유 문구. 카톡방에 붙여넣거나 공유 시트로 보내면, 링크로 들어온 사람이 학교 메일 인증을 마친 뒤
+// 바로 이 팟으로 온다(openPodFromUrl). 인증·온보딩이 끝난 재방문 사용자는 홈을 거쳐 곧장 상세로 간다.
+function sharePodText(pod){
+  const d = new Date(`${pod.departDate}T00:00:00`);
+  const when = `${d.getMonth() + 1}/${d.getDate()}(${'일월화수목금토'[d.getDay()]}) ${pod.departTime}`; // 맨 뒤에 " 출발"을 붙여 쓴다
+  const short = name => name === '한동대학교' ? '한동대' : name; // 카톡 한 줄에 들어오게 가장 긴 이름만 줄인다
+  // 자리는 한동 카풀 카톡방에서 가장 많이 쓰는 "1/4" 꼴(현재 인원/정원)로 쓰고, 다 차면 방의 "4/4 마감"을 쓴다.
+  const seats = `${pod.participants.length}/${pod.desiredSize}${pod.participants.length >= pod.desiredSize ? ' 마감' : ''}`;
+  // 열차 시각과 캐리어는 포항역이 출발지나 도착지일 때만 넣는다(KTX 짐이 걸린 경로라서).
+  // 포항역이 출발지면 그 열차가 "도착"하는 시각, 도착지면 "출발"하는 시각이다(고른 열차가 있을 때만).
+  const leader = pod.participants.find(p => p.id === pod.leaderId) || pod.participants[0];
+  const trainTime = leader && leader.train ? String(leader.train.time).slice(0, 5) : '';
+  const stationTrip = pod.originName === POHANG_NAME || pod.leaderDest === POHANG_NAME;
+  // 방에서는 출발 기차는 "(21:36 출발 기차)"처럼 괄호로, 도착 기차는 "23:59 도착 기차"처럼 괄호 없이 쓴다.
+  const trainLine = !stationTrip || !trainTime ? ''
+    : pod.originName === POHANG_NAME ? `\n${trainTime} 도착 기차` : `\n(${trainTime} 출발 기차)`;
+  const carrierLine = stationTrip ? `\n캐리어 ${carrierCount(pod)}/${CARRIER_CAPACITY}개` : '';
+  return `${when} 출발\n${short(pod.originName)} → ${short(pod.leaderDest)} (택시)${trainLine}\n${seats}${carrierLine}\n탄만큼 링크: ${location.origin}/?pod=${pod.id}`;
+}
+function sharePod(pod){ return shareText(sharePodText(pod), 'pod_shared'); }
+// 특정 팟이 아니라 서비스 자체를 알리는 링크. 홈 상단 공유 아이콘이 쓴다.
+function shareApp(){ return shareText(`한동대 택시 합승 탄만큼: ${location.origin}/`, 'app_shared'); }
+document.getElementById('btn-share-app').addEventListener('click', shareApp); // 한 번만 연결한다(홈을 다시 그려도 중복되지 않게)
+async function shareText(text, eventName){
+  track(eventName);
+  try {
+    if (navigator.share) { await navigator.share({ text }); return; }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return; // 공유 시트를 닫은 것 — 에러가 아니다
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('링크를 복사했어요. 카톡방에 붙여넣어 주세요');
+  } catch (_) {
+    window.prompt('아래 내용을 복사해서 카톡방에 붙여넣어 주세요', text);
+  }
 }
 
 /* ============ 2. 유틸 ============ */
@@ -475,6 +514,7 @@ const ICON_PATHS = {
   'check-circle': '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
   'camera': '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/>',
   'check': '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  'share': '<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v6h14v-6"/>',
 };
 // 홈 추천 팟이 비었을 때 쓰는 택시 일러스트 — 하늘색·흰색 면 몇 개로만 그린 납작한 세단(외곽선 없음).
 const TAXI_ILLUST = `<svg class="empty-art" width="140" height="88" viewBox="0 0 140 88" fill="none" aria-hidden="true">
@@ -2805,6 +2845,7 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   }
   renderHome();
   showScreen('screen-home');
+  openPodFromUrl(); // 공유 링크로 들어온 새 사용자는 인증·온보딩을 마친 뒤 그 팟으로 간다
 });
 
 /* ============ 9. 화면 2: 홈 ============ */
@@ -2842,6 +2883,17 @@ async function renderHome(){
     renderPodChat(myPod.id); // STATE.myPodId를 다시 읽지 않는다 — 바로 위에서 이미 찾아둔 그 팟이다.
     showScreen('screen-pod-chat');
   });
+  // 카톡방 등에 팟 링크를 보내 사람을 모으는 버튼. DB가 없는 로컬 시드 팟은 링크가 의미 없어서 뺀다.
+  if (SUPA_ENABLED) {
+    const shareBtn = document.createElement('button');
+    shareBtn.type = 'button';
+    shareBtn.className = 'btn btn--ghost btn--block';
+    shareBtn.id = 'btn-my-pod-share';
+    shareBtn.style.cssText = 'color:var(--primary-dark); font-size:14px; margin-top:8px;';
+    shareBtn.innerHTML = `${iconSvg('share', 16)}팟 링크 공유하기`;
+    shareBtn.addEventListener('click', () => sharePod(myPod));
+    card.appendChild(shareBtn);
+  }
   renderPodList();
 }
 
@@ -3362,6 +3414,7 @@ async function renderPodChat(podId){
       <span class="section-label">채팅</span>
       <div class="chat-section-head-btns">
         ${kakaoRouteHref ? `<a class="btn btn--ghost btn--sm" target="_blank" rel="noopener" href="${kakaoRouteHref}">${ICON_PIN} 카카오맵</a>` : ''}
+        ${SUPA_ENABLED ? `<button type="button" class="btn btn--ghost btn--sm" id="btn-share-pod">${iconSvg('share', 15)}공유</button>` : ''}
         <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-summary">${iconSvg('info', 15)}팟 정보</button>
       </div>
     </div>
@@ -3568,6 +3621,8 @@ async function renderPodChat(podId){
 
   // "🤖 팟 정보" — 경로/하차지점/요금을 봇 말풍선으로 보여준다. 실제 채팅 메시지가 아니라
   // 이 화면에서만 보이는 안내라서 pod_messages에 저장하지 않는다(다시 열면 사라짐, 필요하면 또 누르면 됨).
+  const shareBtn = document.getElementById('btn-share-pod');
+  if (shareBtn) shareBtn.addEventListener('click', () => sharePod(pod));
   const summaryBtn = document.getElementById('btn-ai-summary');
   summaryBtn.addEventListener('click', async () => {
     // 이미 열어둔 상태면 다시 안 받아온다 — 아래로 스크롤만 해서 보여준다.
