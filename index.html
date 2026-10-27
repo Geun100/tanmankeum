@@ -300,6 +300,12 @@ window.__kakaoReady = new Promise((resolve, reject) => {
       <div class="screen-body">
         <div class="status-card" id="my-status-card"></div>
 
+        <!-- 둘러보기(로그인 전)에서만 보이는 자주 가는 경로. 누르면 그 경로의 팟만 보여준다. -->
+        <details class="route-filter" id="route-filter">
+          <summary><span>자주 가는 경로</span><strong id="route-filter-current">전체</strong></summary>
+          <ul class="route-list" id="route-filter-chips"></ul>
+        </details>
+
         <div class="pod-list-head">
           <span class="section-label" id="pod-list-title">추천 팟</span>
           <div class="select-row">

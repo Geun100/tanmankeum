@@ -22,6 +22,8 @@ const PLACE_COORDS = {
   'CU 장성그랜드점':      { lat: 36.0791188,         lng: 129.3943544,        isStop: true },
   '커피 유야':           { lat: 36.0805468,         lng: 129.3996132,        isStop: true },
   '한동대 오석':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
+  // 오흡. 오석 흡연장 — 정확한 위치를 아직 몰라 오석과 같은 좌표를 임시로 쓴다(위치를 받으면 교체).
+  '한동대 오석 흡연장':    { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   '한동대 현동':          { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   '그레이스더테이블':      { lat: 36.1035947023864,   lng: 129.3888679123017,  isStop: true },
   // 택정. 카카오맵의 "한동 대학교 버스정류장" 위치(택시 정류장과 거의 같은 곳 — 학생 확인).
@@ -48,7 +50,10 @@ const PLACE_COORDS = {
   '포항시청':            { lat: 36.0189954295148,   lng: 129.343164578839,   isStop: true },
   '대잠사거리':          { lat: 36.0120292126335,   lng: 129.342780842714,   isStop: true },
   '포항성모병원':         { lat: 36.01582822326205,  lng: 129.339900065387,   isStop: true },
-  '포항터미널':          { lat: 36.0134727818623,   lng: 129.349677162622,   isStop: true },
+  // 카카오맵 "포항터미널"(경북 포항시 남구 중흥로 85, 고속·시외버스터미널)과 같은 곳 — 포항시외버스터미널.
+  '포항시외버스터미널':   { lat: 36.0134727818623,   lng: 129.349677162622,   isStop: true },
+  // 옛 이름. 예전 팟·저장된 입력값이 이 이름을 쓰고 있어 좌표만 남기고 하차 후보(isStop)에서는 뺀다.
+  '포항터미널':          { lat: 36.0134727818623,   lng: 129.349677162622,   isStop: false },
   '포항종합운동장':       { lat: 36.0085958893205,   lng: 129.363828582237,   isStop: true },
   '포항공과대학교':       { lat: 36.012436470681074, lng: 129.32180208599536, isStop: true },
 };
@@ -1668,22 +1673,36 @@ const ICON_REFRESH = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none
 const ICON_CHEVRON_R = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>';
 const ICON_CAR = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16C5.67 16 5 15.33 5 14.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>';
 const ICON_GROUP = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z"/></svg>';
-// 추천 칩은 포항역·포항터미널(열차 시간 연계 진입로)과 한동대(캠퍼스)·자취방 동네(장성동) 장소만 둔다.
+// 추천 칩은 포항역·포항시외버스터미널(열차 시간 연계 진입로)과 한동대(캠퍼스)·자취방 동네(장성동) 장소만 둔다.
 // 그 밖의 장소는 검색창에 직접 입력하면 된다.
-const POPULAR_ORIGINS = ['포항역', '포항터미널', '한동대학교', '한동대 택시 정류장', '한동대 비전관 벤치', '한동대 느헤미야홀', '한동대 현동', '한동대 오석', '그레이스더테이블', 'CU 장성그랜드점', '커피 유야'];
+const POPULAR_ORIGINS = ['포항역', '포항시외버스터미널', '한동대학교', '한동대 택시 정류장', '한동대 비전관 벤치', '한동대 느헤미야홀', '한동대 현동', '한동대 오석 흡연장', '한동대 오석', '그레이스더테이블', 'CU 장성그랜드점', '커피 유야'];
 const POPULAR_DESTS = POPULAR_ORIGINS;
+
+// 칩에는 카톡방에서 쓰는 은어를 앞에, 풀네임을 괄호로 보여준다. 입력창에 들어가고 저장되는 값은
+// 앱 장소 이름(PLACE_COORDS 키) 그대로다 — 좌표 조회와 기존 팟 데이터가 그 이름을 기준으로 한다.
+const PLACE_LABELS = {
+  '한동대 택시 정류장': '택정(택시정류장)',
+  '한동대 비전관 벤치': '비벤(비전벤치)',
+  '한동대 느헤미야홀': '느헴(느헤미야홀)',
+  '한동대 현동': '현동(현동홀)',
+  '한동대 오석 흡연장': '오흡(오석 흡연장)',
+  'CU 장성그랜드점': '그할마(CU 장성그랜드점)',
+  '커피 유야': '유야(커피 유야)',
+};
+function placeLabel(name){ return PLACE_LABELS[name] || name; }
 
 function setupPlaceChips(chipsId, inputId, names){
   const wrap = document.getElementById(chipsId);
   const input = document.getElementById(inputId);
   const sync = () => wrap.querySelectorAll('.chip').forEach(c => {
-    c.setAttribute('aria-pressed', String(c.textContent === input.value));
+    c.setAttribute('aria-pressed', String(c.dataset.place === input.value));
   });
   names.forEach(name => {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'chip';
-    chip.textContent = name;
+    chip.dataset.place = name;
+    chip.textContent = placeLabel(name);
     chip.addEventListener('click', () => {
       input.value = name;
       document.getElementById(inputId + '-list').hidden = true; // 자동완성 목록이 떠 있으면 닫는다
@@ -2079,6 +2098,74 @@ function goLoginFromGuest(){
   leaveGuest();
   showScreen('screen-ob-email');
 }
+// 둘러보기 "자주 가는 경로". 한동 카풀 카톡방에서 가장 많이 올라온 경로이고, 건수는 보여주지 않는다.
+// from/to는 앱 장소 이름이다. 캠퍼스는 한동대 안 어느 곳이든(옛 이름 포함) 한동대로 묶고,
+// 오석 흡연장·택시 정류장은 같은 자리를 쓰던 옛 이름(오석, 버스 정류장)의 팟도 함께 보여준다.
+const inCampus = n => n.startsWith('한동대') || n === '그레이스더테이블';
+const FREQUENT_ROUTES = [
+  { label: '한동대 → 포항역', from: inCampus, to: ['포항역'] },
+  { label: '포항역 → 한동대', from: ['포항역'], to: inCampus },
+  { label: '그할마(CU 장성그랜드점) → 현동홀', from: ['CU 장성그랜드점'], to: ['한동대 현동'] },
+  { label: '유야(커피 유야) → 느헤미야홀', from: ['커피 유야'], to: ['한동대 느헤미야홀'] },
+  { label: '오석 흡연장 → 유야(커피 유야)', from: ['한동대 오석 흡연장', '한동대 오석'], to: ['커피 유야'] },
+  { label: '택시정류장 → 유야(커피 유야)', from: ['한동대 택시 정류장', '한동대 버스 정류장'], to: ['커피 유야'] },
+  { label: '포항역 → 그할마(CU 장성그랜드점)', from: ['포항역'], to: ['CU 장성그랜드점'] },
+  { label: '시외버스터미널 → 한동대', from: ['포항시외버스터미널', '포항터미널'], to: inCampus },
+];
+const inPlaces = (spec, name) => typeof spec === 'function' ? spec(name) : spec.includes(name);
+let browseOpen = [];  // 마지막으로 불러온 모집 중 팟
+let browseRoute = -1; // FREQUENT_ROUTES 인덱스, -1이면 전체
+
+// 평소엔 한 줄("자주 가는 경로 · 전체")로 접어두고, 누르면 경로가 한 줄씩 펼쳐진다. 고르면 다시 접힌다.
+function renderRouteFilter(){
+  const wrap = document.getElementById('route-filter-chips');
+  const labels = ['전체', ...FREQUENT_ROUTES.map(r => r.label)];
+  document.getElementById('route-filter-current').textContent = labels[browseRoute + 1];
+  wrap.innerHTML = '';
+  labels.forEach((label, i) => {
+    const li = document.createElement('li');
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'route-row';
+    row.textContent = label;
+    row.setAttribute('aria-pressed', String(i - 1 === browseRoute));
+    row.addEventListener('click', () => {
+      browseRoute = i - 1;
+      document.getElementById('route-filter').open = false;
+      renderRouteFilter();
+      renderBrowseList();
+    });
+    li.appendChild(row);
+    wrap.appendChild(li);
+  });
+}
+function renderBrowseList(){
+  const ul = document.getElementById('pod-list');
+  const route = FREQUENT_ROUTES[browseRoute];
+  const list = route ? browseOpen.filter(p => inPlaces(route.from, p.originName) && inPlaces(route.to, p.leaderDest)) : browseOpen;
+  ul.innerHTML = '';
+  if (!list.length) {
+    const msg = route ? '이 경로로 모집 중인 팟이 아직 없어요. 로그인하고 직접 만들어 보세요.' : '지금 모집 중인 팟이 없어요. 로그인하고 직접 만들어 보세요.';
+    ul.innerHTML = `<li class="empty-hero"><p class="page-sub">${msg}</p></li>`;
+    return;
+  }
+  list.forEach(pod => {
+    const li = document.createElement('li');
+    li.className = 'pod-card';
+    li.innerHTML = `
+      <div class="pod-card-top"><strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong></div>
+      <p class="pod-meta">${browseDayLabel(pod.departDate)} · ${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명 · 남은 자리 ${pod.desiredSize - pod.participants.length}명</p>
+      <p class="pod-meta pod-meta--luggage">${carrierBadgeHtml(pod)}</p>`;
+    li.addEventListener('click', () => openModal({
+      title: '로그인이 필요해요',
+      body: '한동대 메일로 로그인하면 이 팟에 참가하고, 직접 팟도 만들 수 있어요.',
+      confirmLabel: '로그인하기',
+      onConfirm: goLoginFromGuest,
+    }));
+    ul.appendChild(li);
+  });
+}
+
 async function openBrowse(){
   STATE.guest = true;
   document.getElementById('screen-home').classList.add('is-guest');
@@ -2094,26 +2181,10 @@ async function openBrowse(){
       .filter(p => p.status === 'recruiting' && p.participants.length < p.desiredSize && !isPodExpired(p))
       .sort((a, b) => new Date(`${a.departDate}T${a.departTime}`) - new Date(`${b.departDate}T${b.departTime}`));
     if (!STATE.guest) return; // 불러오는 동안 로그인 쪽으로 나갔다
-    ul.innerHTML = '';
-    if (!open.length) {
-      ul.innerHTML = '<li class="empty-hero"><p class="page-sub">지금 모집 중인 팟이 없어요. 로그인하고 직접 만들어 보세요.</p></li>';
-      return;
-    }
-    open.forEach(pod => {
-      const li = document.createElement('li');
-      li.className = 'pod-card';
-      li.innerHTML = `
-        <div class="pod-card-top"><strong>${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)}</strong></div>
-        <p class="pod-meta">${browseDayLabel(pod.departDate)} · ${pod.departTime} 출발 · 현재 ${pod.participants.length}/${pod.desiredSize}명 · 남은 자리 ${pod.desiredSize - pod.participants.length}명</p>
-        <p class="pod-meta pod-meta--luggage">${carrierBadgeHtml(pod)}</p>`;
-      li.addEventListener('click', () => openModal({
-        title: '로그인이 필요해요',
-        body: '한동대 메일로 로그인하면 이 팟에 참가하고, 직접 팟도 만들 수 있어요.',
-        confirmLabel: '로그인하기',
-        onConfirm: goLoginFromGuest,
-      }));
-      ul.appendChild(li);
-    });
+    browseOpen = open;
+    browseRoute = -1;
+    renderRouteFilter();
+    renderBrowseList();
   } catch (e) {
     ul.innerHTML = '<li class="empty-hero"><p class="page-sub">목록을 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.</p></li>';
   }
