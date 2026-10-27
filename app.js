@@ -467,9 +467,6 @@ function sharePodText(pod){
   return `${when} 출발\n${short(pod.originName)} → ${short(pod.leaderDest)} (택시)${trainLine}\n${seats}${carrierLine}\n탄만큼 링크: ${location.origin}/?pod=${pod.id}`;
 }
 function sharePod(pod){ return shareText(sharePodText(pod), 'pod_shared'); }
-// 특정 팟이 아니라 서비스 자체를 알리는 링크. 홈 상단 공유 아이콘이 쓴다.
-function shareApp(){ return shareText(`한동대 택시 합승 탄만큼: ${location.origin}/`, 'app_shared'); }
-document.getElementById('btn-share-app').addEventListener('click', shareApp); // 한 번만 연결한다(홈을 다시 그려도 중복되지 않게)
 async function shareText(text, eventName){
   track(eventName);
   try {
