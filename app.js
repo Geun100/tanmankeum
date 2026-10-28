@@ -448,6 +448,14 @@ function notifyPodCancelled(podId){
   if (!SUPA_ENABLED) return;
   fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'cancelled', podId }) }).catch(() => {});
 }
+// 팟장이 정산을 마치고 종료하면 참가자 전원에게 알린다. 종료하면 서버에서 팟이 지워져 서버가 상태를 확인할 수 없으니,
+// 지우기 직전에 부르고 응답을 기다린다(fire-and-forget이면 지운 뒤에 도착해 "팟을 못 찾았어요"로 끝난다).
+async function notifyPodFinished(podId){
+  if (!SUPA_ENABLED) return;
+  try {
+    await fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'finished', podId }) });
+  } catch { /* 알림은 부가 기능이다 — 실패해도 팟 종료는 막지 않는다 */ }
+}
 function notifyLeaderOfLeave(podId){
   if (!SUPA_ENABLED) return;
   fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'left', podId, userId: STATE.user.id }) }).catch(() => {});
@@ -1599,7 +1607,7 @@ async function dissolvePod(pod){
 // 남의 팟에 참가한 사람이 확정 전에 빠져나간다 — dissolvePod와 달리 팟 자체는
 // 안 건드리고 내 참여 기록만 지운다. 팟장 취소(dissolvePod)와 결과는 같다:
 // 대기 상태로 돌아가고 내 팟이 새로 생긴다.
-async function leavePod(pod){
+async function leavePod(pod, { createOwn = true } = {}){
   if (SUPA_ENABLED) {
     const { error } = await supa.from('pod_participants').delete().eq('pod_id', pod.id).eq('user_id', STATE.user.id);
     if (error) throw error;
@@ -1609,7 +1617,36 @@ async function leavePod(pod){
   STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
   STATE.committed = false;
   STATE.userState = '대기';
-  await createOwnPod();
+  if (createOwn) await createOwnPod(); // 입금 확인 뒤 새 팟을 직접 만들러 가는 경우엔 미리 만들어 두지 않는다
+}
+
+// 팟장이 내 입금을 확인하면(me.paid) 이 팟은 나에게 끝난 것이다 — 버튼 없이 바로 기록을 남기고 새 팟 만들기로 보낸다.
+// 채팅방을 열 때와 홈을 그릴 때 둘 다 여기로 온다. 팟에서 빠질 때 생기는 실시간 이벤트가 이 화면을 다시 그리지 않도록 구독부터 끊는다.
+let finishingRidePodId = null;
+async function finishMemberRide(pod){
+  if (finishingRidePodId === pod.id) return;
+  finishingRidePodId = pod.id;
+  const rideRec = buildRideRecord(pod);
+  unsubscribePod();
+  unsubscribeHome();
+  try {
+    await leavePod(pod, { createOwn: false });
+    notifyLeaderOfLeave(pod.id); // 팟장에게 "팟원이 나갔어요" 푸시
+    saveRideRecord(rideRec);
+    STATE.myPodId = null;
+    STATE.userState = '완료';
+    renderDoneSummary(pod);
+    openNewPodInput({ backTo: 'screen-done', keepPlaces: false });
+  } catch (e) {
+    showError(friendlyDbError(e));
+  } finally {
+    finishingRidePodId = null;
+  }
+}
+function isPaidMember(pod){
+  if (!pod || pod.leaderId === STATE.user.id || pod.status === 'recruiting') return false;
+  const me = pod.participants.find(p => p.id === STATE.user.id);
+  return !!(me && me.paid);
 }
 
 function findPod(id){ return STATE.pods.find(p => p.id === id); }
@@ -2999,9 +3036,16 @@ document.getElementById('filter-same-dest').addEventListener('click', (e) => {
 async function renderHome(){
   // 목록 화면은 실시간 구독을 하지 않는다(설계 결정) — 진입할 때마다 새로 받아오는 걸로 충분하다.
   if (SUPA_ENABLED) {
+    const prevMine = findPod(STATE.myPodId);
     STATE.pods = await loadOpenPods();
+    // 홈에 있는 사이 팟장이 정산을 마치고 팟을 종료했다 — 채팅방에서와 같이 완료 화면으로 보낸다.
+    if (prevMine && prevMine.leaderId !== STATE.user.id && prevMine.status !== 'recruiting' && !findPod(prevMine.id)) {
+      showPodEndedForMember(prevMine);
+      return;
+    }
   }
   const u = STATE.user, myPod = findPod(STATE.myPodId);
+  if (isPaidMember(myPod)) { await finishMemberRide(myPod); return; }
   const isLeaderOfOwn = myPod && myPod.leaderId === u.id;
   // 홈에 머무는 동안 내 팟에 누가 들어오면 아래 인원수 표시가 실시간으로 갱신되도록 구독한다.
   subscribeHome(myPod && myPod.id);
@@ -3462,6 +3506,10 @@ async function renderPodChat(podId){
   if (SUPA_ENABLED) {
     const fresh = await loadPod(podId);
     if (!fresh) {
+      // 확정된 뒤에 팟이 사라지면 팟장이 정산을 마치고 종료한 것이다(확정 후엔 취소할 수 없다).
+      // 팟장처럼 완료 화면으로 보내고, 내 팟을 새로 만들어 두지 않는다 — "새 팟 찾으러 가기"에서 직접 만든다.
+      const gone = findPod(podId);
+      if (gone && gone.leaderId !== u.id && gone.status !== 'recruiting') { showPodEndedForMember(gone); return; }
       // 채팅방을 보고 있는 도중에 팟장이 취소했다. 나는 이 팟에 진짜 속해 있었으니
       // 새 팟을 만들어 매칭 대기 상태로 되돌린다(dissolvePod의 리더 쪽 처리와 동일한 결과).
       unsubscribePod();
@@ -3497,6 +3545,7 @@ async function renderPodChat(podId){
   const pod = findPod(podId);
   announceJoiners(pod, u.id);
   const isLeader = pod.leaderId === u.id;
+  if (isPaidMember(pod)) { await finishMemberRide(pod); return; }
   const seatsLeft = pod.desiredSize - pod.participants.length;
   document.getElementById('chat-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
   document.getElementById('chat-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
@@ -3855,10 +3904,6 @@ async function renderPodChat(podId){
       ctaHtml += `<p class="cta-hint">팟장이 팟을 확정했어요. 이 팟으로 함께 타시겠어요? 수락하면 최종 경로·요금을 볼 수 있어요.</p>`;
       ctaHtml += `<button class="btn btn--primary btn--block" id="btn-accept-pod">수락하기</button>`;
       ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-decline-pod">거절하기</button>`;
-    } else if (me && me.paid) {
-      // 확정 후 이탈은 팟장이 정산 화면에서 내 입금을 체크해줘야만 가능하다.
-      ctaHtml += `<div class="paid-banner" role="status"><strong>${iconSvg('check-circle', 20)}입금 확인 완료</strong><span>팟장이 입금을 확인했어요. 이제 팟에서 나가도 돼요.</span></div>`;
-      ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">팟 나가기</button>`;
     } else {
       ctaHtml += `<p class="cta-hint">팟장이 채팅방에서 정산 안내를 보내면 입금해주세요. 팟장이 입금 확인하면 여기서 나갈 수 있어요.</p>`;
       ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
@@ -4092,7 +4137,7 @@ function confirmFinishPod(pod){
   }
   openModal({
     title: '정산을 완료하고 팟을 종료할까요?',
-    body: '이 팟과 채팅 내용이 전부 삭제돼요. 되돌릴 수 없어요.',
+    body: '이 팟과 채팅 내용이 전부 삭제돼요.',
     confirmLabel: '팟 종료하기',
     danger: true,
     onConfirm: async () => {
@@ -4102,6 +4147,7 @@ function confirmFinishPod(pod){
           // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
           // DB 행의 cascade와 Storage 객체 삭제는 별개다. 사진을 먼저 지워야 공개 URL이 남지 않는다.
           await cleanupPodPhotos(pod.id);
+          await notifyPodFinished(pod.id); // 팟이 지워지기 전에 — 지운 뒤엔 서버가 참가자를 알 수 없다
           const { error } = await supa.from('pods').delete().eq('id', pod.id);
           if (error) throw error;
         }
@@ -4117,6 +4163,20 @@ function confirmFinishPod(pod){
       }
     },
   });
+}
+
+// 팟원 쪽 종료: 팟장이 팟을 종료해 내 팟이 사라졌다. 정산 내역은 팟장 기기에만 있어서 요약은 비어 있고, 완료 화면의
+// "새 팟 찾으러 가기"로 팟 만들기 단계에 들어간다(팟장과 같은 길).
+function showPodEndedForMember(pod){
+  unsubscribePod();
+  unsubscribeHome();
+  STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
+  delete STATE.chatMessages[pod.id];
+  STATE.myPodId = null;
+  STATE.committed = false;
+  STATE.userState = '완료';
+  renderDoneSummary(pod);
+  showScreen('screen-done');
 }
 
 // 팟 종료 화면에 방금 정산한 내역을 요약해서 보여준다. 예전엔 "팟이 완료됐어요" 한 줄만 있고

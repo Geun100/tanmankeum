@@ -1,4 +1,4 @@
-// api/notify-join: 참가(join)·나감(left)·팟 취소(cancelled) 알림이 알맞은 사람에게만, 한 번만 가는지 확인한다.
+// api/notify-join: 참가(join)·나감(left)·팟 취소(cancelled)·팟 종료(finished) 알림이 알맞은 사람에게만, 한 번만 가는지 확인한다.
 // 가짜 Supabase(메모리 표)와 가짜 web-push를 쓰므로 실제 DB도 실제 알림도 건드리지 않는다.
 const assert = require('node:assert/strict');
 const Module = require('node:module');
@@ -136,6 +136,25 @@ const sentTo = () => sent.map(s => s.endpoint).sort();
   assert.equal(r.body.notified, 0);
   assert.equal(db.push_subscriptions.some(s => s.user_id === A || s.user_id === B), false, '만료된 구독(410)은 지운다');
 
+  // ── finished ──
+  reset(); db.pods[0].status = 'in_progress';
+  r = await call({ event: 'finished', podId: POD });
+  assert.equal(r.body.notified, 2, '참가자 두 명에게 간다');
+  assert.deepEqual(sentTo(), ['ep-' + A, 'ep-' + B], '팟장에게는 안 간다');
+  assert.equal(sent[0].payload.title, '팟이 종료됐어요');
+  assert.equal(sent[0].payload.url, '/');
+  const beforeFin = sent.length;
+  r = await call({ event: 'finished', podId: POD });
+  assert.equal(r.body.notified, 0); assert.equal(sent.length, beforeFin, '같은 종료는 한 번만 알린다');
+
+  reset(); // 아직 정산 중이 아닌 팟(open)
+  r = await call({ event: 'finished', podId: POD });
+  assert.equal(r.body.notified, 0); assert.equal(sent.length, 0, '정산 중이 아니면 안 보낸다(위조 요청 방어)');
+
+  reset(); db.pods[0].status = 'in_progress'; db.pod_participants = [{ pod_id: POD, user_id: LEADER }];
+  r = await call({ event: 'finished', podId: POD });
+  assert.equal(sent.length, 0, '혼자였던 팟은 알릴 사람이 없다');
+
   // ── left ──
   reset(); removeParticipant(B);
   r = await call({ event: 'left', podId: POD, userId: B });
@@ -201,5 +220,5 @@ const sentTo = () => sent.map(s => s.endpoint).sort();
   r = await call({ event: 'cancelled', podId: '00000000-0000-4000-8000-00000000dead' }); assert.equal(r.statusCode, 404);
   r = await call({}, 'GET'); assert.equal(r.statusCode, 405);
 
-  console.log('PASS: 알림 API — 참가·나감·팟 취소가 알맞은 사람에게 한 번만 간다');
+  console.log('PASS: 알림 API — 참가·나감·팟 취소·팟 종료가 알맞은 사람에게 한 번만 간다');
 })().catch(e => { console.error('FAIL:', e && e.stack || e); process.exit(1); });

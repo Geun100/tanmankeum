@@ -2,6 +2,7 @@
 //   event: 'join'      (기본) 누가 팟에 참가하면 → 팟장에게 "새 팟원이 들어왔어요"
 //          'left'      참가자가 팟에서 나가면      → 팟장에게 "팟원이 나갔어요"
 //          'cancelled' 팟장이 팟을 취소하면        → 참가자 전원(팟장 제외)에게 "팟이 취소됐어요"
+//          'finished'  팟장이 정산을 마치고 종료하면 → 참가자 전원(팟장 제외)에게 "팟이 종료됐어요" (팟이 지워지기 직전에 호출)
 // 서버 함수 개수 한도(Hobby 12개) 때문에 새 파일을 만들지 않고 이 함수 하나에 모았다.
 //
 // 로그인 세션을 저장하지 않는 앱이라(app.js의 supaAuth 주석 참고) 서버가 "누가 요청했는지"를 확인할 수 없다.
@@ -16,7 +17,7 @@ const { createClient } = require('@supabase/supabase-js');
 const webpush = require('web-push');
 const V = require('./_email-verify');
 
-const EVENTS = ['join', 'left', 'cancelled'];
+const EVENTS = ['join', 'left', 'cancelled', 'finished'];
 const WINDOW_MS = 10 * 60 * 1000;      // 'left' 중복 방지 구간
 const MAX_LEFT_PER_WINDOW = 3;         // 같은 팟에서 한 구간에 보낼 수 있는 'left' 알림 수
 const CANCEL_MAX_AGE_MS = 60 * 60 * 1000; // 출발 시각이 이만큼 넘게 지난 팟의 취소는 알리지 않는다
@@ -110,6 +111,29 @@ module.exports = async (req, res) => {
       const payload = {
         title: '팟이 취소됐어요',
         body: `${pod.origin_name} → ${pod.leader_dest} · ${String(pod.depart_time).slice(0, 5)} 출발 팟을 팟장이 취소했어요`,
+        url: '/',
+      };
+      const results = await Promise.all((subs || []).map(s => send(s, payload)));
+      res.status(200).json({ notified: results.filter(Boolean).length });
+      return;
+    }
+
+    if (event === 'finished') {
+      // 종료하면 팟이 지워져서 사후에는 확인할 수 없다 — 클라이언트가 지우기 직전에 부르고, 서버는 "정산 중"인 팟만 믿는다.
+      // 같은 팟에는 한 번만 보낸다. 한계: 정산 중인 팟의 번호를 아는 사람이 종료 알림을 한 번 미리 보낼 수 있다.
+      if (pod.status !== 'in_progress') { res.status(200).json({ notified: 0, reason: '정산 중인 팟이 아니에요' }); return; }
+      const { data: rows } = await supa.from('pod_participants').select('user_id').eq('pod_id', podId);
+      const targets = (rows || []).map(r => r.user_id).filter(id => id !== pod.leader_id);
+      if (!targets.length) { res.status(200).json({ notified: 0, reason: '알릴 참가자가 없어요' }); return; }
+
+      const claimed = await claim('finished', pod.leader_id, 0);
+      if (claimed === 'dup') { res.status(200).json({ notified: 0, reason: '이미 알렸어요' }); return; }
+      if (claimed === 'error') { res.status(200).json({ notified: 0, skipped: 'push_events 표를 쓸 수 없어요' }); return; }
+
+      const { data: subs } = await supa.from('push_subscriptions').select('*').in('user_id', targets);
+      const payload = {
+        title: '팟이 종료됐어요',
+        body: `${pod.origin_name} → ${pod.leader_dest} · 팟장이 정산을 마치고 팟을 종료했어요. 새 팟을 만들어보세요`,
         url: '/',
       };
       const results = await Promise.all((subs || []).map(s => send(s, payload)));
