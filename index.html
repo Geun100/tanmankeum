@@ -175,6 +175,17 @@ window.__kakaoReady = new Promise((resolve, reject) => {
             베타 기간에는 성별과 관계없이 매칭될 수 있어요
           </p>
         </div>
+        <div class="consent-card" id="ob-consent">
+          <label class="consent-row">
+            <input type="checkbox" id="ob-consent-terms">
+            <span><a href="terms.html" target="_blank" rel="noopener">서비스약관</a>과 <a href="privacy.html" target="_blank" rel="noopener">개인정보처리방침</a>에 동의합니다.</span>
+          </label>
+          <p class="consent-note">&lt;탄만큼&gt;은 개인정보를 판매하거나 마케팅 목적으로 사용하지 않습니다.</p>
+          <label class="consent-row consent-row--split">
+            <input type="checkbox" id="ob-consent-nopaid">
+            <span>&lt;탄만큼&gt;을 자가용으로 돈을 받고 동승자를 태워주는 데 사용하지 않겠습니다.</span>
+          </label>
+        </div>
       </div>
       <div class="cta-dock">
         <button class="btn btn--primary btn--block" id="btn-ob-next" disabled>다음</button>

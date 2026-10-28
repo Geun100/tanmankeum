@@ -2474,12 +2474,21 @@ if (SUPA_ENABLED) {
 
 const nicknameInput = document.getElementById('ob-nickname');
 const nextBtn = document.getElementById('btn-ob-next');
-function syncNextBtn(){ nextBtn.disabled = nicknameInput.value.trim().length === 0 || !obGender; }
+// 약관 동의는 가입(온보딩) 때만 받는다. 프로필 변경 화면에서는 카드를 숨겨 다시 묻지 않는다.
+const consentCard = document.getElementById('ob-consent');
+const consentTerms = document.getElementById('ob-consent-terms');
+const consentNoPaid = document.getElementById('ob-consent-nopaid');
+const CONSENT_KEY = 'tanmankeum_consent_v1';
+try { if (localStorage.getItem(CONSENT_KEY) === '1') { consentTerms.checked = true; consentNoPaid.checked = true; } } catch (e) {}
+function consentOk(){ return consentCard.hidden || (consentTerms.checked && consentNoPaid.checked); }
+function syncNextBtn(){ nextBtn.disabled = nicknameInput.value.trim().length === 0 || !obGender || !consentOk(); }
+[consentTerms, consentNoPaid].forEach(c => c.addEventListener('change', syncNextBtn));
 nicknameInput.addEventListener('input', syncNextBtn);
 syncNextBtn();
 nextBtn.addEventListener('click', () => {
   if (nextBtn.disabled) return;
   if (profileEditing) { endProfileEdit(true); return; }
+  try { localStorage.setItem(CONSENT_KEY, '1'); } catch (e) {}
   showProfileRow(false);
   showScreen('screen-ob-route');
   // 휠은 화면이 보인 뒤에야 scrollTop이 적용된다(숨겨진 요소는 스크롤 높이가 0이다).
@@ -3025,6 +3034,7 @@ function showProfileRow(show){
 }
 function endProfileEdit(confirmed){
   profileEditing = false;
+  consentCard.hidden = false;
   if (!confirmed && profileBackup) { nicknameInput.value = profileBackup.nickname; setGenderSelection(profileBackup.gender); syncNextBtn(); }
   const screen = document.getElementById('screen-ob-profile');
   screen.querySelector('.step-dots').hidden = false;
@@ -3040,6 +3050,8 @@ function endProfileEdit(confirmed){
 document.getElementById('ob-profile-row').addEventListener('click', () => {
   profileEditing = true;
   profileBackup = { nickname: nicknameInput.value, gender: obGender };
+  consentCard.hidden = true;
+  syncNextBtn();
   const screen = document.getElementById('screen-ob-profile');
   screen.querySelector('.step-dots').hidden = true;
   screen.querySelector('.page-title').textContent = '프로필 변경';

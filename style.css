@@ -118,6 +118,12 @@
   .modal-card .report-err{ margin:10px 0 0; font-size:13px; color:var(--danger); text-align:left; }
   .file-picker-input{ position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; }
   .field-row .field{ flex:1; min-width:0; }
+  .consent-card{ margin-top:20px; padding:4px 14px; border:1px solid var(--line); border-radius:var(--radius-input); background:#fff; }
+  .consent-row{ display:flex; align-items:flex-start; gap:10px; padding:12px 0; font-size:14px; line-height:1.5; color:var(--ink); cursor:pointer; }
+  .consent-row input{ width:20px; height:20px; margin-top:1px; accent-color:var(--primary); flex-shrink:0; }
+  .consent-row a{ color:var(--primary-dark); font-weight:700; text-decoration:underline; }
+  .consent-row--split{ border-top:1px solid var(--line); }
+  .consent-note{ margin:-4px 0 10px 30px; font-size:12px; line-height:1.5; color:var(--ink-soft); }
   .hint-box{ background:var(--primary-soft); color:var(--primary-dark); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
 
   /* ===== 스플래시: 선 → 핀 → 글자 순서로 등장 ===== */
