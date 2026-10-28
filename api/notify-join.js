@@ -3,12 +3,15 @@
 //          'left'      참가자가 팟에서 나가면      → 팟장에게 "팟원이 나갔어요"
 //          'cancelled' 팟장이 팟을 취소하면        → 참가자 전원(팟장 제외)에게 "팟이 취소됐어요"
 //          'finished'  팟장이 정산을 마치고 종료하면 → 참가자 전원(팟장 제외)에게 "팟이 종료됐어요" (팟이 지워지기 직전에 호출)
+//          'chat'      누가 채팅(글·사진)을 보내면 → 같은 팟의 나머지 사람들에게 보낸 사람 닉네임과 내용
 // 서버 함수 개수 한도(Hobby 12개) 때문에 새 파일을 만들지 않고 이 함수 하나에 모았다.
 //
 // 로그인 세션을 저장하지 않는 앱이라(app.js의 supaAuth 주석 참고) 서버가 "누가 요청했는지"를 확인할 수 없다.
 // 그래서 요청을 믿지 않고, 서버가 DB의 실제 상태를 확인한 뒤에만 보낸다:
 //   - cancelled: 팟이 정말 취소(dissolved) 상태인가, 아직 지난 팟이 아닌가, 알릴 참가자가 있는가
 //   - left: 그 사람이 지금 정말 참가자가 아닌가, 팟장이 아닌가, 실제 프로필이 있는가
+//   - chat: 요청은 messageId만 받는다. 보낸 사람·내용은 DB의 그 메시지에서 읽고(요청에 담긴 값은 쓰지 않는다),
+//           이 팟의 방금(2분 안) 저장된 메시지인지 확인한다. 메시지마다 한 번만 보낸다(push_events의 subject = 메시지 번호).
 // 거기에 push_events 표로 같은 알림 중복과 연타를 막는다(supabase/add-push-events.sql).
 // 한계: 사용자 번호가 공개 조회라, 팟에 없는 사람의 번호로 "나감"을 흉내 내는 요청은 완전히 막지 못한다 —
 // 같은 팟에서 10분에 3건까지만 보내서 폭을 줄인다. 근본 해결은 서버가 확인할 수 있는 비밀값에 묶는 것이다.
@@ -18,7 +21,9 @@ const webpush = require('web-push');
 const V = require('./_email-verify');
 const { handleReport } = require('./_report');
 
-const EVENTS = ['join', 'left', 'cancelled', 'finished'];
+const EVENTS = ['join', 'left', 'cancelled', 'finished', 'chat'];
+const CHAT_FRESH_MS = 2 * 60 * 1000;  // 저장된 지 이만큼 안의 메시지만 알린다
+const CHAT_PREVIEW_MAX = 100;         // 알림에 싣는 글자 수
 const WINDOW_MS = 10 * 60 * 1000;      // 'left' 중복 방지 구간
 const MAX_LEFT_PER_WINDOW = 3;         // 같은 팟에서 한 구간에 보낼 수 있는 'left' 알림 수
 const CANCEL_MAX_AGE_MS = 60 * 60 * 1000; // 출발 시각이 이만큼 넘게 지난 팟의 취소는 알리지 않는다
@@ -140,6 +145,41 @@ module.exports = async (req, res) => {
         title: '팟이 종료됐어요',
         body: `${pod.origin_name} → ${pod.leader_dest} · 팟장이 정산을 마치고 팟을 종료했어요. 새 팟을 만들어보세요`,
         url: '/',
+      };
+      const results = await Promise.all((subs || []).map(s => send(s, payload)));
+      res.status(200).json({ notified: results.filter(Boolean).length });
+      return;
+    }
+
+    if (event === 'chat') {
+      const messageId = body.messageId;
+      if (typeof messageId !== 'string' || !V.UUID_RE.test(messageId)) { res.status(400).json({ error: 'messageId가 올바르지 않아요' }); return; }
+      if (!ACTIVE.includes(pod.status)) { res.status(200).json({ notified: 0, reason: '이미 끝난 팟이에요' }); return; }
+
+      // 보낸 사람과 내용은 요청이 아니라 DB의 메시지에서 가져온다 — 요청으로 내용을 위조할 수 없다.
+      const { data: msg } = await supa.from('pod_messages').select('user_id, text, image_url, created_at').eq('id', messageId).eq('pod_id', podId).maybeSingle();
+      if (!msg) { res.status(200).json({ notified: 0, reason: '메시지를 못 찾았어요' }); return; }
+      const savedAt = Date.parse(msg.created_at);
+      if (!Number.isFinite(savedAt) || Date.now() - savedAt > CHAT_FRESH_MS) { res.status(200).json({ notified: 0, reason: '방금 보낸 메시지가 아니에요' }); return; }
+
+      const { data: rows } = await supa.from('pod_participants').select('user_id').eq('pod_id', podId);
+      const targets = (rows || []).map(r => r.user_id).filter(id => id !== msg.user_id);
+      if (!targets.length) { res.status(200).json({ notified: 0, reason: '알릴 참가자가 없어요' }); return; }
+
+      const claimed = await claim('chat', messageId, 0);
+      if (claimed === 'dup') { res.status(200).json({ notified: 0, reason: '이미 알렸어요' }); return; }
+      if (claimed === 'error') { res.status(200).json({ notified: 0, skipped: 'push_events 표를 쓸 수 없어요' }); return; }
+
+      const { data: sender } = await supa.from('profiles').select('nickname').eq('id', msg.user_id).maybeSingle();
+      const flat = String(msg.text || '').replace(/\s+/g, ' ').trim();
+      const preview = msg.image_url ? '사진을 보냈어요'
+        : flat.length > CHAT_PREVIEW_MAX ? flat.slice(0, CHAT_PREVIEW_MAX) + '…' : flat;
+      const { data: subs } = await supa.from('push_subscriptions').select('*').in('user_id', targets);
+      const payload = {
+        title: String((sender && sender.nickname) || '팟원').slice(0, 40),
+        body: preview,
+        url: `/?pod=${podId}`,
+        tag: `chat-${podId}`, // 같은 팟의 알림은 서로 덮어써서 알림창에 쌓이지 않는다
       };
       const results = await Promise.all((subs || []).map(s => send(s, payload)));
       res.status(200).json({ notified: results.filter(Boolean).length });

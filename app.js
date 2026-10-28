@@ -460,6 +460,13 @@ function notifyLeaderOfLeave(podId){
   if (!SUPA_ENABLED) return;
   fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'left', podId, userId: STATE.user.id }) }).catch(() => {});
 }
+// 채팅(글·사진)을 보내면 같은 팟의 나머지 사람들에게 푸시를 보낸다. 서버가 DB의 그 메시지를 읽어 보낸 사람과 내용을 정하므로
+// 여기서는 메시지 번호만 넘긴다. 알림은 부가 기능이라 실패해도 채팅 전송에는 영향이 없다.
+function notifyPodOfChat(podId, messageId){
+  if (!SUPA_ENABLED || !messageId) return;
+  fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'chat', podId, messageId }) }).catch(() => {});
+}
+
 // 푸시 알림(notificationclick)이 /?pod=<id>로 열었을 때, 홈에 도착한 뒤 바로 그 팟으로 들어간다.
 // 내 팟이면 채팅방(알림 대상이 팟장이니까), 남의 팟이면 상세(참가를 검토하러 온 거니까)로 보낸다.
 function openPodFromUrl(){
@@ -3953,9 +3960,10 @@ async function renderPodChat(podId){
         uploadedPath = path;
         const imageUrl = supa.storage.from('settlement-photos').getPublicUrl(path).data.publicUrl;
         // pod_messages.text에 "1자 이상" 제약이 있어서 빈 문자열은 못 넣는다. 사진 메시지는 '사진'으로 채운다.
-        const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text: '사진', image_url: imageUrl });
+        const { data: saved, error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text: '사진', image_url: imageUrl }).select('id').single();
         if (error) throw error;
         messageSaved = true;
+        notifyPodOfChat(podId, saved && saved.id);
       } else {
         const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(file); });
         STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text: '사진', imageUrl: dataUrl });
@@ -4024,8 +4032,9 @@ async function renderPodChat(podId){
     sendBtn.disabled = true;
     try {
       if (SUPA_ENABLED) {
-        const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text });
+        const { data: saved, error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: u.id, text }).select('id').single();
         if (error) throw error;
+        notifyPodOfChat(podId, saved && saved.id);
       } else {
         STATE.chatMessages[podId].push({ who: u.nickname, mine: true, text });
       }
