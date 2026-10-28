@@ -152,10 +152,15 @@ module.exports = async (req, res) => {
     if (!ACTIVE.includes(pod.status)) { res.status(200).json({ notified: false, reason: '이미 끝난 팟이에요' }); return; }
     if (userId === pod.leader_id) { res.status(200).json({ notified: false, reason: '팟장은 나가는 게 아니라 팟 취소예요' }); return; }
 
+    // 서로 의존하지 않는 조회는 한꺼번에 보낸다 — 순서대로 기다리면 "나감" 알림이 "참가" 알림보다 몇 번의 왕복만큼 늦다.
     // 정말 팟에서 빠졌는지 확인한다. 아직 참가 중이면 "나갔어요"를 보낼 수 없다.
-    const { data: still } = await supa.from('pod_participants').select('user_id').eq('pod_id', podId).eq('user_id', userId).maybeSingle();
+    const [{ data: still }, { data: profile }, { data: sub }, { count: nowCount }] = await Promise.all([
+      supa.from('pod_participants').select('user_id').eq('pod_id', podId).eq('user_id', userId).maybeSingle(),
+      supa.from('profiles').select('nickname').eq('id', userId).maybeSingle(),
+      supa.from('push_subscriptions').select('*').eq('user_id', pod.leader_id).maybeSingle(),
+      supa.from('pod_participants').select('user_id', { count: 'exact', head: true }).eq('pod_id', podId),
+    ]);
     if (still) { res.status(200).json({ notified: false, reason: '아직 참가 중이에요' }); return; }
-    const { data: profile } = await supa.from('profiles').select('nickname').eq('id', userId).maybeSingle();
     if (!profile) { res.status(200).json({ notified: false, reason: '없는 사용자예요' }); return; }
 
     // 같은 팟에서 10분에 3건까지만 — 흉내 내는 요청이 팟장에게 알림을 쏟아내는 걸 막는다.
@@ -177,10 +182,8 @@ module.exports = async (req, res) => {
       return;
     }
 
-    const { data: sub } = await supa.from('push_subscriptions').select('*').eq('user_id', pod.leader_id).maybeSingle();
     if (!sub) { res.status(200).json({ notified: false, reason: '팟장이 알림을 안 켜뒀어요' }); return; }
 
-    const { count: nowCount } = await supa.from('pod_participants').select('user_id', { count: 'exact', head: true }).eq('pod_id', podId);
     const ok = await send(sub, {
       title: '팟원이 나갔어요',
       body: `${String(profile.nickname).slice(0, 40)}님이 팟에서 나갔어요 · ${pod.origin_name} → ${pod.leader_dest} (현재 ${nowCount || 0}/${pod.desired_size}명)`,

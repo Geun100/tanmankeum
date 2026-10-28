@@ -293,6 +293,9 @@ function subscribePod(podId, onChange){
   if (!SUPA_ENABLED) return;
   realtimeChannel = supa.channel('pod:' + podId)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'pod_participants', filter: 'pod_id=eq.' + podId }, onChange)
+    // DELETE는 필터를 걸 수 없다(지워진 행에는 기본 키만 남아 pod_id를 알 수 없다) — 위 구독은 참가(INSERT)만 받고
+    // 나감(DELETE)은 못 받아서, 팟원이 나가면 한참 뒤 다른 변화가 있어야 화면이 바뀌었다. 필터 없이 DELETE를 따로 받아 다시 읽는다.
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pod_participants' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'pod_messages', filter: 'pod_id=eq.' + podId }, onChange)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pods', filter: 'id=eq.' + podId }, onChange)
     .subscribe();
@@ -316,6 +319,7 @@ function subscribeHome(podId){
   };
   homeChannel = supa.channel('home:' + podId)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'pod_participants', filter: 'pod_id=eq.' + podId }, refreshIfHome)
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'pod_participants' }, refreshIfHome) // DELETE는 필터 불가 — subscribePod 주석 참고
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pods', filter: 'id=eq.' + podId }, refreshIfHome)
     .subscribe();
 }
@@ -1607,13 +1611,15 @@ async function dissolvePod(pod){
 // 남의 팟에 참가한 사람이 확정 전에 빠져나간다 — dissolvePod와 달리 팟 자체는
 // 안 건드리고 내 참여 기록만 지운다. 팟장 취소(dissolvePod)와 결과는 같다:
 // 대기 상태로 돌아가고 내 팟이 새로 생긴다.
-async function leavePod(pod, { createOwn = true } = {}){
+// onLeft: 내 참여 기록을 지운 직후에 부른다. 팟장 알림을 내 새 팟을 만든 뒤(createOwnPod)가 아니라 이 시점에 보내야 참가 알림만큼 빠르다.
+async function leavePod(pod, { createOwn = true, onLeft } = {}){
   if (SUPA_ENABLED) {
     const { error } = await supa.from('pod_participants').delete().eq('pod_id', pod.id).eq('user_id', STATE.user.id);
     if (error) throw error;
   } else {
     pod.participants = pod.participants.filter(p => p.id !== STATE.user.id);
   }
+  if (onLeft) onLeft();
   STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
   STATE.committed = false;
   STATE.userState = '대기';
@@ -1630,8 +1636,7 @@ async function finishMemberRide(pod){
   unsubscribePod();
   unsubscribeHome();
   try {
-    await leavePod(pod, { createOwn: false });
-    notifyLeaderOfLeave(pod.id); // 팟장에게 "팟원이 나갔어요" 푸시
+    await leavePod(pod, { createOwn: false, onLeft: () => notifyLeaderOfLeave(pod.id) }); // 팟장에게 "팟원이 나갔어요" 푸시
     saveRideRecord(rideRec);
     STATE.myPodId = null;
     STATE.userState = '완료';
@@ -4165,8 +4170,8 @@ async function renderPodChat(podId){
       danger: true,
       onConfirm: async () => {
         try {
-          await leavePod(pod);
-          notifyLeaderOfLeave(pod.id); // 팟장에게 "팟원이 나갔어요" 푸시
+          unsubscribePod(); unsubscribeHome(); // 내 나감(DELETE)이 이 화면을 다시 그리지 않게 — 나감 이벤트가 이제 실시간으로 온다
+          await leavePod(pod, { onLeft: () => notifyLeaderOfLeave(pod.id) }); // 팟장에게 "팟원이 나갔어요" 푸시
           renderHome();
           showScreen('screen-home');
         } catch (e) {
@@ -4188,8 +4193,8 @@ async function renderPodChat(podId){
         // 확정 뒤에 나가는 건 정산까지 마친 이용이라 기록에 남긴다(확정 전 취소는 이용이 아니다).
         const rideRec = isPostConfirm ? buildRideRecord(pod) : null;
         try {
-          await leavePod(pod);
-          notifyLeaderOfLeave(pod.id); // 팟장에게 "팟원이 나갔어요" 푸시
+          unsubscribePod(); unsubscribeHome(); // 내 나감(DELETE)이 이 화면을 다시 그리지 않게 — 나감 이벤트가 이제 실시간으로 온다
+          await leavePod(pod, { onLeft: () => notifyLeaderOfLeave(pod.id) }); // 팟장에게 "팟원이 나갔어요" 푸시
           if (rideRec) saveRideRecord(rideRec);
           renderHome();
           showScreen('screen-home');
