@@ -151,6 +151,7 @@ revoke all on public.user_reports_review from anon, authenticated;
 
 -- ============ 운영자 알림 (디스코드 웹훅) ============
 -- 신고가 저장되는 순간 DB가 디스코드 채널로 한 줄을 보낸다. 앱 코드나 서버 함수는 건드리지 않는다.
+--   - 신고가 처음 들어온 순간(1명)     : "신고 1명 접수 — 내용을 확인해 주세요"
 --   - 서로 다른 신고자가 2명이 된 순간 : "신고 2명 — 주의 단계, 내용을 확인해 주세요"
 --   - 3명이 된 순간                    : "신고 3명 이상 — 이용이 자동 제한됐어요. 확인 후 유지/해제를 정해 주세요"
 --   - 성별 신고가 들어온 순간          : "성별 관련 신고 접수 — 먼저 확인해 주세요" (1건이어도)
@@ -216,6 +217,7 @@ begin
 
   for k in
     select x from unnest(array[
+      case when n = 1 then 'people1' end,
       case when n = 2 then 'people2' end,
       case when n = 3 then 'people3' end,
       case when new.reason = 'gender' then 'gender' end
@@ -226,6 +228,7 @@ begin
     get diagnostics added = row_count;
     if added = 1 then
       line := case k
+        when 'people1' then '신고 1명 접수 — 내용을 확인해 주세요'
         when 'people2' then '신고 2명 — 주의 단계, 내용을 확인해 주세요'
         when 'people3' then '신고 3명 이상 — 이용이 자동 제한됐어요. 확인 후 유지/해제를 정해 주세요'
         else '성별 관련 신고 접수 — 먼저 확인해 주세요'
