@@ -452,7 +452,6 @@ function notifyLeaderOfLeave(podId){
   if (!SUPA_ENABLED) return;
   fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'left', podId, userId: STATE.user.id }) }).catch(() => {});
 }
-
 // 푸시 알림(notificationclick)이 /?pod=<id>로 열었을 때, 홈에 도착한 뒤 바로 그 팟으로 들어간다.
 // 내 팟이면 채팅방(알림 대상이 팟장이니까), 남의 팟이면 상세(참가를 검토하러 온 거니까)로 보낸다.
 function openPodFromUrl(){
@@ -1163,6 +1162,7 @@ function friendlyDbError(e){
   if (msg.includes('정원이 찼습니다')) return '방금 정원이 다 찼어요. 다른 팟을 찾아볼까요?';
   if (msg.includes('이미 참여 중인 팟이 있습니다')) return '이미 다른 팟에 참여 중이에요.';
   if (msg.includes('이미 마감된 팟입니다')) return '이미 마감되거나 취소된 팟이에요.';
+  if (msg.includes('이용이 제한된 계정입니다')) return `이용이 제한된 계정이에요. 잘못된 제한이라면 ${REPORT_CONTACT} 으로 알려주세요.`;
   return '네트워크 문제로 처리하지 못했어요. 다시 시도해주세요.';
 }
 function friendlyPhotoError(e){
@@ -1880,6 +1880,11 @@ const SCHOOL_DOMAIN = '@handong.ac.kr';
 const VERIFIED_KEY = 'tanmankeum_verified_v1';
 function isVerifiedLocal(){ try { return localStorage.getItem(VERIFIED_KEY) === '1'; } catch { return false; } }
 function setVerifiedLocal(){ try { localStorage.setItem(VERIFIED_KEY, '1'); } catch {} }
+// 사용자별 비밀값: 학교 메일 인증을 마칠 때 서버가 이 사람에게만 건넨다(api/auth-link). 신고·알림처럼 "누가 보냈는지"가
+// 중요한 요청에 같이 보낸다. 사용자 번호는 공개돼 있어서 번호만으로는 본인임을 증명할 수 없기 때문이다.
+const SECRET_KEY = 'tanmankeum_secret';
+function getSecret(){ try { return localStorage.getItem(SECRET_KEY) || ''; } catch { return ''; } }
+function setSecret(s){ try { localStorage.setItem(SECRET_KEY, s); } catch {} }
 let emailDoneCb = null;
 // 인증됐으면 onDone, 아니면 메일 인증 화면을 띄운다. 이미 쓰던 사용자는 인증 서버가 안 돼도
 // 들여보낸다 — 인증 서버 장애가 기존 사용자를 막으면 안 된다. 새 사용자는 서버 확인이 안 되면 못 들어온다.
@@ -2024,7 +2029,7 @@ async function sendEmailCode(){
   if (emailBusy || !email) return;
   emailBusy = true; setEmailMsg(''); syncEmailButtons();
   try {
-    const r = await postJson('/api/auth-otp', { userId: getOrCreateUserId(), email });
+    const r = await postJson('/api/auth-otp', { userId: getOrCreateUserId(), email, secret: getSecret() });
     if (r.ok && r.data.alreadyVerified) { finishVerification(); return; }
     if (!r.ok) {
       if (r.status === 429 && r.data.retryAfter) resendAt = Date.now() + r.data.retryAfter * 1000;
@@ -2058,6 +2063,7 @@ async function verifyEmailCode(){
     const r = await postJson('/api/auth-link', { userId: getOrCreateUserId(), accessToken: data.session.access_token });
     if (r.ok && r.data.verified) {
       track('email_verified');
+      if (r.data.secret) setSecret(r.data.secret); // 복구(adoptAccount)로 페이지를 다시 열기 전에 먼저 저장한다
       // 이미 인증된 메일이면 서버가 원래 계정 번호를 돌려준다 — 그 계정을 이어받는다.
       if (r.data.recovered && r.data.userId) { await adoptAccount(r.data.userId); return; }
       finishVerification();
@@ -3006,6 +3012,7 @@ async function renderHome(){
   // 홈에 머무는 동안 내 팟에 누가 들어오면 아래 인원수 표시가 실시간으로 갱신되도록 구독한다.
   subscribeHome(myPod && myPod.id);
   initPushUI();
+  checkMyReportNotice(); // 신고가 쌓여 주의·제한 단계가 되면 본인에게 한 번 알린다
   // 홈에 있는 동안 새로 들어온 사람이 있으면 토스트로 알린다(처음 렌더는 기준값만 저장).
   if (myPod) announceJoiners(myPod, u.id);
   const card = document.getElementById('my-status-card');
@@ -3361,6 +3368,7 @@ async function renderPodDetail(podId){
         body: `${pod.originName} → ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분, 예상 부담금 ${won(prev.mine.fare)}. 참가하면 바로 채팅방으로 이동해요.`,
         bodyHtml: `
           <p class="modal-note">참가하면 바로 채팅방으로 이동해요.</p>
+          <p class="modal-note">택시비는 팟장이 먼저 내요. 도착한 뒤 내 몫을 팟장 계좌로 보내면 돼요.</p>
           <div class="modal-route-card">
             <div class="modal-timeline">
               <div class="modal-timeline-row">
@@ -3392,6 +3400,148 @@ async function renderPodDetail(podId){
       });
     });
   }
+}
+
+/* ============ 문제 알리기(신고) ============ */
+// 채팅방 아래쪽의 작은 링크 하나로 연다. 사람마다 버튼을 달지 않고, "신고" 대신 "문제"라고 부른다.
+// 저장은 서버(api/_report.js, 호출은 /api/notify-join의 event:'report')가 한다 — 앱은 user_reports 표에 직접 쓰지도 읽지도 못한다.
+// 서버가 "내 비밀값이 맞는지, 같은 팟의 참가자끼리인지, 확정된 뒤인지, 같은 사람은 한 번만인지"를 확인한다.
+// 비밀값은 학교 메일 인증을 마칠 때 받는다 — 사용자 번호는 공개라서 번호만으로는 본인 증명이 안 된다.
+const REPORT_REASONS = [
+  ['no_show', '약속 장소에 안 나왔어요'],
+  ['unpaid', '송금이 안 됐어요'],
+  ['not_confirmed', '입금했는데 확인을 안 해줘요'],
+  ['rude', '말투나 행동이 불쾌했어요'],
+  ['gender', '성별이 다른 것 같아요'],
+  ['other', '기타'],
+];
+// 서버가 거절하면 e.code로 이유를 구분해 던진다: DUPLICATE(이미 알림), NEEDS_VERIFY(본인 확인 필요),
+// NOT_ALLOWED(확정 전·다른 팟 등), NOT_READY(표가 아직 없음), FAILED(그 밖).
+const REPORT_DETAIL_MAX = 200; // 서버(api/_report.js)·DB와 같은 값
+async function submitReport(pod, targetId, reason, detail){
+  if (!SUPA_ENABLED) return;
+  const r = await postJson('/api/notify-join', { event: 'report', podId: pod.id, userId: STATE.user.id, secret: getSecret(), targetId, reason, detail });
+  if (r.ok) {
+    if (r.data.duplicate) { const dup = new Error('duplicate'); dup.code = 'DUPLICATE'; throw dup; }
+    return;
+  }
+  const e = new Error(r.data.error || 'report failed');
+  e.code = r.data.needsVerify ? 'NEEDS_VERIFY' : r.status === 403 ? 'NOT_ALLOWED' : r.status === 503 ? 'NOT_READY' : 'FAILED';
+  e.serverMessage = r.data.error;
+  throw e;
+}
+// 비밀값이 없거나(이 기능 이전에 인증한 사용자) 무효가 된 경우(다른 기기에서 다시 인증) 메일 인증을 한 번 더 하게 한다.
+// 인증을 마치면 서버가 새 비밀값을 건네고, 원래 보던 채팅방으로 돌아온다. 면제 사용자는 서버 스위치가 꺼져 있으면 비밀값을 못 받는다.
+function promptReverifyForReport(podId){
+  openModal({
+    title: '본인 확인이 필요해요',
+    body: '문제 알리기는 누가 알렸는지 확실히 하려고 한동대 메일 인증을 한 번 더 해야 보낼 수 있어요. 지금 인증할까요?',
+    confirmLabel: '인증하기',
+    onConfirm: () => {
+      emailDoneCb = () => {
+        if (getSecret()) showToast('인증됐어요. 다시 알려주세요.');
+        else showError(`이 계정은 아직 본인 확인 값을 받지 못했어요. 문의하기나 ${REPORT_CONTACT} 으로 알려주세요.`);
+        renderPodChat(podId); showScreen('screen-pod-chat');
+      };
+      showScreen('screen-ob-email');
+    },
+  });
+}
+// 확인 창은 [알리기]를 누르면 항상 먼저 닫히고 나서 이 함수가 실행된다 — 입력이 비었으면 같은 창을
+// 안내 문구와 함께 다시 연다(고른 값은 sel로 넘겨 유지한다).
+function openReportModal(pod, sel = {}, err = ''){
+  const others = pod.participants.filter(p => p.id !== STATE.user.id);
+  const target = sel.target || (others.length === 1 ? others[0].id : '');
+  const opt = (name, value, label, checked) =>
+    `<label class="report-opt"><input type="radio" name="${name}" value="${escapeHtml(value)}" ${checked ? 'checked' : ''}><span>${escapeHtml(label)}</span></label>`;
+  openModal({
+    title: '함께 탄 분과 어떤 문제가 있었나요?',
+    cardClass: 'modal-card--rich',
+    bodyHtml: `
+      <p class="modal-note">알려주신 내용은 상대에게 보이지 않아요.</p>
+      ${others.length > 1 ? `<p class="report-group">누구에 대한 일인가요?</p>${others.map(p => opt('report-target', p.id, p.nickname, p.id === target)).join('')}` : ''}
+      <p class="report-group">어떤 일이었나요?</p>
+      ${REPORT_REASONS.map(([v, l]) => opt('report-reason', v, l, v === sel.reason)).join('')}
+      <div id="report-detail-wrap" ${sel.reason === 'other' ? '' : 'hidden'}>
+        <textarea class="report-detail" id="report-detail" rows="3" maxlength="${REPORT_DETAIL_MAX}" placeholder="어떤 일이었는지 적어주세요 (${REPORT_DETAIL_MAX}자 이하)" aria-label="어떤 일이었는지">${escapeHtml(sel.detail || '')}</textarea>
+        <p class="modal-note">이름·전화번호 같은 개인정보는 적지 말아주세요.</p>
+      </div>
+      ${err ? `<p class="report-err" role="alert">${err}</p>` : ''}`,
+    confirmLabel: '알리기',
+    onConfirm: async () => {
+      const t = others.length === 1 ? others[0].id : (document.querySelector('input[name="report-target"]:checked') || {}).value;
+      const reason = (document.querySelector('input[name="report-reason"]:checked') || {}).value;
+      const detail = reason === 'other' ? document.getElementById('report-detail').value.trim() : '';
+      if (!t || !reason || (reason === 'other' && !detail)) {
+        openReportModal(pod, { target: t, reason, detail }, !t ? '누구에 대한 일인지 골라주세요.' : !reason ? '어떤 일이었는지 골라주세요.' : '어떤 일이었는지 적어주세요.');
+        return;
+      }
+      try {
+        await submitReport(pod, t, reason, detail);
+        showToast('알려주셔서 고마워요. 확인해볼게요.');
+      } catch (e) {
+        const code = e && e.code;
+        if (code === 'DUPLICATE') showToast('이미 이 분에 대해 알려주셨어요.');
+        else if (code === 'NEEDS_VERIFY') promptReverifyForReport(pod.id);
+        else if (code === 'NOT_ALLOWED' || code === 'NOT_READY') showError(e.serverMessage || '지금은 알릴 수 없어요.');
+        else showError('알리지 못했어요. 연결을 확인하고 다시 시도해주세요.');
+      }
+    },
+  });
+  // '기타'를 고를 때만 적는 칸을 연다.
+  const detailWrap = document.getElementById('report-detail-wrap');
+  document.querySelectorAll('input[name="report-reason"]').forEach(r => r.addEventListener('change', () => {
+    detailWrap.hidden = r.value !== 'other';
+    if (!detailWrap.hidden) document.getElementById('report-detail').focus();
+  }));
+}
+
+// --- 신고가 쌓인 사람 표시 ---
+// DB 함수 user_report_levels가 서로 다른 신고자 수로 단계를 돌려준다: 1=주의(2명), 2=이용 제한(3명 이상).
+// 함수가 아직 없거나 실패해도 화면은 그대로 둔다 — 표시는 있으면 좋은 부가 기능이고, 실제 제한은 DB가 한다.
+const REPORT_CONTACT = 'hellohorong@gmail.com';
+// 서비스 안에서 문제가 생겼을 때(정산·비용, 신고, 이용 제한 등) 운영자에게 바로 물어볼 수 있는 카카오톡 오픈채팅.
+const HELP_URL = 'https://open.kakao.com/o/pSGF2AQi';
+function helpLinkEl(text = '문제가 생겼나요? 문의하기'){
+  const nav = document.createElement('nav');
+  nav.className = 'legal-links legal-links--tight';
+  nav.setAttribute('aria-label', '문의');
+  const a = document.createElement('a');
+  a.href = HELP_URL; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = text;
+  nav.appendChild(a);
+  return nav;
+}
+async function fetchReportLevels(ids){
+  if (!SUPA_ENABLED || !ids.length) return [];
+  try {
+    const { data, error } = await supa.rpc('user_report_levels', { ids });
+    return error ? [] : (data || []);
+  } catch (_) { return []; }
+}
+// 팟장 화면의 참가자 줄에 "주의" 배지를 단다. 줄을 먼저 그린 뒤 비동기로 붙이므로 화면이 늦어지지 않는다.
+async function decorateWarnBadges(pod, wrap){
+  const ids = pod.participants.filter(p => p.id !== STATE.user.id).map(p => p.id);
+  const levels = await fetchReportLevels(ids);
+  levels.forEach(l => {
+    const name = wrap.querySelector(`[data-uid="${l.user_id}"] .p-name`);
+    if (name && !name.querySelector('.badge--warn')) {
+      const badge = document.createElement('span');
+      badge.className = 'badge badge--warn';
+      badge.textContent = '주의';
+      name.append(' ', badge);
+    }
+  });
+}
+// 본인에게 단계마다 한 번 알린다. 누가 알렸는지, 무슨 사유였는지는 말하지 않는다.
+async function checkMyReportNotice(){
+  if (!STATE.user) return;
+  const [mine] = await fetchReportLevels([STATE.user.id]);
+  if (!mine) return;
+  const key = 'tanmankeum_report_notice_' + mine.level;
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) {}
+  openModal(mine.level >= 2
+    ? { title: '이용이 제한됐어요', body: `함께 탄 분들 여러 명이 불편을 알려와서 새 팟을 만들거나 참가할 수 없어요. 운영팀이 내용을 확인하고 있어요. 잘못 알려진 일이라면 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {} }
+    : { title: '함께 탄 분들이 불편을 알려왔어요', body: `약속 시간과 정산을 지켜주세요. 계속되면 이용이 제한될 수 있어요. 궁금한 점은 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {} });
 }
 
 /* ============ 11. 화면 4: 팟 채팅방 ============ */
@@ -3599,6 +3749,7 @@ async function renderPodChat(podId){
     const f = fareMap[p.id];
     const row = document.createElement('div');
     row.className = 'participant-row';
+    row.dataset.uid = p.id; // decorateWarnBadges가 이 줄을 찾는 데 쓴다
     row.innerHTML = `
       <div class="participant-info">
         <span class="p-name">${escapeHtml(p.nickname)}
@@ -3611,6 +3762,21 @@ async function renderPodChat(podId){
     `;
     pWrap.appendChild(row);
   });
+  // 확정 전엔 그냥 나가면 되니 확정된 뒤에만 보인다. 사람마다가 아니라 목록 아래에 한 번만 둔다.
+  if ((pod.status === 'confirmed' || pod.status === 'in_progress') && pod.participants.length > 1) {
+    const reportBtn = document.createElement('button');
+    reportBtn.type = 'button';
+    reportBtn.className = 'report-link';
+    reportBtn.textContent = '함께 탄 분과 문제가 있었나요?';
+    reportBtn.addEventListener('click', () => {
+      // 비밀값이 없으면 어차피 서버가 거절한다 — 사유를 고르게 한 뒤에 거절하지 않고 먼저 본인 확인으로 안내한다.
+      if (SUPA_ENABLED && !getSecret()) { promptReverifyForReport(pod.id); return; }
+      openReportModal(pod);
+    });
+    pWrap.appendChild(reportBtn);
+  }
+  pWrap.appendChild(helpLinkEl()); // 비용·정산·인원 문제 등을 운영자에게 바로 문의할 수 있게
+  if (pod.leaderId === u.id) decorateWarnBadges(pod, pWrap); // 팟장만 "주의" 배지를 본다
 
   // 지도는 접어둔 기본 상태에선 안 그린다 — 카카오 길찾기 API를 매번 부르는 건 비용이고,
   // 채팅방은 realtime으로 자주 다시 그려지는 화면이라 펼쳐져 있을 때만 그린다.
@@ -3879,7 +4045,7 @@ async function renderPodChat(podId){
   if (confirmBtn) confirmBtn.addEventListener('click', () => {
     openModal({
       title: '팟을 확정할까요?',
-      body: `현재 ${pod.participants.length}명으로 팟을 확정해요. 확정 후에는 최종 경로와 요금이 계산되고, 팟을 취소할 수 없어요.`,
+      body: `현재 ${pod.participants.length}명으로 팟을 확정해요. 확정 후에는 최종 경로와 요금이 계산되고, 팟을 취소할 수 없어요. 팟장은 택시비를 먼저 결제하고, 정산 때 팟원들에게 몫을 받아요.`,
       confirmLabel: '확정하기',
       onConfirm: async () => {
         try {
@@ -4254,6 +4420,7 @@ function renderSettlement(podId){
     <p class="fine-note" id="share-confirm-note" style="margin-top:10px;"></p>
   `;
   document.getElementById('settlement-body').innerHTML = html;
+  document.getElementById('settlement-body').appendChild(helpLinkEl('정산이나 비용 문제가 생겼나요? 문의하기'));
   // 이미 한 번 계산해서 계좌를 공유한 뒤 채팅방 갔다가 다시 돌아온 경우엔 다시 입력 안 시키고
   // 바로 종료할 수 있게 둔다. 아직 한 번도 계산 안 했으면 그 전엔 종료 못 누르게 막는다.
   document.getElementById('btn-finish-pod').disabled = !pod.settlement;

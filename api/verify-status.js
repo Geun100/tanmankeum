@@ -12,8 +12,9 @@ module.exports = async (req, res) => {
 
   try {
     const supa = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data } = await supa.from('verified_users').select('user_id').eq('user_id', userId).maybeSingle();
-    res.status(200).json({ verified: !!data });
+    const { data } = await supa.from('verified_users').select('user_id, secret_hash').eq('user_id', userId).maybeSingle();
+    // hasSecret: 이 사용자가 서버에서 비밀값을 받은 적이 있는지(지문이 있는지)만 알려준다. 지문 자체는 내보내지 않는다.
+    res.status(200).json({ verified: !!data, hasSecret: !!(data && data.secret_hash) });
   } catch (e) {
     res.status(500).json({ error: '인증 상태를 확인하지 못했어요' });
   }

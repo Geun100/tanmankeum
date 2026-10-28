@@ -15,6 +15,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const webpush = require('web-push');
 const V = require('./_email-verify');
+const { handleReport } = require('./_report');
 
 const EVENTS = ['join', 'left', 'cancelled'];
 const WINDOW_MS = 10 * 60 * 1000;      // 'left' 중복 방지 구간
@@ -24,6 +25,10 @@ const ACTIVE = ['open', 'confirmed', 'in_progress'];
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST만 지원해요' }); return; }
+
+  // 문제 알리기(신고)는 푸시가 아니라 저장이 목적이다 — 푸시 키가 없어도 동작해야 하고, 아래의 "키가 없으면 조용히 건너뜀"
+  // 규칙을 타면 안 되므로 그보다 먼저 넘긴다(api/_report.js).
+  if (req.body && req.body.event === 'report') { await handleReport(req, res); return; }
 
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
   if (!SUPABASE_URL) { res.status(500).json({ error: '서버에 SUPABASE_URL이 없어요' }); return; }

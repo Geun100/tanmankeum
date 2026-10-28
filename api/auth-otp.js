@@ -18,8 +18,10 @@ module.exports = async (req, res) => {
   const opts = { auth: { persistSession: false, autoRefreshToken: false } };
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, opts);
   try {
-    const { data: already } = await admin.from('verified_users').select('user_id').eq('user_id', userId).maybeSingle();
-    if (already) { res.status(200).json({ ok: true, alreadyVerified: true }); return; }
+    // 인증번호 없이 통과시키는 지름길은 이 기기가 그 사용자의 비밀값을 갖고 있을 때만 연다. 사용자 번호는 공개라서
+    // 번호만으로 "이미 인증된 사람"이 될 수 있으면, 비밀값이 없는 쪽이 비밀값을 받을 길이 없어진다(인증번호를 다시 받아야 한다).
+    const { data: already } = await admin.from('verified_users').select('user_id, secret_hash').eq('user_id', userId).maybeSingle();
+    if (already && V.secretMatches(already.secret_hash, req.body && req.body.secret)) { res.status(200).json({ ok: true, alreadyVerified: true }); return; }
 
     // 이미 다른 계정으로 인증된 메일이어도 번호는 보낸다. 번호를 맞히면 그 메일함의 주인이라는 뜻이라,
     // auth-link가 "원래 계정"으로 되돌려준다(브라우저를 바꾸거나 저장소를 지운 사람이 계정을 되찾는 길).

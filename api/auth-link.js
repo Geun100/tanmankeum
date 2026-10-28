@@ -31,6 +31,16 @@ module.exports = async (req, res) => {
     if (!email || !(user.email_confirmed_at || user.confirmed_at)) { res.status(403).json({ error: '학교 메일 인증이 확인되지 않았어요' }); return; }
     const emailHash = V.hashEmail(email);
 
+    // 인증을 마친 사람에게 그 사람만 아는 비밀값을 만들어 건넨다. 서버에는 지문만 저장한다(supabase/add-user-secret.sql).
+    // 아래 어느 경로든 "이 메일함의 주인임을 이 계정에 대한 증명으로 쓸 수 있을 때"만 발급한다. 이미 다른 메일로 인증된
+    // 계정의 번호를 안다는 것만으로는(번호는 공개돼 있다) 비밀값을 받을 수 없다.
+    const issueSecret = async (uid) => {
+      const secret = V.newSecret();
+      const { error: upErr } = await admin.from('verified_users').update({ secret_hash: V.hashSecret(secret) }).eq('user_id', uid);
+      if (upErr) throw upErr; // 저장하지 못한 비밀값을 건네면 쓸 수 없는 값을 쥐게 된다 — 실패로 알리고 다시 시도하게 한다
+      return secret;
+    };
+
     // 이 메일이 이미 어떤 계정으로 인증돼 있으면, 새 계정을 만들지 않고 그 계정을 이어받게 한다.
     // 인증번호를 맞혔다는 건 이 메일함의 주인이라는 증명이다. 브라우저를 바꾸거나 저장소를 지우면
     // 앱이 새 임의 번호를 만들기 때문에, 이렇게 해야 정상 이용자가 자기 계정(닉네임·팟)을 되찾는다.
@@ -38,11 +48,14 @@ module.exports = async (req, res) => {
     if (owner) {
       const recovered = owner.user_id !== userId;
       if (recovered) await clearPush(owner.user_id);
-      res.status(200).json({ ok: true, verified: true, userId: owner.user_id, recovered });
+      // 메일함 주인이라는 증명이니 그 계정의 새 비밀값을 건넨다(다른 기기에서 복구하는 경우도 포함 — 이전 기기의 값은 무효가 된다).
+      const secret = await issueSecret(owner.user_id);
+      res.status(200).json({ ok: true, verified: true, userId: owner.user_id, recovered, secret });
       return;
     }
 
-    const { error: insErr } = await admin.from('verified_users').insert({ user_id: userId, email_hash: emailHash });
+    const newSecret = V.newSecret();
+    const { error: insErr } = await admin.from('verified_users').insert({ user_id: userId, email_hash: emailHash, secret_hash: V.hashSecret(newSecret) });
     if (insErr) {
       if (insErr.code === '23505') {
         // 동시에 같은 메일로 인증이 겹쳤거나, 이 사용자가 이미 (다른 메일로) 인증돼 있는 경우.
@@ -50,15 +63,36 @@ module.exports = async (req, res) => {
         if (again) {
           const recovered = again.user_id !== userId;
           if (recovered) await clearPush(again.user_id); // 동시 인증이 겹친 경로도 같은 정리를 한다
-          res.status(200).json({ ok: true, verified: true, userId: again.user_id, recovered });
+          const secret = await issueSecret(again.user_id);
+          res.status(200).json({ ok: true, verified: true, userId: again.user_id, recovered, secret });
           return;
         }
-        const { data: me } = await admin.from('verified_users').select('user_id').eq('user_id', userId).maybeSingle();
-        if (me) { res.status(200).json({ ok: true, verified: true, userId, recovered: false }); return; }
+        const { data: me } = await admin.from('verified_users').select('user_id, email_hash').eq('user_id', userId).maybeSingle();
+        if (me) {
+          if (me.email_hash == null && process.env.ALLOW_LEGACY_CLAIM === '1') {
+            // 기존 사용자 면제 줄(메일 해시가 비어 있음): 이 메일로 인증을 마쳤으니 그 줄에 메일 해시와 비밀값을 채운다.
+            // 번호는 공개라서 이 줄은 "먼저 인증한 메일함 주인"이 차지한다 — 번호만 알면 남의 줄을 가로챌 수 있다.
+            // 그래서 기본은 꺼져 있고, 운영자가 진짜 기존 사용자를 옮기는 동안에만 Vercel 환경변수 ALLOW_LEGACY_CLAIM=1로
+            // 잠깐 켠다(끝나면 끈다). 꺼져 있으면 면제 사용자는 예전처럼 "인증됨"으로만 끝나고 비밀값은 받지 못한다.
+            const claimSecret = V.newSecret();
+            const { error: claimErr } = await admin.from('verified_users')
+              .update({ email_hash: emailHash, secret_hash: V.hashSecret(claimSecret) }).eq('user_id', userId).is('email_hash', null);
+            if (claimErr) throw claimErr;
+            // 동시에 다른 요청이 먼저 채웠을 수 있다 — 지금 줄이 내 메일·내 비밀값일 때만 비밀값을 건넨다.
+            const { data: after } = await admin.from('verified_users').select('email_hash, secret_hash').eq('user_id', userId).maybeSingle();
+            if (after && after.email_hash === emailHash && V.secretMatches(after.secret_hash, claimSecret)) {
+              res.status(200).json({ ok: true, verified: true, userId, recovered: false, secret: claimSecret });
+              return;
+            }
+          }
+          // 이미 다른 메일로 인증된 계정이다. 이 메일함 주인이라는 사실은 그 계정의 주인이라는 증명이 아니므로 비밀값은 주지 않는다.
+          res.status(200).json({ ok: true, verified: true, userId, recovered: false });
+          return;
+        }
       }
       throw insErr;
     }
-    res.status(200).json({ ok: true, verified: true, userId, recovered: false });
+    res.status(200).json({ ok: true, verified: true, userId, recovered: false, secret: newSecret });
   } catch (e) {
     res.status(500).json({ error: '인증을 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요' });
   }
