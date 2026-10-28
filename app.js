@@ -237,8 +237,8 @@ function podFromRow(podRow){
 const BETA_ANY_GENDER = true;
 
 // 테스트용: true면 시드/더미(is_seed 팟장) 팟은 출발 날짜·시각이 지나도 만료로 거르지 않는다.
-// 실제 사용자 팟은 그대로 만료된다. 출시 전에 false로 되돌린다.
-const SEED_IGNORE_DATE = true;
+// 출시를 위해 false로 되돌렸다. 시드 팟은 isDummyPod로 목록에서 아예 숨기므로 이 값은 더 이상 목록에 영향을 주지 않는다.
+const SEED_IGNORE_DATE = false;
 
 // 팟장이 시드/더미 계정인지. supabase/add-seed-flag.sql을 아직 안 돌렸으면 profiles.is_seed
 // 컬럼 자체가 없어서 이 조회가 통째로 실패할 수 있다 — 그러면 그냥 "구분 안 함"으로 넘어간다.
@@ -246,6 +246,8 @@ const SEED_IGNORE_DATE = true;
 let seedLeaderIds = null;
 // 테스트용 더미 팟이 날짜·시각 필터(isPodExpired, calcMatchScore의 timeOk)를 건너뛰는지.
 function seedIgnoresDate(pod){ return SEED_IGNORE_DATE && !!(seedLeaderIds && seedLeaderIds.has(pod.leaderId)); }
+// 시험용으로 넣어 둔 더미 팟(is_seed 계정이 팟장)인가. 실제 이용자에게는 목록에 보이지 않게 한다 — DB에서 지우지는 않는다.
+function isDummyPod(pod){ return !!(seedLeaderIds && seedLeaderIds.has(pod.leaderId)); }
 async function loadSeedProfileIds(){
   if (seedLeaderIds) return seedLeaderIds;
   try {
@@ -262,7 +264,11 @@ const POD_SELECT ='*, pod_participants(*, profiles(nickname, gender))';
 
 
 async function loadOpenPods(){
-  const { data, error } = await supa.from('pods').select(POD_SELECT).neq('status', 'dissolved');
+  // 더미 팟을 처음부터 거를 수 있게 시드 계정 목록을 같이 받아 둔다(병렬이라 시작이 느려지지 않는다).
+  const [{ data, error }] = await Promise.all([
+    supa.from('pods').select(POD_SELECT).neq('status', 'dissolved'),
+    loadSeedProfileIds(),
+  ]);
   if (error) throw error;
   return data.map(podFromRow);
 }
@@ -2373,7 +2379,7 @@ async function openBrowse(){
     if (SUPA_ENABLED) await loadSeedProfileIds(); // isPodExpired가 더미 팟 예외를 판단하려면 필요하다
     // 출발 시각이 지난 팟·정원이 찬 팟·모집이 끝난 팟은 뺀다.
     const open = pods
-      .filter(p => p.status === 'recruiting' && p.participants.length < p.desiredSize && !isPodExpired(p))
+      .filter(p => p.status === 'recruiting' && p.participants.length < p.desiredSize && !isPodExpired(p) && !isDummyPod(p))
       .sort((a, b) => new Date(`${a.departDate}T${a.departTime}`) - new Date(`${b.departDate}T${b.departTime}`));
     if (!STATE.guest) return; // 불러오는 동안 로그인 쪽으로 나갔다
     browseOpen = open;
@@ -3206,7 +3212,7 @@ function statusLabel(){
 
 function renderPodList(){
   const u = STATE.user;
-  let list = STATE.pods.filter(p => p.id !== STATE.myPodId);
+  let list = STATE.pods.filter(p => p.id !== STATE.myPodId && !isDummyPod(p)); // 더미 팟은 목록에서 숨긴다
   // 시드/더미 팟(is_seed 계정)은 SEED_IGNORE_DATE가 true인 동안 날짜 만료 필터를 건너뛴다(isPodExpired).
   // seedLeaderIds는 그 예외와 정렬(실제 사용자 우선)에 쓰며, 로드되는 대로 다시 그린다.
   if (!seedLeaderIds) loadSeedProfileIds().then(() => renderPodList());
