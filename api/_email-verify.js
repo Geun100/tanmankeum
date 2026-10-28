@@ -23,4 +23,22 @@ function hashEmail(email){
   return crypto.createHmac('sha256', s).update('email:' + email).digest('hex');
 }
 
-module.exports = { SCHOOL_DOMAIN, UUID_RE, normalizeSchoolEmail, hashEmail };
+// ----- 사용자별 비밀값 -----
+// 메일 인증을 마친 순간 서버가 만들어 브라우저에 한 번만 건넨다. 서버에는 지문(해시)만 저장한다.
+// 비밀값은 256비트 난수라 무차별 대입이 불가능하다 — 해시에 서버 비밀값을 섞는 건 DB만 새는 경우에 대한 추가 방어다.
+const SECRET_RE = /^[A-Za-z0-9_-]{43}$/;
+function newSecret() { return crypto.randomBytes(32).toString('base64url'); }
+function hashSecret(secret) {
+  const s = process.env.EMAIL_HASH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!s) throw new Error('서버에 EMAIL_HASH_SECRET(또는 SUPABASE_SERVICE_ROLE_KEY)이 없어요');
+  return crypto.createHmac('sha256', s).update('secret:' + secret).digest('hex');
+}
+// 저장된 지문(stored)과 브라우저가 보낸 비밀값(provided)이 맞는지. 형식이 틀리거나 저장된 지문이 없으면 항상 false.
+function secretMatches(stored, provided) {
+  if (typeof stored !== 'string' || !stored || typeof provided !== 'string' || !SECRET_RE.test(provided)) return false;
+  const a = Buffer.from(stored, 'utf8');
+  const b = Buffer.from(hashSecret(provided), 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+module.exports = { SCHOOL_DOMAIN, UUID_RE, SECRET_RE, normalizeSchoolEmail, hashEmail, newSecret, hashSecret, secretMatches };

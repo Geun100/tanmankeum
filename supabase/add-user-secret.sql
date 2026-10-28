@@ -1,0 +1,25 @@
+-- 사용자별 비밀값 (마이그레이션, 재실행 안전).
+-- Supabase 대시보드 > SQL Editor에 통째로 붙여넣고 실행한다.
+--
+-- 사용자 번호(uuid)는 팟 참가자 목록에 공개돼 있어서 "이 번호의 주인이 맞다"는 증명이 못 된다.
+-- 그래서 학교 메일 인증을 마치는 순간(서버가 그 사람이 메일함 주인임을 확인한 순간) 서버가 그 사람만 아는
+-- 비밀 문자열을 만들어 브라우저에 한 번만 건네고, 서버에는 그 값의 지문(해시)만 저장한다.
+-- 이후 신고·알림처럼 "누가 보냈는지"가 중요한 요청은 이 비밀값을 같이 보내고, 서버가 지문과 맞는지 확인한다.
+--
+-- secret_hash가 비어 있는 사용자 = 비밀값을 아직 못 받은 사용자(이 기능 이전에 인증한 사람, 기존 사용자 면제).
+-- 이 사람들은 학교 메일 인증을 한 번 더 하면 받는다(기존 닉네임·이력은 그대로).
+--
+-- 기존 사용자(메일 해시가 비어 있는 면제 줄)는 번호가 이미 공개라서, 기본으로는 비밀값을 받을 수 없다(번호만 아는 사람이 먼저
+-- 인증해서 줄을 차지할 수 있기 때문이다). 진짜 기존 사용자를 옮길 때만 운영자가 아래 순서로 한다.
+--   1) 옮길 대상 확인:
+--        select v.user_id, p.nickname, p.is_seed, p.created_at from public.verified_users v
+--          left join public.profiles p on p.id = v.user_id where v.email_hash is null order by p.created_at;
+--   2) Vercel 환경변수 ALLOW_LEGACY_CLAIM=1 을 추가하고 다시 배포한다.
+--   3) 대상자들이 바로 학교 메일 인증을 한다(먼저 인증한 사람이 줄을 차지하므로 짧게 끝낸다).
+--   4) ALLOW_LEGACY_CLAIM을 지우고 다시 배포한다. 남은 면제 줄은 가짜(시드) 계정이어야 한다.
+--
+-- 한 사용자에 비밀값은 하나다. 다른 기기에서 다시 인증하면 새 값이 발급되고 이전 기기의 값은 쓸 수 없게 된다.
+-- 비밀값을 잃었거나 의심스러울 때 운영자가 지우는 방법:
+--   update public.verified_users set secret_hash = null where user_id = '<그 사람의 uuid>';
+
+alter table public.verified_users add column if not exists secret_hash text;
