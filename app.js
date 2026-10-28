@@ -3081,6 +3081,9 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   // 날짜는 사용자가 직접 고른다(오늘 이전은 min으로 막혀 있다). 값이 비면(브라우저 이상 등)
   // 오늘로 폴백한다 — 과거 날짜로 등록되는 것보단 안전하다.
   const date = dateInput.value && dateInput.value >= localDateStr(new Date()) ? dateInput.value : localDateStr(new Date());
+  // 이미 지난 출발 시각은 고를 수 없다 — 분 단위로 고르니 지금 분은 허용한다.
+  const nowMinute = new Date(); nowMinute.setSeconds(0, 0);
+  if (new Date(`${date}T${time}`) < nowMinute) { showError('이미 지난 시각이에요. 출발 시각을 다시 골라주세요.'); return; }
 
   const btn = document.getElementById('btn-find-pod');
   btn.disabled = true;
@@ -3638,6 +3641,23 @@ async function submitReport(pod, targetId, reason, detail){
   e.serverMessage = r.data.error;
   throw e;
 }
+// 출발 전 체크: 팟이 확정되고 아직 출발 전일 때 채팅 위에 한 번 보여준다. "확인했어요"를 누르면 그 팟에서는 다시 안 보인다.
+function precheckCardHtml(pod){
+  if (pod.status !== 'confirmed') return '';
+  try { if (localStorage.getItem(`tanmankeum_precheck_${pod.id}`) === '1') return ''; } catch (e) {}
+  const leader = pod.participants.find(p => p.id === pod.leaderId);
+  const leaderNick = leader ? leader.nickname : '팟장';
+  return `<div class="precheck-card" id="chat-precheck">
+      <p class="precheck-title">출발 전 체크</p>
+      <ul>
+        <li><span aria-hidden="true">📍</span>정한 장소·시각에 나와주세요</li>
+        <li><span aria-hidden="true">⏰</span>출발 5분 전부터 갑자기 방을 나가면 서비스 이용이 정지될 수 있어요</li>
+        <li><span aria-hidden="true">🧍</span>인상착의를 채팅에 남겨주세요</li>
+        <li><span aria-hidden="true">💳</span>정산은 도착 후 ${escapeHtml(leaderNick)}(팟장)이 실제 택시비로 거리비례로 정산해요</li>
+      </ul>
+      <button type="button" class="precheck-ok" id="btn-precheck-ok">확인했어요</button>
+    </div>`;
+}
 // 비밀값이 없거나(이 기능 이전에 인증한 사용자) 무효가 된 경우(다른 기기에서 다시 인증) 메일 인증을 한 번 더 하게 한다.
 // 인증을 마치면 서버가 새 비밀값을 건네고, 원래 보던 채팅방으로 돌아온다. 면제 사용자는 서버 스위치가 꺼져 있으면 비밀값을 못 받는다.
 function promptReverifyForReport(podId){
@@ -3881,7 +3901,6 @@ async function renderPodChat(podId){
         ? '이동·정산 중'
         : '팟 완료';
   const chatMap = mapContainerHTML();
-  const kakaoRouteHref = kakaoMapMultiRouteUrl(result.stops);
   let html = `
     <div class="chat-status">
       <p class="chat-status-line"><span class="chat-status-left"><span class="status-dot"></span>${statusText}</span><span class="muted">${pod.departTime} 출발 예정</span></p>
@@ -3909,10 +3928,9 @@ async function renderPodChat(podId){
     </div>
   `;
   html += `
+    ${precheckCardHtml(pod)}
     <div class="chat-section-head">
-      <span class="section-label">채팅</span>
       <div class="chat-section-head-btns">
-        ${kakaoRouteHref ? `<a class="btn btn--ghost btn--sm" target="_blank" rel="noopener" href="${kakaoRouteHref}">${ICON_PIN} 카카오맵</a>` : ''}
         ${SUPA_ENABLED ? `<button type="button" class="btn btn--ghost btn--sm" id="btn-share-pod">${iconSvg('share', 15)}공유</button>` : ''}
         <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-summary">${iconSvg('info', 15)}팟 정보</button>
       </div>
@@ -3929,6 +3947,11 @@ async function renderPodChat(podId){
   chatBody.innerHTML = html;
   chatBody.dataset.podId = String(podId);
   const scrollChatToBottom = () => { chatBody.scrollTop = chatBody.scrollHeight; };
+  const precheckOk = document.getElementById('btn-precheck-ok');
+  if (precheckOk) precheckOk.addEventListener('click', () => {
+    try { localStorage.setItem(`tanmankeum_precheck_${podId}`, '1'); } catch (e) {}
+    document.getElementById('chat-precheck').remove();
+  });
 
   // 아바타 한 줄 = "누가, 몇 명" 즉시 훑기용. 사람별 상세(성별·하차지·요금)는 아래 카드 하나에
   // 몰아서, 빈자리마다 "아직 빈자리예요" 문장을 반복해 세로 공간을 잡아먹지 않게 한다.
@@ -3973,21 +3996,12 @@ async function renderPodChat(podId){
     `;
     pWrap.appendChild(row);
   });
-  // 확정 전엔 그냥 나가면 되니 확정된 뒤에만 보인다. 사람마다가 아니라 목록 아래에 한 번만 둔다.
-  if ((pod.status === 'confirmed' || pod.status === 'in_progress') && pod.participants.length > 1) {
-    const reportBtn = document.createElement('button');
-    reportBtn.type = 'button';
-    reportBtn.className = 'report-link';
-    reportBtn.textContent = '함께 탄 분과 문제가 있었나요?';
-    reportBtn.addEventListener('click', () => {
-      // 비밀값이 없으면 어차피 서버가 거절한다 — 사유를 고르게 한 뒤에 거절하지 않고 먼저 본인 확인으로 안내한다.
-      if (SUPA_ENABLED && !getSecret()) { promptReverifyForReport(pod.id); return; }
-      openReportModal(pod);
-    });
-    pWrap.appendChild(reportBtn);
-  } else {
-    pWrap.appendChild(helpLinkEl()); // 비용·정산·인원 문제 등을 운영자에게 바로 문의할 수 있게(링크가 두 줄로 겹치지 않게 신고 링크가 없을 때만)
-  }
+  // 확정 전엔 그냥 나가면 되니 확정된 뒤에만 보인다. 상단 깃발 아이콘 하나로 연다 — 누르면 바로 신고 창이 열리고,
+  // 본인 확인값이 없거나 무효일 때만(서버가 거절하면) 그때 한 번 더 인증하게 한다.
+  const reportBtn = document.getElementById('btn-chat-report');
+  reportBtn.hidden = !((pod.status === 'confirmed' || pod.status === 'in_progress') && pod.participants.length > 1);
+  reportBtn.onclick = () => openReportModal(pod);
+  pWrap.appendChild(helpLinkEl()); // 비용·정산·인원 문제 등을 운영자에게 바로 문의할 수 있게
   if (pod.leaderId === u.id) decorateWarnBadges(pod, pWrap); // 팟장만 "주의" 배지를 본다
 
   // 지도는 접어둔 기본 상태에선 안 그린다 — 카카오 길찾기 API를 매번 부르는 건 비용이고,
@@ -4026,8 +4040,8 @@ async function renderPodChat(podId){
     // 아무도 말을 안 걸었는데 누가 인사한 것처럼 꾸미지 않는다. 대신 무슨 말을 하면 좋을지만 추천한다 —
     // 칩을 누르면 입력창에 채워지기만 하고, 보낼지는 사용자가 정한다.
     const suggestions = isLeader
-      ? ['안녕하세요! 잘 부탁드려요 :)', '탑승 장소는 정문 앞에서 만나요', '출발 5분 전에 알려드릴게요']
-      : ['안녕하세요! 잘 부탁드려요 :)', '몇 번째 자리에서 타면 될까요?', '조금 늦을 수도 있어요, 미리 말씀드려요'];
+      ? ['안녕하세요! 잘 부탁드려요 :)', '탑승 장소는 택시 정류장에서 만나요', '출발 5분 전에 알려드릴게요', '인상착의는 검은 안경 쓰고, 파란후드예요']
+      : ['안녕하세요! 잘 부탁드려요 :)', '몇 번째 자리에서 타면 될까요?', '조금 늦을 수도 있어요, 미리 말씀드려요', '인상착의는 검은 안경 쓰고, 파란후드예요'];
     const empty = document.createElement('div');
     empty.className = 'chat-empty';
     empty.innerHTML = `<p>아직 대화가 없어요. 먼저 인사해보세요</p>
