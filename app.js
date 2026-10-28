@@ -4079,24 +4079,11 @@ async function renderPodChat(podId){
       ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하러 가기</button>`;
     }
   } else if (!isLeader && pod.status !== 'recruiting') {
-    const me = pod.participants.find(p => p.id === u.id);
-    if (me && !me.accepted) {
-      // 팟장이 확정한 뒤, 참가자는 수락해야 최종 경로·요금을 볼 수 있다. 거절하면 팟에서 빠진다.
-      ctaHtml += `<p class="cta-hint">팟장이 팟을 확정했어요. 이 팟으로 함께 타시겠어요? 수락하면 최종 경로·요금을 볼 수 있어요.</p>`;
-      ctaHtml += `<button class="btn btn--primary btn--block" id="btn-accept-pod">수락하기</button>`;
-      ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-decline-pod">거절하기</button>`;
-    } else {
-      ctaHtml += `<p class="cta-hint">팟장이 채팅방에서 정산 안내를 보내면 입금해주세요. 팟장이 입금 확인하면 여기서 나갈 수 있어요.</p>`;
-      ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
-    }
+    // 확정된 뒤에는 참가자가 팟에서 나갈 길이 없다(수락·거절 단계도 없다) — 참가는 확정 전에 신중하게 정한다.
+    // 팟이 끝나는 길은 팟장이 입금을 확인하거나(finishMemberRide) 팟장이 팟을 종료하는 것(showPodEndedForMember)뿐이다.
+    ctaHtml += `<p class="cta-hint">팟이 확정됐어요. 팟장이 채팅방에 정산 안내를 보내면 입금해주세요. 입금이 확인되면 새 팟을 만들 수 있어요.</p>`;
+    ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   } else if (isLeader && pod.status !== 'recruiting') {
-    const others = pod.participants.filter(p => !p.isLeader);
-    const pending = others.filter(p => !p.accepted);
-    if (others.length) {
-      ctaHtml += pending.length
-        ? `<p class="cta-hint">수락 ${others.length - pending.length}/${others.length} · 대기: ${pending.map(p => escapeHtml(p.nickname)).join(', ')}. 전원 수락을 기다리지 않고 정산을 시작해도 돼요.</p>`
-        : `<p class="cta-hint">참가자 전원이 수락했어요.</p>`;
-    }
     ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
   ctaEl.innerHTML = ctaHtml;
@@ -4154,57 +4141,27 @@ async function renderPodChat(podId){
   const finishFromChatBtn = document.getElementById('btn-finish-from-chat');
   if (finishFromChatBtn) finishFromChatBtn.addEventListener('click', () => confirmFinishPod(pod));
 
-  const acceptBtn = document.getElementById('btn-accept-pod');
-  if (acceptBtn) acceptBtn.addEventListener('click', async () => {
-    acceptBtn.disabled = true;
-    try {
-      if (SUPA_ENABLED) {
-        const { error } = await supa.from('pod_participants').update({ accepted: true }).eq('pod_id', pod.id).eq('user_id', u.id);
-        if (error) throw error;
-      } else {
-        const me = pod.participants.find(p => p.id === u.id); if (me) me.accepted = true;
-      }
-      renderPodChat(pod.id);
-    } catch (e) {
-      acceptBtn.disabled = false;
-      showError(friendlyDbError(e));
-    }
-  });
-  const declineBtn = document.getElementById('btn-decline-pod');
-  if (declineBtn) declineBtn.addEventListener('click', () => {
-    openModal({
-      title: '이 팟을 거절할까요?',
-      body: '팟에서 나가고 다시 매칭 대기 화면으로 돌아가요. 남은 인원의 요금은 다시 계산돼요.',
-      confirmLabel: '거절하기',
-      danger: true,
-      onConfirm: async () => {
-        try {
-          unsubscribePod(); unsubscribeHome(); // 내 나감(DELETE)이 이 화면을 다시 그리지 않게 — 나감 이벤트가 이제 실시간으로 온다
-          await leavePod(pod, { onLeft: () => notifyLeaderOfLeave(pod.id) }); // 팟장에게 "팟원이 나갔어요" 푸시
-          renderHome();
-          showScreen('screen-home');
-        } catch (e) {
-          showError(friendlyDbError(e));
-        }
-      },
-    });
-  });
-
+  // 참가 취소는 팟장이 확정하기 전에만 된다. 확정 뒤에는 이 버튼이 그려지지 않는다.
   const leaveBtn = document.getElementById('btn-leave-pod');
   if (leaveBtn) leaveBtn.addEventListener('click', () => {
-    const isPostConfirm = pod.status !== 'recruiting';
     openModal({
-      title: isPostConfirm ? '팟을 나갈까요?' : '참가를 취소할까요?',
+      title: '참가를 취소할까요?',
       body: '이 팟에서 나가고, 다시 매칭 대기 화면으로 돌아가요.',
-      confirmLabel: isPostConfirm ? '나가기' : '참가 취소하기',
+      confirmLabel: '참가 취소하기',
       danger: true,
       onConfirm: async () => {
-        // 확정 뒤에 나가는 건 정산까지 마친 이용이라 기록에 남긴다(확정 전 취소는 이용이 아니다).
-        const rideRec = isPostConfirm ? buildRideRecord(pod) : null;
         try {
+          // 화면은 확정 전인데 그 사이 팟장이 확정했을 수 있다 — 나가기 직전에 서버 상태로 한 번 더 확인한다.
+          if (SUPA_ENABLED) {
+            const latest = await loadPod(pod.id);
+            if (latest && latest.status !== 'recruiting') {
+              showError('팟장이 팟을 확정해서 이제 나갈 수 없어요.');
+              renderPodChat(pod.id);
+              return;
+            }
+          }
           unsubscribePod(); unsubscribeHome(); // 내 나감(DELETE)이 이 화면을 다시 그리지 않게 — 나감 이벤트가 이제 실시간으로 온다
           await leavePod(pod, { onLeft: () => notifyLeaderOfLeave(pod.id) }); // 팟장에게 "팟원이 나갔어요" 푸시
-          if (rideRec) saveRideRecord(rideRec);
           renderHome();
           showScreen('screen-home');
         } catch (e) {
@@ -4353,7 +4310,7 @@ function showPodEndedForMember(pod){
   unsubscribePod();
   unsubscribeHome();
   const me = pod.participants.find(p => p.id === STATE.user.id);
-  if (me && me.accepted) saveRideRecord(buildRideRecord(pod)); // 팟이 지워지기 전에 마지막으로 본 값으로 만든다
+  if (me) saveRideRecord(buildRideRecord(pod)); // 팟이 지워지기 전에 마지막으로 본 값으로 만든다
   STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
   delete STATE.chatMessages[pod.id];
   STATE.myPodId = null;
