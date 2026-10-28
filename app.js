@@ -360,13 +360,87 @@ function renderPushBtn(on){
 function pushSupported(){
   return !!('serviceWorker' in navigator && 'PushManager' in window && window.VAPID_PUBLIC_KEY && SUPA_ENABLED);
 }
+
+// ---- 알림을 받을 수 없는 환경 안내 ----
+// 웹 푸시는 카카오톡 안 브라우저와 아이폰의 일반 브라우저 탭에서는 아예 안 된다(홈 화면에 추가한 앱이어야 한다).
+// 카톡으로 받은 공유 링크로 들어오는 사람이 대부분이라, 앱이 환경을 알아보고 이유와 방법을 한 줄로 알려준다.
+// openPodFromUrl이 ?pod=를 지우기 전의 주소를 기억해 둔다 — 다른 브라우저로 옮겨도 같은 팟으로 오게 한다.
+const SHARE_URL_AT_BOOT = location.href;
+function isStandalone(){
+  try { return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches; } catch (_) { return false; }
+}
+// 'app'(설치한 앱) | 'kakao'(카카오톡 안 브라우저) | 'ios-browser'(아이폰·아이패드 브라우저 탭) | 'other'(안드로이드·컴퓨터 등, 알림이 된다)
+function pushEnv(ua = navigator.userAgent, standalone = isStandalone(), touchPoints = navigator.maxTouchPoints || 0){
+  if (standalone) return 'app';
+  if (/KAKAOTALK/i.test(ua)) return 'kakao';
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && touchPoints > 1)) return 'ios-browser';
+  return 'other';
+}
+const PUSH_HINT_KEY = 'tanmankeum_pushhint_until';
+const PUSH_HINT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+function pushHintSnoozed(){ try { return Number(localStorage.getItem(PUSH_HINT_KEY) || 0) > Date.now(); } catch (_) { return false; } }
+function snoozePushHint(){ try { localStorage.setItem(PUSH_HINT_KEY, String(Date.now() + PUSH_HINT_SNOOZE_MS)); } catch (_) {} }
+// 카카오톡 안에서 현재 주소를 기본 브라우저(아이폰은 사파리)로 다시 연다. 카카오톡이 제공하는 주소 형식이다.
+function openInExternalBrowser(){
+  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(SHARE_URL_AT_BOOT);
+}
+function openAddToHomeGuide(){
+  openModal({
+    title: '홈 화면에 추가하면 알림을 받아요',
+    cardClass: 'modal-card--rich',
+    bodyHtml: `
+      <ol class="a2hs-steps">
+        <li>화면 아래의 <b>공유 버튼</b>(네모에서 화살표가 나오는 아이콘)을 눌러요.</li>
+        <li>메뉴를 위로 올려 <b>홈 화면에 추가</b>를 눌러요.</li>
+        <li>홈 화면에 생긴 <b>탄만큼 아이콘</b>으로 열고, 오른쪽 위 종 모양을 눌러 알림을 켜요.</li>
+      </ol>
+      <p class="modal-note">설치한 앱은 로그인이 따로라 학교 메일 인증을 한 번 더 해야 할 수 있어요.</p>`,
+    confirmLabel: '확인',
+    onConfirm: () => {},
+  });
+}
+// 환경에 맞는 안내를 실행한다. 알림이 되는 환경이면 false.
+function explainNoPush(){
+  const env = pushEnv();
+  if (env === 'kakao') { track('push_hint_click', { env }); openInExternalBrowser(); return true; }
+  if (env === 'ios-browser') { track('push_hint_click', { env }); openAddToHomeGuide(); return true; }
+  return false;
+}
+// 화면 위쪽에 얇은 안내 한 줄을 붙인다(이미 있으면 갈아 끼운다). 닫으면 7일 동안 안 보인다.
+function placePushHint(container){
+  if (!container) return;
+  container.querySelectorAll(':scope > .push-hint').forEach(el => el.remove());
+  const env = pushEnv();
+  if ((env !== 'kakao' && env !== 'ios-browser') || pushHintSnoozed()) return;
+  const box = document.createElement('div');
+  box.className = 'push-hint';
+  box.setAttribute('role', 'note');
+  const text = document.createElement('span');
+  text.textContent = env === 'kakao' ? '카카오톡 안에서는 알림을 받을 수 없어요.' : '홈 화면에 추가하면 채팅·팟 알림을 받을 수 있어요.';
+  const act = document.createElement('button');
+  act.type = 'button'; act.className = 'push-hint-btn';
+  act.textContent = env === 'kakao' ? '사파리·크롬에서 열기' : '추가 방법';
+  act.addEventListener('click', explainNoPush);
+  const x = document.createElement('button');
+  x.type = 'button'; x.className = 'push-hint-x'; x.setAttribute('aria-label', '닫기'); x.textContent = '×';
+  x.addEventListener('click', () => { snoozePushHint(); box.remove(); });
+  box.append(text, act, x);
+  container.prepend(box);
+  track('push_hint_shown', { env });
+}
+let pushEnvTracked = false;
+function trackPushEnvOnce(){ if (!pushEnvTracked) { pushEnvTracked = true; track('push_env', { env: pushEnv() }); } }
 function initPushUI(){
   const btn = document.getElementById('btn-enable-push');
   if (!btn) return;
+  trackPushEnvOnce();
   const supported = pushSupported();
   if (!supported || Notification.permission === 'denied') {
     renderPushBtn(false);
-    btn.onclick = () => showToast(!supported ? '이 환경에서는 알림을 쓸 수 없어요' : '브라우저 설정에서 알림을 허용해주세요');
+    btn.onclick = () => {
+      if (!supported) { if (!explainNoPush()) showToast('이 환경에서는 알림을 쓸 수 없어요'); return; }
+      showToast('브라우저 설정에서 알림을 허용해주세요');
+    };
     return;
   }
   if (Notification.permission === 'granted' && !pushOffByUser()) {
@@ -501,7 +575,7 @@ function sharePodText(pod){
   const trainLine = !stationTrip || !trainTime ? ''
     : pod.originName === POHANG_NAME ? `\n${trainTime} 도착 기차` : `\n(${trainTime} 출발 기차)`;
   const carrierLine = stationTrip ? `\n캐리어 ${carrierCount(pod)}/${CARRIER_CAPACITY}개` : '';
-  return `${when} 출발\n${short(pod.originName)} → ${short(pod.leaderDest)} (택시)${trainLine}\n${seats}${carrierLine}\n탄만큼 링크: ${location.origin}/?pod=${pod.id}`;
+  return `${when} 출발\n${short(pod.originName)} → ${short(pod.leaderDest)} (택시)${trainLine}\n${seats}${carrierLine}\n탄만큼 초대 링크: ${location.origin}/?pod=${pod.id}`;
 }
 function sharePod(pod){ return shareText(sharePodText(pod), 'pod_shared'); }
 async function shareText(text, eventName){
@@ -3073,6 +3147,7 @@ async function renderHome(){
   // 홈에 머무는 동안 내 팟에 누가 들어오면 아래 인원수 표시가 실시간으로 갱신되도록 구독한다.
   subscribeHome(myPod && myPod.id);
   initPushUI();
+  placePushHint(document.querySelector('#screen-home .screen-body'));
   checkMyReportNotice(); // 신고가 쌓여 주의·제한 단계가 되면 본인에게 한 번 알린다
   // 홈에 있는 동안 새로 들어온 사람이 있으면 토스트로 알린다(처음 렌더는 기준값만 저장).
   if (myPod) announceJoiners(myPod, u.id);
@@ -3338,6 +3413,7 @@ async function renderPodDetail(podId){
       </div>
     `;
     body.innerHTML = html;
+    placePushHint(body);
     cta.innerHTML = `<button class="btn btn--ghost btn--block" id="btn-back-home">다른 팟 보기</button>`;
     document.getElementById('btn-back-home').addEventListener('click', () => showScreen('screen-home'));
     return;
@@ -3393,6 +3469,7 @@ async function renderPodDetail(podId){
   `;
 
   body.innerHTML = html;
+  placePushHint(body);
 
   // 실제 경로가 아직 없으면, 응답이 온 뒤 실제 요금으로 한 번 다시 그린다.
   // (그때는 캐시에 값이 있어 onRoute를 넘기지 않으므로 재귀하지 않는다)

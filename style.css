@@ -396,6 +396,12 @@
   /* 학교 메일 인증 화면 아래: 개인정보처리방침·서비스약관 링크 */
   .legal-links{ display:flex; justify-content:center; gap:22px; margin-top:28px; }
   .legal-links a{ font-size:13px; color:var(--ink-soft); text-decoration:underline; text-underline-offset:3px; }
+  .push-hint{ display:flex; align-items:center; gap:8px; background:var(--primary-soft); color:var(--primary-dark); border-radius:var(--radius-input); padding:10px 12px; margin:0 0 12px; font-size:13px; line-height:1.4; }
+  .push-hint span{ flex:1; }
+  .push-hint-btn{ background:none; border:0; padding:4px; color:var(--primary-dark); font-size:13px; font-weight:700; text-decoration:underline; text-underline-offset:3px; white-space:nowrap; cursor:pointer; }
+  .push-hint-x{ background:none; border:0; padding:2px 6px; color:var(--primary-dark); font-size:18px; line-height:1; cursor:pointer; }
+  .a2hs-steps{ margin:0 0 10px; padding-left:20px; font-size:14px; line-height:1.7; color:var(--ink); text-align:left; }
+  .a2hs-steps li + li{ margin-top:6px; }
   .legal-links--tight{ margin-top:12px; padding-bottom:8px; }
 
   /* 개인정보처리방침·서비스약관 페이지(privacy.html, terms.html) */
