@@ -3843,8 +3843,8 @@ async function renderPodChat(podId){
     // 계좌 공유 후 채팅방으로 돌아온 팟장이 정산 화면으로 되돌아가 팟을 종료할 수 있어야 한다.
     // 정산금액을 이미 계산해뒀으면 여기서 바로 종료할 수 있게 하고, 입금 확인은 별도 버튼으로 남긴다.
     if (pod.settlement && pod.settlement.length) {
-      ctaHtml += `<button class="btn btn--primary btn--block" id="btn-finish-from-chat">정산 완료하고 팟 종료</button>`;
       ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-go-settlement">입금 확인 · 정산 화면</button>`;
+      ctaHtml += `<button class="btn btn--primary btn--block" id="btn-finish-from-chat">정산 완료하고 팟 종료</button>`;
     } else {
       ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하러 가기</button>`;
     }
@@ -4220,11 +4220,6 @@ function renderSettlement(podId){
       <h3>인당 정산금</h3>
       <div id="settlement-list"></div>
     </div>
-    <div class="info-box" id="paid-tracker" hidden>
-      <h3>입금 확인</h3>
-      <p class="fine-note" style="margin:0 0 10px;">체크하면 그 사람은 채팅방에서 팟을 나갈 수 있어요.</p>
-      <div id="paid-list"></div>
-    </div>
     <div class="info-box share-box" id="share-box" hidden>
       <div class="fare-head">
         <h3><label for="account-number">입금 안내 공유</label></h3>
@@ -4233,12 +4228,17 @@ function renderSettlement(podId){
       <div class="field" id="account-field">
         <input type="text" id="account-number" placeholder="은행명 계좌번호 (예: 탄만은행 123-4567)">
         <div id="receipt-field">
-          <p class="fare-hint" id="receipt-photo-name">택시 영수증 사진은 꼭 올려야 해요(실제 결제 확인용)</p>
+          <p class="fare-hint" id="receipt-photo-name">영수증 사진을 올리면 참여자가 실제 결제를 확인할 수 있어요(선택)</p>
           <p class="fine-note" id="receipt-have-photo" style="display:none; color:var(--primary-dark); margin:0;">${iconSvg('check', 14)}위에서 찍은 사진이 영수증으로 함께 공유돼요.</p>
           <input type="file" id="receipt-photo" accept="image/*" class="file-picker-input">
         </div>
       </div>
       <button type="button" class="calc-btn calc-btn--block" id="btn-share-account">계좌번호 공유하기</button>
+    </div>
+    <div class="info-box" id="paid-tracker" hidden>
+      <h3>입금 확인</h3>
+      <p class="fine-note" style="margin:0 0 10px;">체크하면 그 사람은 채팅방에서 팟을 나갈 수 있어요.</p>
+      <div id="paid-list"></div>
     </div>
     <p class="fine-note" id="share-confirm-note" style="margin-top:10px;"></p>
   `;
@@ -4269,7 +4269,7 @@ function renderSettlement(podId){
   document.getElementById('receipt-photo').addEventListener('change', (e) => {
     const nameEl = document.getElementById('receipt-photo-name');
     const f = e.target.files[0];
-    nameEl.textContent = f ? f.name : '택시 영수증 사진은 꼭 올려야 해요(실제 결제 확인용)';
+    nameEl.textContent = f ? f.name : '영수증 사진을 올리면 참여자가 실제 결제를 확인할 수 있어요(선택)';
     nameEl.classList.toggle('is-set', !!f);
     if (f) nameEl.classList.remove('is-error');
   });
@@ -4381,13 +4381,8 @@ function renderSettlement(podId){
   document.getElementById('btn-share-account').addEventListener('click', () => {
     const acc = document.getElementById('account-number').value.trim();
     if (!acc) { document.getElementById('account-number').focus(); return; }
-    // 화면 1에서 찍은 사진이 있으면 그걸 영수증으로 쓴다. 없으면 화면 2에서 고른 사진.
+    // 화면 1에서 찍은 사진이 있으면 그걸 영수증으로 쓴다. 없으면 화면 2에서 고른 사진. 둘 다 없어도 공유할 수 있다(선택).
     const file = (settlementPhoto[podId] && settlementPhoto[podId].file) || document.getElementById('receipt-photo').files[0] || null;
-    if (!file) {
-      document.getElementById('receipt-photo-name').classList.add('is-error'); // 안내 문구가 그대로 빨갛게 바뀐다(문구를 두 번 쓰지 않는다)
-      document.getElementById('receipt-photo').focus();
-      return;
-    }
     openModal({
       title: '계좌번호를 공유할까요?',
       icon: iconSvg('info', 22),
