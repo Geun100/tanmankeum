@@ -812,7 +812,9 @@ function nearestPointOnPath(coord, path){
 // 매칭 점수 100점 만점: 출발지근접30 + 목적지경로적합30 + 실경로포함25 + 출발시간차10 + 인원조건5
 // allowConditional: 500m 기준 매칭이 MIN_MATCH_RESULTS보다 적을 때만 true로 호출된다 —
 // 그때만 500~800m "조건부 매칭" 구간을 점수/자격 판정에 넣는다(renderPodList의 2차 패스).
-function calcMatchScore(user, pod, allowConditional = false){
+// ignoreTime: 팟 상세 화면처럼 사용자가 이 팟을 직접 골라 들어온 경우 true — "내가 정한 시간"은 목록을 거르는 기준이지 참가를
+// 막는 규칙이 아니다(공유 링크로 온 사람의 예전 설정 시간이 팟보다 늦다고 막으면 안 된다).
+function calcMatchScore(user, pod, allowConditional = false, ignoreTime = false){
   const uOrigin = placeCoord(user.origin), pOrigin = placeCoord(pod.originName);
   const originDist = (uOrigin && pOrigin) ? dist(uOrigin, pOrigin) : Infinity;
   const originScore = tierScore(originDist, 30, allowConditional);
@@ -861,7 +863,7 @@ function calcMatchScore(user, pod, allowConditional = false){
 
   // 내가 고른 시간보다 1시간 넘게 일찍 출발한 팟은 이미 놓친 팟이라 안 보여준다.
   // 내 시간보다 늦게 출발하는 팟은 얼마나 늦든 상관없다 — 기다렸다 타면 되니까.
-  const timeOk = seedIgnoresDate(pod) || timeToMin(pod.departTime) >= timeToMin(user.time) - 60;
+  const timeOk = ignoreTime || seedIgnoresDate(pod) || timeToMin(pod.departTime) >= timeToMin(user.time) - 60;
 
   const walkable = allWalkable(hypoPod);
   const eligible = nearOrigin && sameGender && timeOk && walkable;
@@ -1042,8 +1044,8 @@ function calcFinalRouteAndFare(pod){
 }
 
 // 홈 목록/팟 상세 화면에서 "내가 참가했다면"을 미리 계산 (참가 전 미리보기)
-function previewJoin(pod, user, allowConditional = false){
-  const matchScore = calcMatchScore(user, pod, allowConditional);
+function previewJoin(pod, user, allowConditional = false, ignoreTime = false){
+  const matchScore = calcMatchScore(user, pod, allowConditional, ignoreTime);
   if (!matchScore.eligible) return { eligible: false, matchScore };
   // hypoPod는 calcMatchScore가 이미 trunk 재계산 + 전원 하차지점 갱신까지 끝내둔 상태다.
   const hypoPod = matchScore.hypoPod;
@@ -3304,7 +3306,7 @@ async function renderPodDetail(podId){
   const body = document.getElementById('detail-body');
   const cta = document.getElementById('detail-cta');
   const isOwnPod = pod.leaderId === u.id;
-  const prev = previewJoin(pod, u);
+  const prev = previewJoin(pod, u, false, true); // 직접 고른 팟이라 "내 설정 시간"으로는 막지 않는다
   // 내가 합류하면 trunk(최종 목적지)가 지금 팟 상태(pod.leaderDest)와 달라질 수 있다 — 내가 지금
   // 참가자 중 제일 멀면 내 목적지가 새 종점이 된다. 화면에는 항상 "내가 합류했다고 가정한" 트렁크를
   // 보여줘야 한다 — pod.leaderDest(나 없는 현재 상태)를 쓰면 지도 마커랑 라벨이 서로 어긋난다.
@@ -3326,11 +3328,9 @@ async function renderPodDetail(podId){
     const why = prev.matchScore.reasons || {};
     const reasonText = !why.nearOrigin
       ? `내 출발지(${escapeHtml(u.origin || '정해지지 않음')})가 이 팟 출발지(${escapeHtml(pod.originName)})와 멀어요. 내 정보에서 출발지를 바꾸면 다시 확인할 수 있어요.`
-      : !why.timeOk
-        ? `이 팟은 ${escapeHtml(pod.departTime)}에 출발해요. 내가 정한 출발 시간(${escapeHtml(u.time)})보다 1시간 넘게 일찍 떠나서 참가할 수 없어요.`
-        : !why.sameGender
-          ? '이 팟은 같은 성별끼리만 참가할 수 있어요.'
-          : `내 목적지(${escapeHtml(u.dest)})가 이 팟 경로에서 너무 멀어요. 하차지점에서 도보 ${WALK_CAP_MIN}분 안에 닿을 수 있어야 참가할 수 있어요.`;
+      : !why.sameGender
+        ? '이 팟은 같은 성별끼리만 참가할 수 있어요.'
+        : `내 목적지(${escapeHtml(u.dest)})가 이 팟 경로에서 너무 멀어요. 하차지점에서 도보 ${WALK_CAP_MIN}분 안에 닿을 수 있어야 참가할 수 있어요.`;
     html += `
       <div class="info-box is-danger">
         <h3 style="color:var(--danger);">참가할 수 없어요</h3>
