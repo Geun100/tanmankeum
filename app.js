@@ -863,7 +863,8 @@ function calcMatchScore(user, pod, allowConditional = false){
   // 내 시간보다 늦게 출발하는 팟은 얼마나 늦든 상관없다 — 기다렸다 타면 되니까.
   const timeOk = seedIgnoresDate(pod) || timeToMin(pod.departTime) >= timeToMin(user.time) - 60;
 
-  const eligible = nearOrigin && sameGender && timeOk && allWalkable(hypoPod);
+  const walkable = allWalkable(hypoPod);
+  const eligible = nearOrigin && sameGender && timeOk && walkable;
   const routeScore = eligible ? 25 : 0;
 
   const diffMin = Math.abs(timeToMin(user.time) - timeToMin(pod.departTime));
@@ -890,6 +891,8 @@ function calcMatchScore(user, pod, allowConditional = false){
 
   return {
     total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, conditional, hypoPod, myId, trainMatch,
+    // 참가할 수 없을 때 어느 조건이 걸렸는지 — 상세 화면이 이유를 정확히 알려주는 데 쓴다.
+    reasons: { nearOrigin, sameGender, timeOk, walkable },
     originDistM: Number.isFinite(originDist) ? Math.round(originDist) : null, diffMin,
   };
 }
@@ -3318,18 +3321,23 @@ async function renderPodDetail(podId){
   `;
 
   if (!prev.eligible) {
-    // 경로 이탈: 지도까지만 보여주고 이후는 참가 불가 안내로 대체
-    const fallbackStop = pod.routeStops[pod.routeStops.length - 1];
-    const map1 = mapContainerHTML();
-    html += `<div class="map-card">${map1.html}</div>`;
+    // 참가할 수 없는 이유를 정확히 알려준다. 예전엔 어떤 이유든 "목적지가 멀다"고만 말했고, 지도에 하차 후보 정류장을
+    // 전부 찍어 "내 하차"가 엉뚱한 곳에 보였다 — 참가할 수 없는 사람에게 필요한 건 지도가 아니라 이유다.
+    const why = prev.matchScore.reasons || {};
+    const reasonText = !why.nearOrigin
+      ? `내 출발지(${escapeHtml(u.origin || '정해지지 않음')})가 이 팟 출발지(${escapeHtml(pod.originName)})와 멀어요. 내 정보에서 출발지를 바꾸면 다시 확인할 수 있어요.`
+      : !why.timeOk
+        ? `이 팟은 ${escapeHtml(pod.departTime)}에 출발해요. 내가 정한 출발 시간(${escapeHtml(u.time)})보다 1시간 넘게 일찍 떠나서 참가할 수 없어요.`
+        : !why.sameGender
+          ? '이 팟은 같은 성별끼리만 참가할 수 있어요.'
+          : `내 목적지(${escapeHtml(u.dest)})가 이 팟 경로에서 너무 멀어요. 하차지점에서 도보 ${WALK_CAP_MIN}분 안에 닿을 수 있어야 참가할 수 있어요.`;
     html += `
       <div class="info-box is-danger">
         <h3 style="color:var(--danger);">참가할 수 없어요</h3>
-        <p class="fine-note" style="color:var(--danger);">내 목적지(${escapeHtml(u.dest)})가 이 팟 경로에서 너무 멀어요. 하차지점에서 도보 ${WALK_CAP_MIN}분 안에 닿을 수 있어야 참가할 수 있어요.</p>
+        <p class="fine-note" style="color:var(--danger);">${reasonText}</p>
       </div>
     `;
     body.innerHTML = html;
-    paintRouteMap(map1.id, { stops: pod.routeStops, originName: pod.originName, leaderDest: pod.leaderDest, dropPoint: fallbackStop, myDest: fallbackStop });
     cta.innerHTML = `<button class="btn btn--ghost btn--block" id="btn-back-home">다른 팟 보기</button>`;
     document.getElementById('btn-back-home').addEventListener('click', () => showScreen('screen-home'));
     return;
