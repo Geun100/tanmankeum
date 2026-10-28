@@ -3774,8 +3774,9 @@ async function renderPodChat(podId){
       openReportModal(pod);
     });
     pWrap.appendChild(reportBtn);
+  } else {
+    pWrap.appendChild(helpLinkEl()); // 비용·정산·인원 문제 등을 운영자에게 바로 문의할 수 있게(링크가 두 줄로 겹치지 않게 신고 링크가 없을 때만)
   }
-  pWrap.appendChild(helpLinkEl()); // 비용·정산·인원 문제 등을 운영자에게 바로 문의할 수 있게
   if (pod.leaderId === u.id) decorateWarnBadges(pod, pWrap); // 팟장만 "주의" 배지를 본다
 
   // 지도는 접어둔 기본 상태에선 안 그린다 — 카카오 길찾기 API를 매번 부르는 건 비용이고,

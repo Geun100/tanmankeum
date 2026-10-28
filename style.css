@@ -115,7 +115,7 @@
   .report-opt input{ width:18px; height:18px; accent-color:var(--primary); flex-shrink:0; }
   .report-detail{ display:block; width:100%; box-sizing:border-box; margin:4px 0 2px; padding:10px 12px; border:1px solid var(--line); border-radius:var(--radius-input); font-size:14px; line-height:1.5; color:var(--ink); background:#fff; resize:none; }
   .report-detail:focus{ outline:2px solid var(--primary); outline-offset:-1px; }
-  .report-err{ margin:10px 0 0; font-size:13px; color:var(--danger); text-align:left; }
+  .modal-card .report-err{ margin:10px 0 0; font-size:13px; color:var(--danger); text-align:left; }
   .file-picker-input{ position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; }
   .field-row .field{ flex:1; min-width:0; }
   .hint-box{ background:var(--primary-soft); color:var(--primary-dark); font-size:13px; line-height:1.6; padding:12px 14px; border-radius:var(--radius-input); }
