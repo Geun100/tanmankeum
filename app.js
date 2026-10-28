@@ -4346,18 +4346,21 @@ function confirmFinishPod(pod){
   });
 }
 
-// 팟원 쪽 종료: 팟장이 팟을 종료해 내 팟이 사라졌다. 정산 내역은 팟장 기기에만 있어서 요약은 비어 있고, 완료 화면의
-// "새 팟 찾으러 가기"로 팟 만들기 단계에 들어간다(팟장과 같은 길).
+// 팟원 쪽 종료: 팟장이 "정산 완료하고 팟 종료"를 눌러 내 팟이 사라졌다. 입금 확인을 따로 체크하지 않은 팟장을 위한 한 번에 끝내기라서,
+// 팟원 전원이 입금 확인된 것과 똑같이 다룬다 — 이용 기록을 남기고 바로 새 팟 만들기로 보낸다(finishMemberRide와 같은 결과).
+// 정산 내역은 팟장 기기에만 있어서 기록 금액은 예상 요금이다.
 function showPodEndedForMember(pod){
   unsubscribePod();
   unsubscribeHome();
+  const me = pod.participants.find(p => p.id === STATE.user.id);
+  if (me && me.accepted) saveRideRecord(buildRideRecord(pod)); // 팟이 지워지기 전에 마지막으로 본 값으로 만든다
   STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
   delete STATE.chatMessages[pod.id];
   STATE.myPodId = null;
   STATE.committed = false;
   STATE.userState = '완료';
   renderDoneSummary(pod);
-  showScreen('screen-done');
+  openNewPodInput({ backTo: 'screen-done', keepPlaces: false });
 }
 
 // 팟 종료 화면에 방금 정산한 내역을 요약해서 보여준다. 예전엔 "팟이 완료됐어요" 한 줄만 있고
