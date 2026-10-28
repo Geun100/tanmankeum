@@ -152,6 +152,27 @@ const sentTo = () => sent.map(s => s.endpoint).sort();
   r = await call({ event: 'chat', podId: POD, messageId: MSG(10) });
   assert.equal(r.statusCode, 200); assert.equal(sent.length, 0, '알림을 켠 사람이 없으면 조용히 끝난다');
 
+  // ── confirmed: 팟장이 팟을 확정하면 팟원들에게(팟장 제외) 한 번만 알린다 ──
+  reset(); db.pods[0].status = 'confirmed';
+  r = await call({ event: 'confirmed', podId: POD });
+  assert.equal(r.body.notified, 2, '팟원 두 명에게 간다');
+  assert.deepEqual(sentTo(), ['ep-' + A, 'ep-' + B], '팟장에게는 안 간다');
+  assert.equal(sent[0].payload.title, '팟이 확정됐어요');
+  assert.equal(sent[0].payload.body, '한동대학교 → 포항역 · 18:00 출발 팟이 확정됐어요. 팟장이 정산 안내를 보내면 입금해주세요');
+  assert.equal(sent[0].payload.url, `/?pod=${POD}`);
+  const confirmedSent = sent.length;
+  r = await call({ event: 'confirmed', podId: POD });
+  assert.equal(r.body.reason, '이미 알렸어요'); assert.equal(sent.length, confirmedSent, '같은 팟의 확정 알림은 한 번만');
+  reset(); // 아직 모집 중인 팟에 확정 요청(위조)
+  r = await call({ event: 'confirmed', podId: POD });
+  assert.equal(r.body.notified, 0); assert.equal(sent.length, 0, '확정 상태가 아니면 안 보낸다');
+  reset(); db.pods[0].status = 'confirmed'; db.pod_participants = [{ pod_id: POD, user_id: LEADER }];
+  r = await call({ event: 'confirmed', podId: POD });
+  assert.equal(sent.length, 0, '팟장 혼자면 알릴 사람이 없다');
+  reset(); db.pods[0].status = 'confirmed'; flags.missingEvents = true;
+  r = await call({ event: 'confirmed', podId: POD });
+  assert.equal(sent.length, 0, 'push_events 표를 못 쓰면 보내지 않는다');
+
   // ── cancelled ──
   reset(); db.pods[0].status = 'dissolved';
   r = await call({ event: 'cancelled', podId: POD });

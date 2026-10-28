@@ -534,6 +534,11 @@ function notifyPodCancelled(podId){
 }
 // 팟장이 정산을 마치고 종료하면 참가자 전원에게 알린다. 종료하면 서버에서 팟이 지워져 서버가 상태를 확인할 수 없으니,
 // 지우기 직전에 부르고 응답을 기다린다(fire-and-forget이면 지운 뒤에 도착해 "팟을 못 찾았어요"로 끝난다).
+// 팟장이 팟을 확정하면 팟원들에게 알린다. 서버가 DB의 팟 상태가 정말 확정인지 확인하고 보낸다. 알림은 부가 기능이라 실패해도 확정은 그대로다.
+function notifyPodConfirmed(podId){
+  if (!SUPA_ENABLED) return;
+  fetch('/api/notify-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'confirmed', podId }) }).catch(() => {});
+}
 async function notifyPodFinished(podId){
   if (!SUPA_ENABLED) return;
   try {
@@ -673,6 +678,29 @@ function fareBreakdownHtml(p, actualAmount){
   }).join('');
   if (isActual) rows += `<p class="fine-note" style="margin:4px 0 0; color:var(--muted);">※ 예상 요금(${won(expected)})과 실제 택시비가 달라서, 실제 택시비에 맞춰 구간별 금액을 같은 비율로 조정했어요.</p>`;
   return `<details style="margin:2px 0 6px;"><summary style="cursor:pointer; color:var(--primary-dark); font-size:13px;">왜 이 금액이에요?</summary>${rows}</details>`;
+}
+// fareBreakdownHtml의 글자 버전 — 계좌 공유 메시지에 "왜 이 금액인지"를 채팅으로 남길 때 쓴다.
+// 구간별 택시비를 그 구간을 같이 탄 인원수로 나눈 값이고, 실제 택시비에 맞춰 비율로 다시 맞춘다.
+function fareBreakdownLines(p, actualAmount){
+  if (!p || !p.breakdown || !p.breakdown.length || !(actualAmount > 0)) return [];
+  const expected = p.breakdown.reduce((a, b) => a + b.share, 0);
+  const k = expected > 0 ? actualAmount / expected : 1;
+  return p.breakdown.map((b, i) => {
+    let share = Math.round(b.share * k);
+    if (i === p.breakdown.length - 1) share = actualAmount - p.breakdown.slice(0, -1).reduce((a, x) => a + Math.round(x.share * k), 0);
+    return `${b.from} → ${b.to}: ${won(b.segmentFare * k)} ÷ ${b.riders}명 = ${won(share)}`;
+  });
+}
+// 채팅 메시지는 500자까지라(pod_messages.text 제약) 길면 여러 개로 나눈다. 한 사람 몫(block)은 쪼개지 않는다.
+function chunkChatBlocks(header, blocks, footer, max = 460){
+  const out = [];
+  let cur = header;
+  blocks.forEach(b => {
+    if (cur.length + 1 + b.length > max && cur !== header) { out.push(cur); cur = header; }
+    cur += '\n' + b;
+  });
+  out.push(footer ? `${cur}\n${footer}` : cur);
+  return out;
 }
 // 닉네임·계좌번호처럼 사용자가 직접 입력한 문자열을 템플릿 리터럴로 innerHTML에 꽂을 때 반드시
 // 거친다. 온보딩 입력창의 maxlength는 클라이언트 표시일 뿐이라, Supabase REST API를 직접 호출하면
@@ -946,7 +974,9 @@ function calcMatchScore(user, pod, allowConditional = false, ignoreTime = false)
   const timeOk = ignoreTime || seedIgnoresDate(pod) || timeToMin(pod.departTime) >= timeToMin(user.time) - 60;
 
   const walkable = allWalkable(hypoPod);
-  const eligible = nearOrigin && sameGender && timeOk && walkable;
+  // 캐리어(기내용·대형)를 든 사람은 트렁크가 이미 가득 찬 팟에 들어갈 수 없다. 이미 이 팟에 있는 사람은 따지지 않는다.
+  const carrierOk = alreadyIn || !(user.luggageType === 'carryon' || user.luggageType === 'large') || carrierCount(pod) < CARRIER_CAPACITY;
+  const eligible = nearOrigin && sameGender && timeOk && carrierOk && walkable;
   const routeScore = eligible ? 25 : 0;
 
   const diffMin = Math.abs(timeToMin(user.time) - timeToMin(pod.departTime));
@@ -974,7 +1004,7 @@ function calcMatchScore(user, pod, allowConditional = false, ignoreTime = false)
   return {
     total, originScore, fitScore, routeScore, timeScore, sizeScore, eligible, conditional, hypoPod, myId, trainMatch,
     // 참가할 수 없을 때 어느 조건이 걸렸는지 — 상세 화면이 이유를 정확히 알려주는 데 쓴다.
-    reasons: { nearOrigin, sameGender, timeOk, walkable },
+    reasons: { nearOrigin, sameGender, timeOk, carrierOk, walkable },
     originDistM: Number.isFinite(originDist) ? Math.round(originDist) : null, diffMin,
   };
 }
@@ -1718,6 +1748,23 @@ async function leavePod(pod, { createOwn = true, onLeft } = {}){
   if (createOwn) await createOwnPod(); // 입금 확인 뒤 새 팟을 직접 만들러 가는 경우엔 미리 만들어 두지 않는다
 }
 
+// 팟이 끝났을 때(팟장·팟원 공통): "팟이 완료됐어요" 화면을 잠깐 보여준 뒤 버튼 없이 새 팟 만들기로 보낸다.
+// 완료 화면에서 뒤로 돌아오면 버튼이 없어 막히므로, 새 팟 만들기의 뒤로가기는 홈으로 보낸다.
+const DONE_SCREEN_MS = 2000;
+let doneTimer = null;
+function showDoneThenNewPod(pod){
+  renderDoneSummary(pod);
+  showScreen('screen-done');
+  if (doneTimer) clearTimeout(doneTimer);
+  doneTimer = setTimeout(() => {
+    doneTimer = null;
+    // 그 사이 사용자가 다른 화면으로 옮겼으면(홈 등) 끌고 가지 않는다
+    if (!document.getElementById('screen-done').classList.contains('active')) return;
+    STATE.myPodId = null; // 끝난 팟은 이미 지워졌다
+    openNewPodInput({ backTo: 'screen-home', keepPlaces: false });
+  }, DONE_SCREEN_MS);
+}
+
 // 팟장이 내 입금을 확인하면(me.paid) 이 팟은 나에게 끝난 것이다 — 버튼 없이 바로 기록을 남기고 새 팟 만들기로 보낸다.
 // 채팅방을 열 때와 홈을 그릴 때 둘 다 여기로 온다. 팟에서 빠질 때 생기는 실시간 이벤트가 이 화면을 다시 그리지 않도록 구독부터 끊는다.
 let finishingRidePodId = null;
@@ -1732,8 +1779,7 @@ async function finishMemberRide(pod){
     saveRideRecord(rideRec);
     STATE.myPodId = null;
     STATE.userState = '완료';
-    renderDoneSummary(pod);
-    openNewPodInput({ backTo: 'screen-done', keepPlaces: false });
+    showDoneThenNewPod(pod);
   } catch (e) {
     showError(friendlyDbError(e));
   } finally {
@@ -2522,10 +2568,11 @@ plusBtn.addEventListener('click', () => { if (partySize < SIZE_MAX) { partySize+
 syncSize();
 
 // --- 2단계: 짐 종류(없음/작은 짐/큰 짐) + 자유 메모 — 평소엔 칩 한 번 탭이면 끝나고,
-// 캐리어 수는 아래 CARRIER_CAPACITY 대비로 보여주기만 하고 참가를 막지는 않는다. 특이사항 있는 사람만 메모에 직접 적게 둔다. ---
+// 캐리어 수는 아래 CARRIER_CAPACITY 대비로 보여주고, 이미 가득 찬 팟에는 캐리어를 든 사람이 참가할 수 없다(calcMatchScore). 특이사항 있는 사람만 메모에 직접 적게 둔다. ---
 const LUGGAGE_LABEL = { small: `${iconSvg('backpack', 14)}백팩·소형`, carryon: `${iconSvg('carryon', 14)}기내용 캐리어`, large: `${iconSvg('suitcase', 14)}대형 캐리어` }; // none은 표시 안 함
 // 택시 트렁크에 실을 수 있는 캐리어 수(일반 택시 기준). 기내용·대형 캐리어를 1개로 센다.
-// 백팩·소형은 세지 않고 인원수로만 알린다. 목록·채팅방에 "캐리어 n/2개"로 보여주기만 하고 참가를 막지는 않는다.
+// 백팩·소형은 세지 않고 인원수로만 알린다. 목록·채팅방에 "캐리어 n/2개"로 보여주고, 캐리어(기내용·대형)를 든 사람은 이미 가득 찬 팟에 참가할 수 없다.
+// 이 검사는 화면(앱)에서만 한다 — 두 사람이 동시에 마지막 자리를 잡는 경우까지 막으려면 DB 트리거가 필요하다.
 const CARRIER_CAPACITY = 2;
 function carrierCount(pod){
   return pod.participants.filter(p => p.luggageType === 'carryon' || p.luggageType === 'large').length;
@@ -3411,7 +3458,9 @@ async function renderPodDetail(podId){
       ? `내 출발지(${escapeHtml(u.origin || '정해지지 않음')})가 이 팟 출발지(${escapeHtml(pod.originName)})와 멀어요. 내 정보에서 출발지를 바꾸면 다시 확인할 수 있어요.`
       : !why.sameGender
         ? '이 팟은 같은 성별끼리만 참가할 수 있어요.'
-        : `내 목적지(${escapeHtml(u.dest)})가 이 팟 경로에서 너무 멀어요. 하차지점에서 도보 ${WALK_CAP_MIN}분 안에 닿을 수 있어야 참가할 수 있어요.`;
+        : !why.carrierOk
+          ? `이 팟은 캐리어 자리가 가득 찼어요(캐리어 ${carrierCount(pod)}/${CARRIER_CAPACITY}개). 캐리어 없이 갈 수 있거나 자리가 남은 다른 팟을 찾아봐요.`
+          : `내 목적지(${escapeHtml(u.dest)})가 이 팟 경로에서 너무 멀어요. 하차지점에서 도보 ${WALK_CAP_MIN}분 안에 닿을 수 있어야 참가할 수 있어요.`;
     html += `
       <div class="info-box is-danger">
         <h3 style="color:var(--danger);">참가할 수 없어요</h3>
@@ -3692,18 +3741,16 @@ async function checkMyReportNotice(){
 }
 
 /* ============ 11. 화면 4: 팟 채팅방 ============ */
-// "🤖 팟 정보"를 한 번 열어보면, 채팅을 보내서 renderPodChat이 다시 그려져도 계속 보이게
-// 기억해둔다(podId -> 인사말 텍스트, 못 받았으면 ''). DB에는 안 저장한다 — 이 화면을 나가서
-// 다시 들어오면 사라지는 건 원래 의도대로 유지한다.
-const podSummaryIntro = {};
-
 // 정산 화면에서 찍은 영수증/미터기 사진(podId -> { file }). 재렌더에도 살아남게 모듈 스코프에 둔다.
 // 이 사진은 (1) OCR로 금액을 읽고 (2) 계좌 공유 시 영수증 증빙으로 그대로 업로드된다 — 두 번 찍을 필요 없음.
 const settlementPhoto = {};
 
 // bot-route-row/bot-person-list/bot-total-row 마크업. 클릭했을 때와, 이미 열어둔 상태로
 // 화면이 다시 그려질 때 둘 다 이 함수 하나로 만든다 — 갈라지면 둘이 슬금슬금 달라진다.
-function buildBotSummaryHtml(pod, result, intro){
+// opts.modal: 팟 정보 창(모달)에 넣을 때는 "택시팟 매니저" 말풍선 머리를 뺀다.
+// 확정된 뒤에는 예상 요금이 의미가 없어서 보여주지 않는다 — 정산이 끝나면 정산 금액(settled)만 보인다.
+function buildBotSummaryHtml(pod, result, intro, opts = {}){
+  const showEstimate = pod.status === 'recruiting';
   const leaderId = pod.leaderId;
   const settlementMap = {};
   (pod.settlement || []).forEach(s => { settlementMap[s.nickname] = s.amount; });
@@ -3713,7 +3760,7 @@ function buildBotSummaryHtml(pod, result, intro){
   // 본다 — 남의 하차지점까지 낀 경로를 보여주면 오히려 헷갈린다.
   const leaderRouteHref = kakaoMapMultiRouteUrl(result.stops);
   return `
-    <span class="chat-name">택시팟 매니저</span>
+    ${opts.modal ? '' : '<span class="chat-name">택시팟 매니저</span>'}
     ${intro ? `<p class="bot-intro">${intro}</p>` : ''}
     <div class="bot-route-row">${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)} · ${pod.departTime} 출발 · 약 ${result.totalMins}분 · 도착 약 ${arrival}</div>
     <div class="bot-person-list">
@@ -3739,7 +3786,7 @@ function buildBotSummaryHtml(pod, result, intro){
           <div class="bot-person">
             <div class="bot-person-top">
               <span class="bot-person-name">${escapeHtml(p.nickname)}${isLeader ? ' <span class="badge badge--leader">팟장</span>' : ''}</span>
-              <span class="bot-person-fare">${won(p.fare)}</span>
+              ${showEstimate ? `<span class="bot-person-fare">${won(p.fare)}</span>` : ''}
             </div>
             <p class="bot-person-route">${routeText}</p>
             ${settled != null ? `<p class="bot-person-route">정산금 ${won(settled)}</p>` : ''}
@@ -3747,7 +3794,7 @@ function buildBotSummaryHtml(pod, result, intro){
           </div>`;
       }).join('')}
     </div>
-    <div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div>
+    ${showEstimate ? `<div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div>` : ''}
   `;
 }
 
@@ -3910,7 +3957,7 @@ async function renderPodChat(podId){
         </span>
         <p>${escapeHtml(p.gender)} · 목적지 ${escapeHtml(p.dest)} · 하차 ${escapeHtml(f.dropPoint)}(도보 ${f.walkTime}분)${LUGGAGE_LABEL[p.luggageType] ? ` · ${LUGGAGE_LABEL[p.luggageType]}` : ''}</p>
       </div>
-      <div class="participant-fare">${won(f.fare)}</div>
+      ${pod.status === 'recruiting' ? `<div class="participant-fare">${won(f.fare)}</div>` : ''}
     `;
     pWrap.appendChild(row);
   });
@@ -4008,13 +4055,6 @@ async function renderPodChat(podId){
       msgWrap.appendChild(div);
     });
   }
-  // "팟 정보"를 이미 열어둔 상태였으면, 채팅을 보내서 이 화면이 다시 그려져도 그대로 복원한다.
-  if (podSummaryIntro[podId] !== undefined) {
-    const botDiv = document.createElement('div');
-    botDiv.className = 'chat-msg bot';
-    botDiv.innerHTML = buildBotSummaryHtml(pod, result, podSummaryIntro[podId]);
-    msgWrap.appendChild(botDiv);
-  }
   if (keepScrollTop !== null) chatBody.scrollTop = keepScrollTop; else scrollChatToBottom();
 
   const chatInput = document.getElementById('chat-input');
@@ -4077,48 +4117,18 @@ async function renderPodChat(podId){
     }
   };
 
-  // "🤖 팟 정보" — 경로/하차지점/요금을 봇 말풍선으로 보여준다. 실제 채팅 메시지가 아니라
-  // 이 화면에서만 보이는 안내라서 pod_messages에 저장하지 않는다(다시 열면 사라짐, 필요하면 또 누르면 됨).
+  // "팟 정보" — 경로·하차지점을 잠깐 볼 수 있는 창으로 연다. 채팅 흐름에 끼워 넣지 않아서 닫으면 채팅은 그대로다.
   const shareBtn = document.getElementById('btn-share-pod');
   if (shareBtn) shareBtn.addEventListener('click', () => sharePod(pod));
   const summaryBtn = document.getElementById('btn-ai-summary');
-  summaryBtn.addEventListener('click', async () => {
-    // 이미 열어둔 상태면 다시 안 받아온다 — 아래로 스크롤만 해서 보여준다.
-    if (podSummaryIntro[podId] !== undefined) {
-      scrollChatToBottom();
-      return;
-    }
-    summaryBtn.disabled = true;
-    summaryBtn.textContent = '정리 중…';
-    try {
-      // 인사 한 줄만 AI한테 받는다 — 숫자는 여기서 이미 정확히 계산돼 있으니(result) 표로 직접 그린다.
-      // AI 호출이 실패해도(네트워크 등) 표는 그대로 보여준다 — 인사말은 있으면 좋은 것일 뿐, 핵심은 표.
-      let intro = '';
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            originName: pod.originName, trunkDest: pod.leaderDest, departTime: pod.departTime,
-            peopleCount: pod.participants.length, seatsLeft, isLeader, status: pod.status,
-          }),
-        });
-        const data = await res.json();
-        if (res.ok && data.summary) intro = data.summary;
-      } catch (e) { /* 인사말 없이 표만 보여줘도 괜찮다 */ }
-
-      podSummaryIntro[podId] = intro;
-      const div = document.createElement('div');
-      div.className = 'chat-msg bot';
-      div.innerHTML = buildBotSummaryHtml(pod, result, intro);
-      msgWrap.appendChild(div);
-      scrollChatToBottom();
-    } catch (e) {
-      showError('팟 정보를 못 가져왔어요. 잠시 후 다시 시도해보세요.');
-    } finally {
-      summaryBtn.disabled = false;
-      summaryBtn.innerHTML = `${iconSvg('info', 15)}팟 정보`;
-    }
+  summaryBtn.addEventListener('click', () => {
+    openModal({
+      title: '팟 정보',
+      cardClass: 'modal-card--rich',
+      bodyHtml: `<div class="pod-info-modal">${buildBotSummaryHtml(pod, result, '', { modal: true })}</div>`,
+      confirmLabel: '닫기',
+      onConfirm: () => {},
+    });
   });
 
   async function sendChat(){
@@ -4172,8 +4182,8 @@ async function renderPodChat(podId){
   } else if (!isLeader && pod.status !== 'recruiting') {
     // 확정된 뒤에는 참가자가 팟에서 나갈 길이 없다(수락·거절 단계도 없다) — 참가는 확정 전에 신중하게 정한다.
     // 팟이 끝나는 길은 팟장이 입금을 확인하거나(finishMemberRide) 팟장이 팟을 종료하는 것(showPodEndedForMember)뿐이다.
+    // 요금은 예상일 뿐이라 팟원에게는 따로 보여주지 않는다 — 최종 요금은 팟장이 정산 때 채팅방에 공유한다.
     ctaHtml += `<p class="cta-hint">팟이 확정됐어요. 팟장이 채팅방에 정산 안내를 보내면 입금해주세요. 입금이 확인되면 새 팟을 만들 수 있어요.</p>`;
-    ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   } else if (isLeader && pod.status !== 'recruiting') {
     ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
@@ -4183,7 +4193,7 @@ async function renderPodChat(podId){
   if (confirmBtn) confirmBtn.addEventListener('click', () => {
     openModal({
       title: '팟을 확정할까요?',
-      body: `현재 ${pod.participants.length}명으로 팟을 확정해요. 확정 후에는 최종 경로와 요금이 계산되고, 팟을 취소할 수 없어요. 팟장은 택시비를 먼저 결제하고, 정산 때 팟원들에게 몫을 받아요.`,
+      body: `현재 ${pod.participants.length}명으로 확정해요. 확정하면 취소할 수 없어요. 요금은 도착 후 실제 택시비로 정산해요.`,
       confirmLabel: '확정하기',
       onConfirm: async () => {
         try {
@@ -4195,6 +4205,7 @@ async function renderPodChat(podId){
           pod.finalResult = calcFinalRouteAndFare(pod);
           STATE.userState = '팟확정';
           track('pod_confirmed', { pod_id: pod.id, party_size: pod.participants.length });
+          notifyPodConfirmed(pod.id); // 팟원들에게 "팟이 확정됐어요" 푸시
           renderFinal(pod.id);
           showScreen('screen-final');
         } catch (e) {
@@ -4385,8 +4396,7 @@ function confirmFinishPod(pod){
         saveRideRecord(rideRec);
         STATE.userState = '완료';
         track('pod_completed', { pod_id: pod.id, party_size: pod.participants.length });
-        renderDoneSummary(pod); // STATE.pods에선 방금 빠졌지만 pod 객체 자체(경로·정산 내역)는 그대로 살아있다
-        showScreen('screen-done');
+        showDoneThenNewPod(pod); // STATE.pods에선 방금 빠졌지만 pod 객체 자체(경로·정산 내역)는 그대로 살아있다
       } catch (e) {
         showError(friendlyDbError(e));
       }
@@ -4407,8 +4417,7 @@ function showPodEndedForMember(pod){
   STATE.myPodId = null;
   STATE.committed = false;
   STATE.userState = '완료';
-  renderDoneSummary(pod);
-  openNewPodInput({ backTo: 'screen-done', keepPlaces: false });
+  showDoneThenNewPod(pod);
 }
 
 // 팟 종료 화면에 방금 정산한 내역을 요약해서 보여준다. 예전엔 "팟이 완료됐어요" 한 줄만 있고
@@ -4700,9 +4709,20 @@ function renderSettlement(podId){
         let uploadedPath = null;
         let messageSaved = false;
         try {
-          const lines = [`정산 내역이에요.`, `입금 계좌: ${acc}`];
-          (pod.settlement || []).forEach(s => lines.push(`${s.nickname}: ${won(s.amount)}`));
+          const settled = pod.settlement || [];
+          const totalActual = settled.reduce((s, x) => s + x.amount, 0);
+          const lines = [`정산 내역이에요.`, `실제 택시비 합계: ${won(totalActual)}`, `입금 계좌: ${acc}`];
+          settled.forEach(s => lines.push(`${s.nickname}: ${won(s.amount)}`));
           const text = lines.join('\n');
+          // "왜 이 금액이에요?"를 채팅으로도 남긴다 — 입금액 메시지와 따로 보내서 계좌·영수증이 묻히지 않게 한다.
+          const whyBlocks = settled.map(s => {
+            const per = result.perPerson.find(x => x.nickname === s.nickname);
+            const rows = fareBreakdownLines(per, s.amount);
+            return rows.length ? `${s.nickname}\n${rows.map(r => '  ' + r).join('\n')}` : null;
+          }).filter(Boolean);
+          const whyTexts = whyBlocks.length
+            ? chunkChatBlocks('금액은 이렇게 나왔어요.', whyBlocks, '※ 구간별 택시비를 그 구간을 같이 탄 사람 수로 나눠요.')
+            : [];
           let imageUrl = null;
           if (file && SUPA_ENABLED) {
             // Supabase Storage 키는 비-ASCII 문자(한글 등)를 거부한다("InvalidKey") — 원본 파일명을
@@ -4717,12 +4737,18 @@ function renderSettlement(podId){
             imageUrl = supa.storage.from('settlement-photos').getPublicUrl(path).data.publicUrl;
           }
           if (SUPA_ENABLED) {
-            const { error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: pod.leaderId, text, image_url: imageUrl });
+            const { data: saved, error } = await supa.from('pod_messages').insert({ pod_id: podId, user_id: pod.leaderId, text, image_url: imageUrl }).select('id').single();
             if (error) throw error;
             messageSaved = true;
+            notifyPodOfChat(podId, saved && saved.id); // 팟원들에게 "정산 내역" 알림
+            // 금액 근거는 있으면 좋은 설명이라 실패해도 계좌 공유 자체는 성공으로 둔다.
+            for (const t of whyTexts) {
+              try { await supa.from('pod_messages').insert({ pod_id: podId, user_id: pod.leaderId, text: t }); } catch (_) { break; }
+            }
           } else {
             if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
             STATE.chatMessages[podId].push({ who: '나', mine: true, text, imageUrl });
+            whyTexts.forEach(t => STATE.chatMessages[podId].push({ who: '나', mine: true, text: t }));
           }
           document.getElementById('share-confirm-note').textContent = `채팅방에 계좌(${acc})와 정산 내역이 공유됐어요. 각자 계좌이체로 정산해주세요.`;
           document.getElementById('btn-finish-pod').disabled = false;
@@ -4785,7 +4811,4 @@ function openNewPodInput({ backTo, keepPlaces }){
   setWheelTime(clockFromNow(30).time);
   setObDate(localDateStr(new Date()));
 }
-document.getElementById('btn-rematch').addEventListener('click', () => {
-  STATE.myPodId = null; // 끝난 팟은 이미 지워졌다
-  openNewPodInput({ backTo: 'screen-done', keepPlaces: false });
-});
+

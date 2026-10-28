@@ -14,7 +14,7 @@
 
 create table if not exists public.push_events (
   pod_id     uuid not null references public.pods(id) on delete cascade,
-  kind       text not null check (kind in ('cancelled', 'left', 'finished', 'chat')),
+  kind       text not null check (kind in ('cancelled', 'left', 'finished', 'confirmed', 'chat')),
   subject    uuid not null,
   bucket     bigint not null,
   created_at timestamptz not null default now(),
