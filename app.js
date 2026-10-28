@@ -3226,7 +3226,7 @@ async function renderPodDetail(podId){
       const prev = STATE.pods[idx];
       const sameHeadcount = prev.finalResult && prev.finalResult.perPerson.length === fresh.participants.length;
       if (sameHeadcount || fresh.status === 'in_progress') fresh.finalResult = prev.finalResult;
-      fresh.settlement = prev.settlement;
+      fresh.settlement = prev.settlement; fresh.accountShared = prev.accountShared;
       STATE.pods[idx] = fresh;
     } else {
       STATE.pods.push(fresh);
@@ -3486,7 +3486,7 @@ async function renderPodChat(podId){
       const prev = STATE.pods[idx];
       const sameHeadcount = prev.finalResult && prev.finalResult.perPerson.length === fresh.participants.length;
       if (sameHeadcount || fresh.status === 'in_progress') fresh.finalResult = prev.finalResult;
-      fresh.settlement = prev.settlement;
+      fresh.settlement = prev.settlement; fresh.accountShared = prev.accountShared;
       STATE.pods[idx] = fresh;
     } else {
       STATE.pods.push(fresh);
@@ -4079,6 +4079,17 @@ function renderFinal(podId){
 // 예전엔 채팅방 버튼이 무조건 정산 화면으로 다시 보냈는데, 계좌번호까지 공유하고 온 사람한테는
 // 이미 끝난 계산을 다시 보여주는 셈이라 한 번 더 누르게 만드는 불필요한 단계였다.
 function confirmFinishPod(pod){
+  // 계좌를 공유하기 전에 팟을 지우면 참가자들이 어디로 입금해야 하는지 알 수 없고, 채팅과 영수증도 함께 사라진다.
+  // 정산 화면과 채팅방, 두 종료 버튼이 모두 이 함수를 지나므로 여기서 한 번만 막는다.
+  if (!pod.accountShared) {
+    openModal({
+      title: '계좌번호를 먼저 공유해주세요',
+      body: '참가자들이 입금할 수 있게 채팅방에 계좌번호를 공유한 뒤에 팟을 종료할 수 있어요.',
+      confirmLabel: '공유하러 가기',
+      onConfirm: () => { renderSettlement(pod.id); showScreen('screen-settlement'); },
+    });
+    return;
+  }
   openModal({
     title: '정산을 완료하고 팟을 종료할까요?',
     body: '이 팟과 채팅 내용이 전부 삭제돼요. 되돌릴 수 없어요.',
@@ -4422,6 +4433,7 @@ function renderSettlement(podId){
           }
           document.getElementById('share-confirm-note').textContent = `채팅방에 계좌(${acc})와 정산 내역이 공유됐어요. 각자 계좌이체로 정산해주세요.`;
           document.getElementById('btn-finish-pod').disabled = false;
+          pod.accountShared = true; // confirmFinishPod가 이 표시가 있어야 팟 종료를 허용한다
           // 공유가 실제로 채팅에 떴는지 여기서 문구로 설명하는 대신, 채팅방으로 바로 데려가서
           // 방금 올라간 메시지(계좌번호+영수증 사진)를 직접 눈으로 확인하게 한다.
           await renderPodChat(podId);

@@ -130,16 +130,23 @@ module.exports = async (req, res) => {
     if (!profile) { res.status(200).json({ notified: false, reason: '없는 사용자예요' }); return; }
 
     // 같은 팟에서 10분에 3건까지만 — 흉내 내는 요청이 팟장에게 알림을 쏟아내는 걸 막는다.
+    // 기록을 먼저 남기고(claim) 나서 센다. 센 다음에 남기면 동시에 들어온 요청들이 모두 "아직 3건 이하"로 보고
+    // 통과할 수 있다. 남긴 뒤에 세면 동시 요청이 서로의 기록을 보게 되어, 한도를 넘으면 모두 물러난다
+    // (필요 이상으로 막는 쪽으로 어긋나므로 안전하다).
+    const bucket = Math.floor(Date.now() / WINDOW_MS);
+    const claimed = await claim('left', userId, bucket);
+    if (claimed === 'dup') { res.status(200).json({ notified: false, reason: '이미 알렸어요' }); return; }
+    if (claimed === 'error') { res.status(200).json({ notified: false, skipped: 'push_events 표를 쓸 수 없어요' }); return; }
+
     const since = new Date(Date.now() - WINDOW_MS).toISOString();
     const { count, error: cntErr } = await supa
       .from('push_events').select('pod_id', { count: 'exact', head: true })
       .eq('pod_id', podId).eq('kind', 'left').gte('created_at', since);
-    if (cntErr) { res.status(200).json({ notified: false, skipped: 'push_events 표를 쓸 수 없어요' }); return; }
-    if ((count || 0) >= MAX_LEFT_PER_WINDOW) { res.status(200).json({ notified: false, reason: '잠시 뒤에 다시 알릴 수 있어요' }); return; }
-
-    const claimed = await claim('left', userId, Math.floor(Date.now() / WINDOW_MS));
-    if (claimed === 'dup') { res.status(200).json({ notified: false, reason: '이미 알렸어요' }); return; }
-    if (claimed === 'error') { res.status(200).json({ notified: false, skipped: 'push_events 표를 쓸 수 없어요' }); return; }
+    if (cntErr || (count || 0) > MAX_LEFT_PER_WINDOW) { // count에는 방금 남긴 내 기록도 들어 있다
+      await supa.from('push_events').delete().eq('pod_id', podId).eq('kind', 'left').eq('subject', userId).eq('bucket', bucket); // 이번 기록을 물린다
+      res.status(200).json(cntErr ? { notified: false, skipped: 'push_events 표를 쓸 수 없어요' } : { notified: false, reason: '잠시 뒤에 다시 알릴 수 있어요' });
+      return;
+    }
 
     const { data: sub } = await supa.from('push_subscriptions').select('*').eq('user_id', pod.leader_id).maybeSingle();
     if (!sub) { res.status(200).json({ notified: false, reason: '팟장이 알림을 안 켜뒀어요' }); return; }

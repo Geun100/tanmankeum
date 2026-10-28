@@ -21,6 +21,19 @@ function reset() {
   sent = [];
 }
 
+// 동시 요청 시험: flags.holdCounts가 N이면, N개의 요청이 모두 "횟수 세기" 단계에 도착할 때까지 붙잡았다가 한꺼번에 푼다.
+// 그러면 요청들이 같은 순간에 센다 — 센 다음에 기록을 남기는 구현이면 전부 "아직 한도 아래"로 보고 통과한다.
+// 일부가 거절돼 도착하지 않는 구현도 멈추지 않게 300ms 뒤에는 그냥 푼다.
+let held = [];
+async function barrier() {
+  if (!flags.holdCounts) return;
+  await new Promise(resolve => {
+    held.push(resolve);
+    if (held.length >= flags.holdCounts) { held.splice(0).forEach(f => f()); return; }
+    setTimeout(() => { const i = held.indexOf(resolve); if (i >= 0) { held.splice(i, 1); resolve(); } }, 300);
+  });
+}
+
 class Q {
   constructor(table) { this.table = table; this.filters = []; this.cols = '*'; this.opts = {}; this.op = 'select'; }
   select(cols, opts) { this.cols = cols || '*'; this.opts = opts || {}; return this; }
@@ -38,6 +51,7 @@ class Q {
       rows.push({ ...this.row, created_at: new Date().toISOString() });
       return { data: null, error: null };
     }
+    if (this.table === 'push_events' && this.opts.head) await barrier(); // 횟수 세기 단계(동시 요청 시험용)
     const hit = rows.filter(r => this.filters.every(f => f(r)));
     if (this.op === 'delete') { db[this.table] = rows.filter(r => !hit.includes(r)); return { data: null, error: null }; }
     if (this.table === 'push_events' && flags.missingEvents) return { data: null, count: null, error: { code: '42P01', message: 'relation does not exist' } };
@@ -163,6 +177,15 @@ const sentTo = () => sent.map(s => s.endpoint).sort();
   reset(); removeParticipant(B); db.push_subscriptions = db.push_subscriptions.filter(s => s.user_id !== LEADER);
   r = await call({ event: 'left', podId: POD, userId: B });
   assert.equal(r.body.notified, false); assert.equal(sent.length, 0, '팟장이 알림을 안 켰으면 조용히 건너뛴다');
+
+  // 동시에 몰려도 한도(3건)를 넘지 않는다. 기록을 먼저 남기고 세기 때문이다(세고 나서 남기면 모두 통과한다).
+  reset(); [A, B].forEach(removeParticipant);
+  flags.holdCounts = 5; // 5건이 모두 같은 순간에 횟수를 세게 한다
+  const burst = await Promise.all([A, B, C, D, E].map(id => call({ event: 'left', podId: POD, userId: id })));
+  flags.holdCounts = 0;
+  assert.ok(sent.length <= 3, `동시에 5건이 와도 3건을 넘게 보내면 안 된다(실제 ${sent.length}건)`);
+  assert.ok(burst.every(x => x.statusCode === 200));
+  assert.ok(db.push_events.filter(e => e.kind === 'left').length <= 3, '한도를 넘은 요청의 기록은 물러서 표에 3건 넘게 남지 않는다');
 
   // ── 공통 ──
   reset(); flags.missingEvents = true; db.pods[0].status = 'dissolved';
