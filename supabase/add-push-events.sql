@@ -5,6 +5,7 @@
 -- 같은 알림이 반복해서 나가지 않게 이 표에 한 줄씩 먼저 남긴다(남기는 데 성공해야 보낸다).
 --   cancelled: (pod_id, 'cancelled', 팟장, 0)            → 팟마다 한 번만
 --   left     : (pod_id, 'left', 나간 사람, 10분 구간 번호) → 같은 사람이 같은 팟에서 10분에 한 번만
+--   chat     : (pod_id, 'chat', 메시지 번호, 0)           → 메시지마다 한 번만(add-chat-push.sql이 이미 만든 표에 이 종류를 더한다)
 -- 같은 팟에서 10분에 'left' 알림이 3건을 넘으면 서버가 더 보내지 않는다(위조 요청으로 팟장에게 알림을 쏟아내는 걸 막는다).
 --
 -- RLS만 켜고 정책을 하나도 만들지 않는다 — anon 키(프론트 번들에 박힌 공개값)로는 읽기·쓰기가 전부 막히고,
@@ -13,7 +14,7 @@
 
 create table if not exists public.push_events (
   pod_id     uuid not null references public.pods(id) on delete cascade,
-  kind       text not null check (kind in ('cancelled', 'left')),
+  kind       text not null check (kind in ('cancelled', 'left', 'finished', 'chat')),
   subject    uuid not null,
   bucket     bigint not null,
   created_at timestamptz not null default now(),

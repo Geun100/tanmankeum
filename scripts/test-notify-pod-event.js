@@ -1,4 +1,4 @@
-// api/notify-join: 참가(join)·나감(left)·팟 취소(cancelled)·팟 종료(finished) 알림이 알맞은 사람에게만, 한 번만 가는지 확인한다.
+// api/notify-join: 참가(join)·나감(left)·팟 취소(cancelled)·팟 종료(finished)·채팅(chat) 알림이 알맞은 사람에게만, 한 번만 가는지 확인한다.
 // 가짜 Supabase(메모리 표)와 가짜 web-push를 쓰므로 실제 DB도 실제 알림도 건드리지 않는다.
 const assert = require('node:assert/strict');
 const Module = require('node:module');
@@ -16,6 +16,7 @@ function reset() {
     profiles: [LEADER, A, B, C, D, E].map((id, i) => ({ id, nickname: ['팟장', '가나', '다라', '마바', '사아', '자차'][i] })),
     push_subscriptions: [LEADER, A, B, C].map(id => ({ user_id: id, endpoint: 'ep-' + id, p256dh: 'k', auth: 'a' })),
     push_events: [],
+    pod_messages: [],
   };
   flags = { missingEvents: false, pushFail: false };
   sent = [];
@@ -102,6 +103,54 @@ const sentTo = () => sent.map(s => s.endpoint).sort();
   reset();
   r = await call({ event: 'join', podId: POD, joinerNickname: '없는사람' });
   assert.equal(r.body.notified, false); assert.equal(sent.length, 0, '참가자 목록에 없는 닉네임은 거절');
+
+  // ── chat: 누가 채팅을 치면 같은 팟의 나머지 사람들에게(보낸 사람 제외) 내용과 함께, 메시지마다 한 번만 ──
+  const MSG = n => `c0000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const addMsg = (id, over = {}) => db.pod_messages.push({ id, pod_id: POD, user_id: A, text: '안녕하세요', image_url: null, created_at: new Date().toISOString(), ...over });
+  reset(); addMsg(MSG(1), { text: '정문 앞에서 만나요' });
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(1) });
+  assert.equal(r.body.notified, 2, '보낸 사람(가나)을 뺀 팟장과 다라에게 간다');
+  assert.deepEqual(sentTo(), ['ep-' + LEADER, 'ep-' + B], '보낸 사람과 팟 밖의 구독자(마바)에게는 안 간다');
+  assert.equal(sent[0].payload.title, '가나');
+  assert.equal(sent[0].payload.body, '정문 앞에서 만나요', '알림에 메시지 내용이 그대로 들어간다');
+  assert.equal(sent[0].payload.url, `/?pod=${POD}`);
+  assert.equal(sent[0].payload.tag, `chat-${POD}`, '같은 팟 알림은 서로 덮어써서 알림창이 쌓이지 않는다');
+  const chatSent = sent.length;
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(1) });
+  assert.equal(r.body.reason, '이미 알렸어요'); assert.equal(sent.length, chatSent, '같은 메시지는 한 번만 알린다(같은 요청 반복 방어)');
+
+  reset(); addMsg(MSG(2), { text: '진짜 내용' });
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(2), text: '위조한 내용', userId: B });
+  assert.equal(sent[0].payload.body, '진짜 내용', '내용과 보낸 사람은 요청이 아니라 DB의 메시지에서 가져온다');
+  assert.equal(sent[0].payload.title, '가나');
+
+  reset(); addMsg(MSG(3), { text: '사진', image_url: 'https://x/y.jpg' });
+  await call({ event: 'chat', podId: POD, messageId: MSG(3) });
+  assert.equal(sent[0].payload.body, '사진을 보냈어요', '사진은 내용 대신 문구');
+  reset(); addMsg(MSG(4), { text: '줄1\n줄2 ' + 'ㅋ'.repeat(200) });
+  await call({ event: 'chat', podId: POD, messageId: MSG(4) });
+  assert.ok(!sent[0].payload.body.includes('\n'), '줄바꿈은 공백으로'); assert.ok(sent[0].payload.body.length <= 101 && sent[0].payload.body.endsWith('…'), '긴 글은 100자에서 줄인다');
+
+  reset(); // 위조·오래된·엉뚱한 요청
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(5) });
+  assert.equal(sent.length, 0, 'DB에 없는 메시지는 안 보낸다');
+  addMsg(MSG(6), { pod_id: 'b0000000-0000-4000-8000-0000000000ff' });
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(6) });
+  assert.equal(sent.length, 0, '다른 팟의 메시지는 이 팟에 알리지 않는다');
+  addMsg(MSG(7), { created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString() });
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(7) });
+  assert.equal(sent.length, 0, '오래된 메시지는 다시 알리지 않는다');
+  r = await call({ event: 'chat', podId: POD, messageId: 'not-a-uuid' });
+  assert.equal(r.statusCode, 400); assert.equal(sent.length, 0);
+  reset(); addMsg(MSG(8)); db.pods[0].status = 'dissolved';
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(8) });
+  assert.equal(sent.length, 0, '취소된 팟에는 안 보낸다');
+  reset(); addMsg(MSG(9)); flags.missingEvents = true;
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(9) });
+  assert.equal(sent.length, 0, 'push_events 표를 못 쓰면 중복을 막을 수 없으니 보내지 않는다');
+  reset(); addMsg(MSG(10)); db.push_subscriptions = [];
+  r = await call({ event: 'chat', podId: POD, messageId: MSG(10) });
+  assert.equal(r.statusCode, 200); assert.equal(sent.length, 0, '알림을 켠 사람이 없으면 조용히 끝난다');
 
   // ── cancelled ──
   reset(); db.pods[0].status = 'dissolved';

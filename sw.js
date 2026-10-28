@@ -16,6 +16,10 @@ self.addEventListener('push', (event) => {
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       data: { url: data.url || '/' },
+      // tag가 같으면 알림창에서 서로 덮어쓰고(채팅이 쌓이지 않는다), renotify로 새 메시지마다 다시 울린다.
+      // 앱이 열려 있어도 알림은 항상 띄운다 — 아이폰은 푸시를 받고도 알림을 안 띄우는 일이 반복되면 푸시 허용을 취소한다.
+      tag: data.tag || undefined,
+      renotify: !!data.tag,
     })
   );
 });
