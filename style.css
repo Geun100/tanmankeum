@@ -585,6 +585,7 @@
   .cta-row .cta-hint{ flex:1 1 auto; text-align:left; }
   .btn--sm{ height:36px; font-size:13px; padding:0 12px; }
   .cta-row .btn--text-danger.btn--sm{ flex:0 0 auto; padding:0 10px; }
+  .cta-row #btn-confirm-pod{ height:44px; font-size:15px; } /* 팟장의 메인 행동이라 옆 취소 링크보다 확실히 크게 */
   .paid-banner{ display:flex; flex-direction:column; gap:4px; align-items:center; text-align:center; background:var(--green-soft); color:var(--green); border-radius:14px; padding:16px 14px; margin:0 0 12px; }
   .paid-banner strong{ font-size:18px; font-weight:800; }
   .paid-banner span{ font-size:14px; font-weight:600; }
