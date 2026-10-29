@@ -168,6 +168,12 @@ async function enterHome({ replaceOwn = false } = {}){
     // 여기도 그 기준과 맞춘다.
     const mine = STATE.pods.find(p => p.status !== 'done' && p.participants.some(x => x.id === STATE.user.id));
     STATE.myPodId = mine ? mine.id : null;
+    // 앱이 꺼져 있는 사이 팟장이 팟을 종료했다면(적어 둔 내 팟이 목록에 없다) 열 때 새 팟 만들기로 보낸다.
+    const marker = memberPodMarker();
+    if (!replaceOwn && !mine && marker && marker.userId === STATE.user.id && !STATE.pods.some(p => p.id === marker.podId)) {
+      STATE.podEndedWhileAway = true;
+    }
+    if (!mine) forgetMemberPod();
     STATE.committed = !!(mine && mine.leaderId !== STATE.user.id);
     STATE.userState = STATE.committed ? '채팅방' : '대기';
 
@@ -1738,6 +1744,15 @@ async function dissolvePod(pod){
 // 안 건드리고 내 참여 기록만 지운다. 팟장 취소(dissolvePod)와 결과는 같다:
 // 대기 상태로 돌아가고 내 팟이 새로 생긴다.
 // onLeft: 내 참여 기록을 지운 직후에 부른다. 팟장 알림을 내 새 팟을 만든 뒤(createOwnPod)가 아니라 이 시점에 보내야 참가 알림만큼 빠르다.
+// 팟원이 확정된 팟에 속해 있을 때 그 팟을 이 기기에 적어 둔다. 앱이 꺼져 있는 사이 팟장이 팟을 종료하면
+// 다음에 열 때 "내 팟이 사라졌다"는 것만 보여서, 그냥 홈으로 가 버린다 — 이 표시로 "끝난 팟"임을 알아본다.
+const MEMBER_POD_KEY = 'tanmankeum_member_pod';
+function rememberMemberPod(pod, userId){
+  try { if (pod.leaderId !== userId && pod.status !== 'recruiting') localStorage.setItem(MEMBER_POD_KEY, JSON.stringify({ podId: pod.id, userId })); } catch (_) {}
+}
+function memberPodMarker(){ try { return JSON.parse(localStorage.getItem(MEMBER_POD_KEY) || 'null'); } catch (_) { return null; } }
+function forgetMemberPod(){ try { localStorage.removeItem(MEMBER_POD_KEY); } catch (_) {} }
+
 async function leavePod(pod, { createOwn = true, onLeft } = {}){
   if (SUPA_ENABLED) {
     const { error } = await supa.from('pod_participants').delete().eq('pod_id', pod.id).eq('user_id', STATE.user.id);
@@ -1745,6 +1760,7 @@ async function leavePod(pod, { createOwn = true, onLeft } = {}){
   } else {
     pod.participants = pod.participants.filter(p => p.id !== STATE.user.id);
   }
+  forgetMemberPod();
   if (onLeft) onLeft();
   STATE.pods = STATE.pods.filter(p => p.id !== pod.id);
   STATE.committed = false;
@@ -1756,17 +1772,20 @@ async function leavePod(pod, { createOwn = true, onLeft } = {}){
 // 완료 화면에서 뒤로 돌아오면 버튼이 없어 막히므로, 새 팟 만들기의 뒤로가기는 홈으로 보낸다.
 const DONE_SCREEN_MS = 2000;
 let doneTimer = null;
-function showDoneThenNewPod(pod){
+// holdUntil: 서버 정리(사진 삭제·알림·팟 삭제)가 아직 끝나지 않았을 때 그 약속을 넘긴다. 완료 화면을 먼저 보여 주고,
+// 최소 노출 시간과 정리 완료가 둘 다 지나면 넘어간다 — 정리를 기다린 다음에야 완료 화면을 띄우면 그동안 아무 반응이 없다.
+function showDoneThenNewPod(pod, holdUntil){
   renderDoneSummary(pod);
   showScreen('screen-done');
   if (doneTimer) clearTimeout(doneTimer);
-  doneTimer = setTimeout(() => {
+  const minShow = new Promise(resolve => { doneTimer = setTimeout(resolve, DONE_SCREEN_MS); });
+  Promise.all([minShow, holdUntil]).then(() => {
     doneTimer = null;
     // 그 사이 사용자가 다른 화면으로 옮겼으면(홈 등) 끌고 가지 않는다
     if (!document.getElementById('screen-done').classList.contains('active')) return;
     STATE.myPodId = null; // 끝난 팟은 이미 지워졌다
     openNewPodInput({ backTo: 'screen-home', keepPlaces: false });
-  }, DONE_SCREEN_MS);
+  }).catch(() => { /* 정리 실패는 호출한 쪽이 알린다 */ });
 }
 
 // 팟장이 내 입금을 확인하면(me.paid) 이 팟은 나에게 끝난 것이다 — 버튼 없이 바로 기록을 남기고 새 팟 만들기로 보낸다.
@@ -2122,6 +2141,13 @@ if (cachedOnboarding) {
       if (mine && isMyPodStale(mine)) {
         if (mine.leaderId === STATE.user.id) await dissolvePod(mine); else await leavePod(mine);
         promptRescheduleAfterExpiry();
+        return;
+      }
+      if (STATE.podEndedWhileAway) {
+        STATE.podEndedWhileAway = false;
+        showToast('함께 타던 팟이 종료됐어요');
+        renderHome();
+        openNewPodInput({ backTo: 'screen-home', keepPlaces: false });
         return;
       }
       renderHome(); showScreen('screen-home');
@@ -2870,7 +2896,7 @@ async function logout(){
         try { await unsubscribeFromPush(); } catch (_) {}
         unsubscribePod(); unsubscribeHome();
         track('logout');
-        ['tanmankeum_uid', VERIFIED_KEY, SECRET_KEY, ONBOARDING_CACHE_KEY, CONSENT_KEY, PUSH_OFF_KEY, PUSH_EP_KEY, PUSH_HINT_KEY]
+        ['tanmankeum_uid', MEMBER_POD_KEY, VERIFIED_KEY, SECRET_KEY, ONBOARDING_CACHE_KEY, CONSENT_KEY, PUSH_OFF_KEY, PUSH_EP_KEY, PUSH_HINT_KEY]
           .forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
         try { if (window.posthog) posthog.reset(); } catch (_) {}
         location.replace('/');
@@ -3284,10 +3310,10 @@ async function renderHome(){
   if (SUPA_ENABLED) {
     const shareBtn = document.createElement('button');
     shareBtn.type = 'button';
-    shareBtn.className = 'status-share-btn';
+    shareBtn.className = 'btn btn--ghost btn--block';
     shareBtn.id = 'btn-my-pod-share';
-    shareBtn.setAttribute('aria-label', '팟 링크 공유하기');
-    shareBtn.innerHTML = iconSvg('share', 18);
+    shareBtn.style.cssText = 'color:var(--primary-dark); font-size:14px; margin-top:8px;';
+    shareBtn.innerHTML = `${iconSvg('share', 16)}팟 링크 공유하기`;
     shareBtn.addEventListener('click', () => sharePod(myPod));
     card.appendChild(shareBtn);
   }
@@ -3615,6 +3641,10 @@ async function renderPodDetail(podId){
     document.getElementById('btn-goto-chat').addEventListener('click', () => { renderPodChat(pod.id); showScreen('screen-pod-chat'); });
   } else if (STATE.committed && pod.id !== STATE.myPodId) {
     cta.innerHTML = `<button class="btn btn--primary btn--block" disabled>이미 참여 중인 팟이 있어요</button>`;
+  } else if (pod.status !== 'recruiting') {
+    // 확정됐거나 이미 이동 중인 팟. DB 트리거는 "이미 마감된 팟입니다"로 막는데, 공유 링크로 늦게 온 사람이
+    // 누를 수 있는 버튼을 보고 눌렀다가 오류를 보게 되므로 처음부터 못 누르게 하고 이유를 보여준다.
+    cta.innerHTML = `<button class="btn btn--primary btn--block" disabled>이미 확정된 팟이에요</button>`;
   } else if (pod.participants.length >= pod.desiredSize) {
     // 정원이 찬 팟. DB 트리거도 막지만, 누를 수 있는 버튼을 보여주고 실패시키는 건 잘못된 UI다.
     cta.innerHTML = `<button class="btn btn--primary btn--block" disabled>정원이 마감된 팟이에요</button>`;
@@ -3828,9 +3858,10 @@ const settlementPhoto = {};
 // bot-route-row/bot-person-list/bot-total-row 마크업. 클릭했을 때와, 이미 열어둔 상태로
 // 화면이 다시 그려질 때 둘 다 이 함수 하나로 만든다 — 갈라지면 둘이 슬금슬금 달라진다.
 // opts.modal: 팟 정보 창(모달)에 넣을 때는 "택시팟 매니저" 말풍선 머리를 뺀다.
-// 확정된 뒤에는 예상 요금이 의미가 없어서 보여주지 않는다 — 정산이 끝나면 정산 금액(settled)만 보인다.
+// 예상 요금은 확정된 뒤에도 보여준다 — 팟원은 최종 요금 화면을 못 보니 여기서 대략을 가늠한다. 실제 정산은 택시비 기준이라
+// 아래에 "달라질 수 있어요"를 붙인다. 정산이 끝나면 정산 금액(settled)이 사람 줄에 같이 보인다.
 function buildBotSummaryHtml(pod, result, intro, opts = {}){
-  const showEstimate = pod.status === 'recruiting';
+  const showEstimate = true;
   const leaderId = pod.leaderId;
   const settlementMap = {};
   (pod.settlement || []).forEach(s => { settlementMap[s.nickname] = s.amount; });
@@ -3874,7 +3905,7 @@ function buildBotSummaryHtml(pod, result, intro, opts = {}){
           </div>`;
       }).join('')}
     </div>
-    ${showEstimate ? `<div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div>` : ''}
+    ${showEstimate ? `<div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div><p class="fine-note" style="margin-top:6px;">예상 요금이에요. 실제 택시비에 따라 달라질 수 있어요.</p>` : ''}
   `;
 }
 
@@ -3888,8 +3919,11 @@ async function renderPodChat(podId){
     if (!fresh) {
       // 확정된 뒤에 팟이 사라지면 팟장이 정산을 마치고 종료한 것이다(확정 후엔 취소할 수 없다).
       // 팟장처럼 완료 화면으로 보내고, 내 팟을 새로 만들어 두지 않는다 — "새 팟 찾으러 가기"에서 직접 만든다.
+      // 이 기기에 적어 둔 확정 팟이면, 화면 쪽 사본이 아직 모집 중으로 낡아 있어도 취소가 아니라 종료로 본다.
       const gone = findPod(podId);
-      if (gone && gone.leaderId !== u.id && gone.status !== 'recruiting') { showPodEndedForMember(gone); return; }
+      const marker = memberPodMarker();
+      const wasConfirmed = !!(marker && marker.podId === podId && marker.userId === u.id);
+      if (gone && gone.leaderId !== u.id && (gone.status !== 'recruiting' || wasConfirmed)) { showPodEndedForMember(gone); return; }
       // 채팅방을 보고 있는 도중에 팟장이 취소했다. 나는 이 팟에 진짜 속해 있었으니
       // 새 팟을 만들어 매칭 대기 상태로 되돌린다(dissolvePod의 리더 쪽 처리와 동일한 결과).
       unsubscribePod();
@@ -3925,6 +3959,7 @@ async function renderPodChat(podId){
   const pod = findPod(podId);
   announceJoiners(pod, u.id);
   const isLeader = pod.leaderId === u.id;
+  rememberMemberPod(pod, u.id);
   if (isPaidMember(pod)) { await finishMemberRide(pod); return; }
   const seatsLeft = pod.desiredSize - pod.participants.length;
   document.getElementById('chat-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
@@ -4280,8 +4315,9 @@ async function renderPodChat(podId){
           STATE.userState = '팟확정';
           track('pod_confirmed', { pod_id: pod.id, party_size: pod.participants.length });
           notifyPodConfirmed(pod.id); // 팟원들에게 "팟이 확정됐어요" 푸시
-          renderFinal(pod.id);
-          showScreen('screen-final');
+          // 확정하면 채팅방으로 간다 — 출발 전 체크 카드와 팟원들과의 대화가 먼저다. 요금·정산은 채팅방의 "최종 경로 · 요금 보기"로 간다.
+          renderPodChat(pod.id);
+          showScreen('screen-pod-chat');
         } catch (e) {
           showError(friendlyDbError(e));
         }
@@ -4456,12 +4492,13 @@ function confirmFinishPod(pod){
     danger: true,
     onConfirm: async () => {
       const rideRec = buildRideRecord(pod); // 팟이 지워지기 전에 기록용 값을 먼저 뽑는다
-      try {
+      // 완료 화면을 바로 띄우고 정리는 뒤에서 한다. 사진 삭제와 종료 알림은 서로 상관없어서 동시에 보낸다.
+      const cleanup = (async () => {
         if (SUPA_ENABLED) {
           // pod_participants/pod_messages는 pods를 FK on delete cascade로 참조한다 —
           // DB 행의 cascade와 Storage 객체 삭제는 별개다. 사진을 먼저 지워야 공개 URL이 남지 않는다.
-          await cleanupPodPhotos(pod.id);
-          await notifyPodFinished(pod.id); // 팟이 지워지기 전에 — 지운 뒤엔 서버가 참가자를 알 수 없다
+          // 알림은 팟이 지워지기 전에 — 지운 뒤엔 서버가 참가자를 알 수 없다.
+          await Promise.all([cleanupPodPhotos(pod.id), notifyPodFinished(pod.id)]);
           const { error } = await supa.from('pods').delete().eq('id', pod.id);
           if (error) throw error;
         }
@@ -4470,9 +4507,16 @@ function confirmFinishPod(pod){
         saveRideRecord(rideRec);
         STATE.userState = '완료';
         track('pod_completed', { pod_id: pod.id, party_size: pod.participants.length });
-        showDoneThenNewPod(pod); // STATE.pods에선 방금 빠졌지만 pod 객체 자체(경로·정산 내역)는 그대로 살아있다
+      })();
+      showDoneThenNewPod(pod, cleanup); // pod 객체 자체(경로·정산 내역)는 정리 뒤에도 그대로 살아있다
+      try {
+        await cleanup;
       } catch (e) {
+        // 정리가 실패했으면 팟은 아직 있다 — 버튼 없는 완료 화면에 두지 말고 채팅방으로 돌려보낸다.
+        if (doneTimer) { clearTimeout(doneTimer); doneTimer = null; }
         showError(friendlyDbError(e));
+        renderPodChat(pod.id);
+        showScreen('screen-pod-chat');
       }
     },
   });
@@ -4484,6 +4528,7 @@ function confirmFinishPod(pod){
 function showPodEndedForMember(pod){
   unsubscribePod();
   unsubscribeHome();
+  forgetMemberPod();
   const me = pod.participants.find(p => p.id === STATE.user.id);
   if (me) saveRideRecord(buildRideRecord(pod)); // 팟이 지워지기 전에 마지막으로 본 값으로 만든다
   STATE.pods = STATE.pods.filter(p => p.id !== pod.id);

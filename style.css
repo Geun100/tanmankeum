@@ -302,8 +302,6 @@
   /* 내 팟 카드: 빈 화면 택시 그림과 같은 하늘색 계열의 납작한 카드(그림자 없음) */
   .status-card{ background:#ecf5ff; border-radius:var(--radius-card); padding:18px 20px; margin-bottom:24px; }
   .status-card{ position:relative; }
-  .status-share-btn{ position:absolute; top:10px; right:10px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:0; border-radius:50%; background:none; color:var(--muted); cursor:pointer; }
-  .status-share-btn:active{ background:rgba(0,120,255,.1); }
   .status-card .status-tag{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--primary-dark); margin-bottom:13px; }
   .status-dot{ width:7px; height:7px; border-radius:50%; background:var(--primary); animation:pulse 1.4s ease-in-out infinite; }
   @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
