@@ -4678,6 +4678,147 @@ function renderDoneSummary(pod){
   `;
 }
 
+/* ============ 계좌번호 입력: 은행을 고르고 번호를 친다 ============ */
+// 은행마다 계좌번호 자리 구성이 달라서, 은행을 고르면 그 자리 구성에 맞춰 하이픈을 자동으로 넣는다(같이타와 같은 방식).
+// 목록에 없는 은행은 "직접 입력"으로 은행 이름을 쓴다. 기억하는 건 마지막에 고른 은행뿐이고 계좌번호는 저장하지 않는다.
+const BANKS = [
+  // icon/color: 로고가 안 뜰 때 보이는 동그란 글자 배지. logo: 은행 누리집 아이콘(없거나 막히면 배지가 그대로 보인다).
+  { id: 'kakaobank', label: '카카오뱅크', name: '카카오뱅크', seg: [4, 2, 7], icon: 'K', color: '#ffe500', fg: '#191919', logo: '' },
+  { id: 'tossbank', label: '토스뱅크', name: '토스뱅크', seg: [4, 4, 4], icon: 'T', color: '#3182f6', fg: '#fff', logo: 'https://static.toss.im/icons/png/4x/icon-toss-logo.png' },
+  { id: 'kb', label: '국민', name: 'KB국민은행', seg: [6, 2, 6], icon: 'KB', color: '#f7c600', fg: '#191919', logo: 'https://www.kbstar.com/favicon.ico' },
+  { id: 'shinhan', label: '신한', name: '신한은행', seg: [3, 3, 6], icon: 'S', color: '#0046ff', fg: '#fff', logo: 'https://www.shinhan.com/favicon.ico' },
+  { id: 'woori', label: '우리', name: '우리은행', seg: [4, 3, 6], icon: 'W', color: '#1898d5', fg: '#fff', logo: 'https://www.wooribank.com/favicon.ico' },
+  { id: 'hana', label: '하나', name: '하나은행', seg: [3, 6, 5], icon: 'H', color: '#00a78e', fg: '#fff', logo: 'https://www.kebhana.com/favicon.ico' },
+  { id: 'nh', label: '농협', name: 'NH농협은행', seg: [3, 4, 4, 2], icon: 'NH', color: '#0a8f3c', fg: '#fff', logo: 'https://banking.nonghyup.com/favicon.ico' },
+  { id: 'ibk', label: '기업', name: 'IBK기업은행', seg: [3, 6, 2, 3], icon: 'IBK', color: '#0066b3', fg: '#fff', logo: 'https://www.ibk.co.kr/favicon.ico' },
+  { id: 'kbank', label: '케이뱅크', name: '케이뱅크', seg: [3, 3, 6], icon: 'K', color: '#111827', fg: '#fff', logo: 'https://www.kbanknow.com/favicon.ico' },
+  { id: 'sc', label: 'SC제일', name: 'SC제일은행', seg: [3, 2, 6], icon: 'SC', color: '#0f8f55', fg: '#fff', logo: 'https://www.standardchartered.co.kr/favicon.ico' },
+];
+const BANK_KEY = 'tanmankeum_last_bank';
+const BANK_CUSTOM_KEY = 'tanmankeum_last_bank_name';
+function formatAccountDigits(digits, seg){
+  const parts = [];
+  let i = 0;
+  for (const n of seg) { if (i >= digits.length) break; parts.push(digits.slice(i, i + n)); i += n; }
+  return parts.join('-');
+}
+function bankPlaceholder(bank){ return bank ? bank.seg.map(n => 'X'.repeat(n)).join('-') : '은행을 먼저 골라주세요'; }
+function bankIconHtml(b){
+  return `<span class="bank-ico" style="background:${b.color};color:${b.fg}">${b.icon}${b.logo ? `<img src="${b.logo}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}</span>`;
+}
+const PEN_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+const CHEVRON_DOWN_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+// 은행 고르는 상자(로고 + 이름 목록, 맨 아래 "직접 입력"), 번호 칸(은행 자리 구성대로 나뉜 칸), 예금주(선택)
+function bankSelectHtml(){
+  const items = BANKS.map(b => `<li role="option" class="bank-item" data-bank="${b.id}">${bankIconHtml(b)}<span>${b.name}</span></li>`).join('')
+    + `<li role="option" class="bank-item bank-item--custom" data-bank="custom"><span class="bank-ico bank-ico--pen">${PEN_SVG}</span><span>직접 입력</span></li>`;
+  return `
+    <span class="acc-label">은행</span>
+    <div class="bank-select" id="bank-select">
+      <button type="button" class="bank-select-btn" id="bank-select-btn" aria-haspopup="listbox" aria-expanded="false"><span id="bank-select-label" class="is-placeholder">은행 선택</span>${CHEVRON_DOWN_SVG}</button>
+      <ul class="bank-list" id="bank-list" role="listbox" hidden>${items}</ul>
+    </div>
+    <input type="text" id="bank-custom" class="bank-custom" placeholder="은행 이름 (예: 새마을금고)" maxlength="20" autocomplete="off" hidden>
+    <span class="acc-label">계좌번호</span>
+    <div class="acc-seg" id="acc-seg"></div>
+    <span class="acc-label">예금주 <em>(선택)</em></span>
+    <input type="text" id="account-holder" class="acc-holder" placeholder="예금주 이름" maxlength="20" autocomplete="off">`;
+}
+// 정산 화면의 계좌 입력을 동작시킨다. 공유할 때는 accountText()로 "은행이름 번호 · 예금주"를 받는다.
+function setupBankPicker(){
+  const $ = id => document.getElementById(id);
+  const btn = $('bank-select-btn'), list = $('bank-list'), labelEl = $('bank-select-label');
+  const custom = $('bank-custom'), segWrap = $('acc-seg'), holder = $('account-holder');
+  if (!btn || !list || !labelEl || !custom || !segWrap || !holder) return () => ({ error: 'none' });
+  let sel = null; // BANKS의 id 또는 'custom'
+  const bankOf = () => BANKS.find(b => b.id === sel) || null;
+  const boxes = () => [...segWrap.querySelectorAll('.acc-box')];
+  const allDigits = () => boxes().map(x => x.value).join('').replace(/\D/g, '');
+  // 숫자를 칸 순서대로 채운다(칸이 넘치면 다음 칸으로). from 칸부터 시작한다.
+  const fill = (digits, from = 0) => {
+    const bs = boxes(); let rest = digits, last = from;
+    for (let i = from; i < bs.length && rest; i++) { const n = bs[i].maxLength; bs[i].value = rest.slice(0, n); rest = rest.slice(n); last = i; }
+    return bs[last];
+  };
+  const renderSegs = () => {
+    const keep = allDigits();
+    segWrap.innerHTML = '';
+    const b = bankOf();
+    if (b) {
+      b.seg.forEach((n, i) => {
+        if (i) segWrap.insertAdjacentHTML('beforeend', '<span class="acc-dash">-</span>');
+        const inp = document.createElement('input');
+        inp.type = 'text'; inp.inputMode = 'numeric'; inp.autocomplete = 'off'; inp.maxLength = n;
+        inp.placeholder = '0'.repeat(n); inp.className = 'acc-box'; inp.style.flex = String(n);
+        inp.setAttribute('aria-label', `계좌번호 ${i + 1}번째 칸`);
+        segWrap.appendChild(inp);
+      });
+      if (keep) fill(keep);
+    } else {
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.autocomplete = 'off'; inp.maxLength = 30; inp.className = 'acc-box acc-box--wide';
+      inp.placeholder = sel === 'custom' ? '계좌번호 (숫자와 -)' : '은행을 먼저 골라주세요';
+      inp.setAttribute('aria-label', '계좌번호');
+      segWrap.appendChild(inp);
+    }
+  };
+  const close = () => { list.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  const choose = (id, focus) => {
+    sel = id;
+    const b = bankOf();
+    labelEl.classList.remove('is-placeholder');
+    labelEl.innerHTML = b ? `${bankIconHtml(b)}<span>${b.name}</span>` : `<span class="bank-ico bank-ico--pen">${PEN_SVG}</span><span>직접 입력</span>`;
+    custom.hidden = id !== 'custom';
+    renderSegs();
+    try { localStorage.setItem(BANK_KEY, id); } catch (_) {}
+    close();
+    if (focus) (id === 'custom' ? custom : boxes()[0]).focus();
+  };
+  btn.addEventListener('click', () => { const open = list.hidden; list.hidden = !open; btn.setAttribute('aria-expanded', String(open)); });
+  list.addEventListener('click', (e) => { const li = e.target.closest('.bank-item'); if (li) choose(li.dataset.bank, true); });
+  document.addEventListener('click', (e) => { if (!list.hidden && !$('bank-select').contains(e.target)) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !list.hidden) close(); });
+  // 번호 칸: 칸이 다 차면 다음 칸으로, 빈 칸에서 지우면 앞 칸으로, 붙여넣으면 칸에 나눠 담는다
+  segWrap.addEventListener('input', (e) => {
+    const t = e.target.closest('.acc-box'); if (!t) return;
+    if (t.classList.contains('acc-box--wide')) { t.value = t.value.replace(/[^\d-]/g, ''); return; }
+    t.value = t.value.replace(/\D/g, '');
+    const bs = boxes(), i = bs.indexOf(t);
+    if (t.value.length >= t.maxLength && i < bs.length - 1) bs[i + 1].focus();
+  });
+  segWrap.addEventListener('keydown', (e) => {
+    const t = e.target.closest('.acc-box'); if (!t || t.classList.contains('acc-box--wide')) return;
+    const bs = boxes(), i = bs.indexOf(t);
+    if (e.key === 'Backspace' && t.value === '' && i > 0) { e.preventDefault(); bs[i - 1].value = bs[i - 1].value.slice(0, -1); bs[i - 1].focus(); }
+  });
+  segWrap.addEventListener('paste', (e) => {
+    const t = e.target.closest('.acc-box'); if (!t || t.classList.contains('acc-box--wide')) return;
+    const digits = ((e.clipboardData || window.clipboardData).getData('text') || '').replace(/\D/g, '');
+    if (!digits) return;
+    e.preventDefault();
+    const bs = boxes(); fill(digits, bs.indexOf(t)).focus();
+  });
+  renderSegs();
+  // 마지막에 쓴 은행이 있으면 미리 골라 둔다
+  try {
+    const last = localStorage.getItem(BANK_KEY);
+    if (last === 'custom') { custom.value = localStorage.getItem(BANK_CUSTOM_KEY) || ''; choose('custom', false); }
+    else if (BANKS.some(b => b.id === last)) choose(last, false);
+  } catch (_) {}
+  custom.addEventListener('input', () => { try { localStorage.setItem(BANK_CUSTOM_KEY, custom.value.trim()); } catch (_) {} });
+  return function accountText(){
+    if (!sel) return { error: 'bank' };
+    const name = sel === 'custom' ? custom.value.trim() : bankOf().name;
+    if (!name) return { error: 'name' };
+    const vals = boxes().map(x => x.value.trim());
+    while (vals.length && !vals[vals.length - 1]) vals.pop();
+    const number = vals.join('-');
+    if (!number) return { error: 'number' };
+    const who = holder.value.trim();
+    return { text: `${name} ${number}${who ? ` · 예금주 ${who}` : ''}` };
+  };
+}
+
 /* ============ 13. 화면 6: 정산 ============ */
 // 팟장이 참여자별 입금 여부를 체크한다. 체크된 사람은 채팅방에서 "팟 나가기"가 뜬다(renderPodChat 참고).
 // 팟장 본인은 스스로에게 입금할 일이 없으니 목록에서 뺀다.
@@ -4772,11 +4913,11 @@ function renderSettlement(podId){
     </div>
     <div class="info-box share-box" id="share-box" hidden>
       <div class="fare-head">
-        <h3><label for="account-number">입금 안내 공유</label></h3>
+        <h3>입금 안내 공유</h3>
         <label class="photo-read-btn" for="receipt-photo" id="receipt-picker">${iconSvg('camera', 15)}영수증 사진</label>
       </div>
       <div class="field" id="account-field">
-        <input type="text" id="account-number" placeholder="은행명 계좌번호 (예: 탄만은행 123-4567)">
+        ${bankSelectHtml()}
         <div id="receipt-field">
           <p class="fare-hint" id="receipt-photo-name">영수증 사진을 올리면 참여자가 실제 결제를 확인할 수 있어요(선택)</p>
           <p class="fine-note" id="receipt-have-photo" style="display:none; color:var(--primary-dark); margin:0;">${iconSvg('check', 14)}위에서 찍은 사진이 영수증으로 함께 공유돼요.</p>
@@ -4929,9 +5070,17 @@ function renderSettlement(podId){
     applySettlement(actual);
   });
 
+  const accountText = setupBankPicker();
   document.getElementById('btn-share-account').addEventListener('click', () => {
-    const acc = document.getElementById('account-number').value.trim();
-    if (!acc) { document.getElementById('account-number').focus(); return; }
+    const got = accountText();
+    if (got.error) {
+      showToast(got.error === 'bank' ? '은행을 먼저 골라주세요' : got.error === 'name' ? '은행 이름을 입력해주세요' : '계좌번호를 입력해주세요');
+      document.getElementById(got.error === 'name' ? 'bank-custom' : got.error === 'number' ? 'acc-seg' : 'bank-select-btn').scrollIntoView({ block: 'center' });
+      if (got.error === 'name') document.getElementById('bank-custom').focus();
+      if (got.error === 'number') document.querySelector('#acc-seg .acc-box').focus();
+      return;
+    }
+    const acc = got.text;
     // 화면 1에서 찍은 사진이 있으면 그걸 영수증으로 쓴다. 없으면 화면 2에서 고른 사진. 둘 다 없어도 공유할 수 있다(선택).
     const file = (settlementPhoto[podId] && settlementPhoto[podId].file) || document.getElementById('receipt-photo').files[0] || null;
     openModal({
