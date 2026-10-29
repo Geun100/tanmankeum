@@ -342,6 +342,8 @@
   .status-card p.status-meta{ margin-bottom:20px; }
   .status-card p.status-meta .pod-luggage{ vertical-align:-2px; gap:0; }
   .status-card p.status-meta .pod-luggage svg{ margin-right:2px; }
+  /* 홈 내 팟 카드: 채팅방 보기가 메인, 팟 공유는 그 아래 작은 회색 링크(파랑은 메인 버튼에만) */
+  .status-share-link{ display:flex; align-items:center; gap:5px; margin:12px auto 0; padding:4px 8px; border:none; background:none; color:var(--ink-soft); font:inherit; font-size:13px; font-weight:500; cursor:pointer; }
 
   /* 홈 상단 알림 종 — 눈에 띄지 않게 테두리·배경 없이 아이콘 색만 바꾼다(꺼짐: 연한 회색+사선, 켜짐: 파랑) */
   .bell-btn{ border-color:transparent; background:transparent; color:var(--placeholder); }
@@ -424,6 +426,7 @@
   /* 팟 상세는 경로를 눈으로 따라가는 화면이라 지도를 크게 잡는다. */
   .kakao-map-box--lg{ height:380px; }
   .map-legend{ display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--muted); margin-top:10px; }
+  .map-kakao-links{ flex-wrap:wrap; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
   .map-legend span{ display:inline-flex; align-items:center; gap:4px; }
   .legend-dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
 
@@ -461,7 +464,9 @@
   .a2hs-card svg{ color:var(--primary); flex-shrink:0; }
   .a2hs-card span{ line-height:1.4; word-break:keep-all; }
   .a2hs-link{ margin-left:auto; border:0; background:none; color:var(--primary); font:inherit; font-size:12px; font-weight:600; padding:8px 0 8px 10px; cursor:pointer; white-space:nowrap; }
-  .pod-info-modal{ max-height:62vh; overflow-y:auto; text-align:left; }
+  .pod-info-modal{ max-height:62vh; overflow-y:auto; text-align:left; margin-top:16px; }
+  /* 구간별 근거와 맨 아래 안내는 보조 정보라 작게(모달 안 p 기본 14px을 덮는다) */
+  .pod-info-modal .fine-note{ font-size:12px; }
   .legal-links--tight{ margin-top:12px; padding-bottom:8px; }
   #screen-home.is-guest #btn-logout{ display:none; }
 
@@ -546,7 +551,8 @@
   .bot-person-name{ font-size:14px; font-weight:700; }
   .bot-person-name .badge{ font-size:11px; padding:1px 6px; margin-left:2px; }
   .bot-person-fare{ font-size:14px; font-weight:700; color:var(--primary-dark); flex-shrink:0; }
-  .bot-person-route{ margin:2px 0 0; font-size:13px; color:var(--ink-soft); }
+  .bot-person-route{ margin:6px 0 0; font-size:13px; color:var(--ink-soft); }
+  .pod-info-modal .bot-person details{ margin-top:6px !important; } /* 이름과 "왜 이 금액이에요?" 사이 (인라인 margin을 덮는다) */
   .bot-person-links{ display:flex; gap:12px; margin-top:4px; }
   .bot-person-links a{ display:inline-flex; align-items:center; gap:3px; font-size:12px; font-weight:600; color:var(--primary); }
   .bot-person-links svg{ flex-shrink:0; }
@@ -583,6 +589,7 @@
   .cta-row .cta-hint{ flex:1 1 auto; text-align:left; }
   .btn--sm{ height:36px; font-size:13px; padding:0 12px; }
   .cta-row .btn--text-danger.btn--sm{ flex:0 0 auto; padding:0 10px; }
+  .cta-row #btn-confirm-pod{ height:44px; font-size:15px; } /* 팟장의 메인 행동이라 옆 취소 링크보다 확실히 크게 */
   .paid-banner{ display:flex; flex-direction:column; gap:4px; align-items:center; text-align:center; background:var(--green-soft); color:var(--green); border-radius:14px; padding:16px 14px; margin:0 0 12px; }
   .paid-banner strong{ font-size:18px; font-weight:800; }
   .paid-banner span{ font-size:14px; font-weight:600; }

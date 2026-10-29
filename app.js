@@ -432,7 +432,7 @@ function openAddToHomeGuide(){
       <div class="a2hs-panel" data-p="android"${first === 'android' ? '' : ' hidden'}>${panels.android}</div>`,
     confirmLabel: '확인',
     onConfirm: () => {},
-    single: true,
+    hideCancel: true,
   });
   const root = document.getElementById('modal-body-rich');
   root.querySelectorAll('.a2hs-tab').forEach(tab => tab.addEventListener('click', () => {
@@ -768,7 +768,7 @@ function settlementScale(settlement, perPerson){
   return expected > 0 && actual > 0 ? actual / expected : 0;
 }
 // 팟원 기기엔 팟장이 계산한 정산 금액이 없다(DB에 안 남는 값). 팟장이 채팅에 보낸 "정산 내역이에요." 메시지를
-// 읽어서 [{ nickname, amount }]로 되살린다 — 팟 정보 창에 실제 금액을 보여주는 데만 쓴다.
+// 읽어서 [{ nickname, amount }]로 되살린다 — 정산 정보 창에 실제 금액을 보여주는 데만 쓴다.
 // 메시지 형식은 계좌 공유(btn-share-account)에서 만드는 것과 같아야 한다.
 const SETTLEMENT_MSG_HEAD = '정산 내역이에요.';
 function parseSettlementMessage(text, nicknames){
@@ -1349,10 +1349,10 @@ document.getElementById('home-logo').addEventListener('click', async () => {
 });
 
 let modalConfirmHandler = null;
-function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon = false, onConfirm, danger = false, cardClass = '', icon = '', single = false }){
+// hideCancel: 확인 버튼 하나만 둔다(닫기만 있으면 되는 안내 창에서 '돌아가기'와 '닫기'가 같은 일을 하지 않게).
+// quiet: 확인 버튼을 흰 버튼으로 — 보고 닫기만 하는 창이라 파란 강조가 필요 없을 때.
+function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon = false, onConfirm, danger = false, cardClass = '', icon = '', hideCancel = false, quiet = false }){
   document.getElementById('modal-title').textContent = title;
-  // single: 안내만 하는 창(확인·닫기뿐)은 "돌아가기"와 뜻이 같아서 버튼을 하나만 둔다. 고르는 창(참가하기 등)은 둘 다 둔다.
-  document.getElementById('modal-cancel').hidden = single || !onConfirm;
   const iconEl = document.getElementById('modal-icon-badge');
   if (icon) { iconEl.hidden = false; iconEl.innerHTML = icon; } else { iconEl.hidden = true; iconEl.innerHTML = ''; }
   const bodyEl = document.getElementById('modal-body');
@@ -1370,13 +1370,14 @@ function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon
   document.getElementById('modal-card').className = 'modal-card' + (cardClass ? ' ' + cardClass : '');
   const confirmBtn = document.getElementById('modal-confirm');
   confirmBtn.innerHTML = confirmIcon ? `${confirmLabel}${ICON_CHEVRON_R}` : confirmLabel;
-  confirmBtn.className = 'btn ' + (danger ? 'btn--danger' : 'btn--primary');
+  confirmBtn.className = 'btn ' + (danger ? 'btn--danger' : quiet ? 'btn--ghost' : 'btn--primary');
+  document.getElementById('modal-cancel').hidden = hideCancel || !onConfirm; // 확인 동작이 없는 안내 창은 자동으로 버튼 하나
   modalConfirmHandler = onConfirm || null;
   document.getElementById('modal-overlay').hidden = false;
 }
 function closeModal(){ document.getElementById('modal-overlay').hidden = true; modalConfirmHandler = null; }
 // DB 오류(정원 마감, 네트워크 등)를 기존 모달로 그냥 알려준다. 별도 토스트 컴포넌트를 새로 안 만든다.
-function showError(message){ openModal({ title: '문제가 발생했어요', body: message, confirmLabel: '확인', onConfirm: () => {}, single: true }); }
+function showError(message){ openModal({ title: '문제가 발생했어요', body: message, confirmLabel: '확인', onConfirm: () => {}, hideCancel: true }); }
 function friendlyDbError(e){
   const msg = (e && e.message) || String(e);
   if (msg.includes('정원이 찼습니다')) return '방금 정원이 다 찼어요. 다른 팟을 찾아볼까요?';
@@ -3403,23 +3404,16 @@ async function renderHome(){
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${escapeHtml(myPod.originName)} → ${escapeHtml(myPod.leaderDest)}</strong>
     <p class="status-meta">${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명 · ${carrierBadgeHtml(myPod)}</p>
-    <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}</button>
+    ${SUPA_ENABLED ? `<button type="button" class="status-share-link" id="btn-my-pod-share">${iconSvg('share', 14)}팟 링크 공유</button>` : ''}
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
     renderPodChat(myPod.id); // STATE.myPodId를 다시 읽지 않는다 — 바로 위에서 이미 찾아둔 그 팟이다.
     showScreen('screen-pod-chat');
   });
-  // 카톡방 등에 팟 링크를 보내 사람을 모으는 버튼. DB가 없는 로컬 시드 팟은 링크가 의미 없어서 뺀다.
-  if (SUPA_ENABLED) {
-    const shareBtn = document.createElement('button');
-    shareBtn.type = 'button';
-    shareBtn.className = 'btn btn--ghost btn--block';
-    shareBtn.id = 'btn-my-pod-share';
-    shareBtn.style.cssText = 'color:var(--primary-dark); font-size:14px; margin-top:8px;';
-    shareBtn.innerHTML = `${iconSvg('share', 16)}팟 링크 공유하기`;
-    shareBtn.addEventListener('click', () => sharePod(myPod));
-    card.appendChild(shareBtn);
-  }
+  // 카톡방 등에 팟 링크를 보내 사람을 모으는 보조 링크(채팅방 버튼 아래). DB가 없는 로컬 시드 팟은 링크가 의미 없어서 뺀다.
+  const shareBtn = document.getElementById('btn-my-pod-share');
+  if (shareBtn) shareBtn.addEventListener('click', () => sharePod(myPod));
   renderPodList();
 }
 
@@ -3949,8 +3943,8 @@ async function checkMyReportNotice(){
   const key = 'tanmankeum_report_notice_' + mine.level;
   try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) {}
   openModal(mine.level >= 2
-    ? { title: '이용이 제한됐어요', body: `함께 탄 분들 여러 명이 불편을 알려와서 새 팟을 만들거나 참가할 수 없어요. 운영팀이 내용을 확인하고 있어요. 잘못 알려진 일이라면 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {}, single: true }
-    : { title: '함께 탄 분들이 불편을 알려왔어요', body: `약속 시간과 정산을 지켜주세요. 계속되면 이용이 제한될 수 있어요. 궁금한 점은 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {}, single: true });
+    ? { title: '이용이 제한됐어요', body: `함께 탄 분들 여러 명이 불편을 알려와서 새 팟을 만들거나 참가할 수 없어요. 운영팀이 내용을 확인하고 있어요. 잘못 알려진 일이라면 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {}, hideCancel: true }
+    : { title: '함께 탄 분들이 불편을 알려왔어요', body: `약속 시간과 정산을 지켜주세요. 계속되면 이용이 제한될 수 있어요. 궁금한 점은 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {}, hideCancel: true });
 }
 
 /* ============ 11. 화면 4: 팟 채팅방 ============ */
@@ -3960,9 +3954,24 @@ const settlementPhoto = {};
 
 // bot-route-row/bot-person-list/bot-total-row 마크업. 클릭했을 때와, 이미 열어둔 상태로
 // 화면이 다시 그려질 때 둘 다 이 함수 하나로 만든다 — 갈라지면 둘이 슬금슬금 달라진다.
-// opts.modal: 팟 정보 창(모달)에 넣을 때는 "택시팟 매니저" 말풍선 머리를 뺀다.
+// opts.modal: 정산 정보 창(모달)에 넣을 때는 "택시팟 매니저" 말풍선 머리를 뺀다.
 // 예상 요금은 확정된 뒤에도 보여준다 — 팟원은 최종 요금 화면을 못 보니 여기서 대략을 가늠한다. 실제 정산은 택시비 기준이라
 // 아래에 "달라질 수 있어요"를 붙인다. 정산이 끝나면 정산 금액(settled)이 사람 줄에 같이 보인다.
+// 카카오맵 바로가기 — 팟장은 전체 경로 하나, 팟원은 하차지점과 목적지까지 도보 길.
+// 채팅방 지도 카드에서 내 링크만 보여준다.
+function kakaoLinksHtml(p, isLeader, leaderRouteHref){
+  if (!p) return '';
+  if (isLeader && leaderRouteHref) {
+    return `<a target="_blank" rel="noopener" href="${leaderRouteHref}">${ICON_PIN} 전체 경로(출발지·경유지·목적지) 카카오맵</a>`;
+  }
+  const destCoord = placeCoord(p.dest);
+  const dropLinkHref = p.dropCoord ? kakaoMapPlaceUrl(p.dropPoint, p.dropCoord) : null;
+  const walkLinkHref = (p.walkTime > 0 && destCoord) ? kakaoMapRouteUrl(p.dest, p.dropPoint, p.dropCoord) : null;
+  const parts = [];
+  if (dropLinkHref) parts.push(`<a target="_blank" rel="noopener" href="${dropLinkHref}">${ICON_PIN} 하차지점</a>`);
+  if (walkLinkHref) parts.push(`<a target="_blank" rel="noopener" href="${walkLinkHref}">${ICON_WALK} 목적지까지 도보</a>`);
+  return parts.join('');
+}
 function buildBotSummaryHtml(pod, result, intro, opts = {}){
   const leaderId = pod.leaderId;
   const settlementMap = {};
@@ -3972,14 +3981,11 @@ function buildBotSummaryHtml(pod, result, intro, opts = {}){
   const settledTotal = isSettled ? pod.settlement.reduce((a, x) => a + x.amount, 0) : 0;
   const scale = isSettled ? settlementScale(pod.settlement, result.perPerson) : 0;
   const arrival = minToTime(timeToMin(pod.departTime) + result.totalMins);
-  // 팟장은 출발지+모든 경유지(하차지점)+최종 목적지가 순서대로 찍힌 전체 경로 하나,
-  // 나머지 참가자는 "나만의" 두 구간(택시로 내가 내리는 곳까지, 거기서 내 목적지까지 도보)만
-  // 본다 — 남의 하차지점까지 낀 경로를 보여주면 오히려 헷갈린다.
-  const leaderRouteHref = kakaoMapMultiRouteUrl(result.stops);
+  // 카카오맵 길찾기 링크는 이 창에 두지 않는다 — 채팅방 지도 카드(내 링크만)에 있다. 이 창은 정산 뒤 금액 확인용이다.
   return `
     ${opts.modal ? '' : '<span class="chat-name">택시팟 매니저</span>'}
     ${intro ? `<p class="bot-intro">${intro}</p>` : ''}
-    <div class="bot-route-row">${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)} · ${pod.departTime} 출발 · 약 ${result.totalMins}분 · 도착 약 ${arrival}</div>
+    ${opts.modal ? '' : `<div class="bot-route-row">${escapeHtml(pod.originName)} → ${escapeHtml(pod.leaderDest)} · ${pod.departTime} 출발 · 약 ${result.totalMins}분 · 도착 약 ${arrival}</div>`}
     <div class="bot-person-list">
       ${result.perPerson.map(p => {
         const routeText = p.dropPoint === p.dest
@@ -3987,27 +3993,14 @@ function buildBotSummaryHtml(pod, result, intro, opts = {}){
           : `${escapeHtml(p.dropPoint)} 하차 → ${escapeHtml(p.dest)}${p.walkTime > 0 ? ` (도보 ${p.walkTime}분)` : ''}`;
         const isLeader = p.id === leaderId;
         const settled = settlementMap[p.nickname];
-        const destCoord = placeCoord(p.dest);
-        const dropLinkHref = p.dropCoord ? kakaoMapPlaceUrl(p.dropPoint, p.dropCoord) : null;
-        const walkLinkHref = (p.walkTime > 0 && destCoord) ? kakaoMapRouteUrl(p.dest, p.dropPoint, p.dropCoord) : null;
-        let linksHtml;
-        if (isLeader && leaderRouteHref) {
-          linksHtml = `<a target="_blank" rel="noopener" href="${leaderRouteHref}">${ICON_PIN} 전체 경로(출발지·경유지·목적지) 카카오맵</a>`;
-        } else {
-          const parts = [];
-          if (dropLinkHref) parts.push(`<a target="_blank" rel="noopener" href="${dropLinkHref}">${ICON_PIN} 하차지점</a>`);
-          if (walkLinkHref) parts.push(`<a target="_blank" rel="noopener" href="${walkLinkHref}">${ICON_WALK} 목적지까지 도보</a>`);
-          linksHtml = parts.join('');
-        }
         return `
           <div class="bot-person">
             <div class="bot-person-top">
               <span class="bot-person-name">${escapeHtml(p.nickname)}${isLeader ? ' <span class="badge badge--leader">팟장</span>' : ''}</span>
               <span class="bot-person-fare">${won(isSettled && settled != null ? settled : p.fare)}</span>
             </div>
-            <p class="bot-person-route">${routeText}</p>
+            ${opts.modal ? '' : `<p class="bot-person-route">${routeText}</p>`}
             ${isSettled && settled != null ? fareBreakdownHtml(p, settled, scale, { hideNote: true }) : ''}
-            ${linksHtml ? `<div class="bot-person-links">${linksHtml}</div>` : ''}
           </div>`;
       }).join('')}
     </div>
@@ -4092,6 +4085,8 @@ async function renderPodChat(podId){
         ? '이동·정산 중'
         : '팟 완료';
   const chatMap = mapContainerHTML();
+  // 정산 정보 버튼은 계좌 공유 뒤에만 보이니, 타고 가는 동안 쓸 카카오맵 길찾기는 지도 카드에 둔다.
+  const myKakaoLinks = kakaoLinksHtml(result.perPerson.find(p => p.id === u.id), isLeader, kakaoMapMultiRouteUrl(result.stops));
   let html = `
     <div class="chat-status">
       <p class="chat-status-line"><span class="chat-status-left"><span class="status-dot"></span>${statusText}</span><span class="muted">${pod.departTime} 출발 예정</span></p>
@@ -4114,6 +4109,7 @@ async function renderPodChat(podId){
           <span><span class="legend-dot" style="background:var(--blue);"></span>종점(최종 목적지)</span>
           <span id="${chatMap.id}_legend">실선: 경로 조회 중… / 점선: 도보 경로</span>
         </div>
+        ${myKakaoLinks ? `<div class="bot-person-links map-kakao-links">${myKakaoLinks}</div>` : ''}
       </div>
       <div class="people-card" id="chat-participants"></div>
     </div>
@@ -4123,7 +4119,7 @@ async function renderPodChat(podId){
     <div class="chat-section-head">
       <div class="chat-section-head-btns">
         ${SUPA_ENABLED ? `<button type="button" class="btn btn--ghost btn--sm" id="btn-share-pod">${iconSvg('share', 15)}공유</button>` : ''}
-        <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-summary">${iconSvg('info', 15)}팟 정보</button>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-ai-summary" hidden>${iconSvg('info', 15)}정산 정보</button>
       </div>
     </div>
     <div class="chat-box" id="chat-messages"></div>`;
@@ -4221,19 +4217,30 @@ async function renderPodChat(podId){
   let messages;
   if (SUPA_ENABLED) {
     messages = await loadMessages(podId);
-    // 팟원 기기엔 정산 금액이 없다 — 팟장이 마지막으로 보낸 정산 내역 메시지에서 읽어 팟 정보 창에 쓴다.
-    if (pod.leaderId !== u.id) {
-      const names = pod.participants.map(p => p.nickname);
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].userId !== pod.leaderId) continue;
-        const parsed = parseSettlementMessage(messages[i].text, names);
-        if (parsed) { pod.settlement = parsed; break; }
-      }
-    }
   } else {
     if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
     messages = STATE.chatMessages[podId];
   }
+  // 팟장이 채팅에 보낸 마지막 정산 내역 메시지. 팟원 기기엔 정산 금액이 없으니 여기서 읽어 정산 정보 창에 쓰고,
+  // 정산 정보 버튼은 이 메시지(계좌 공유)가 올라온 뒤에만 보인다 — 그 전엔 위쪽 경로 카드와 내용이 겹친다.
+  // (로컬 폴백 메시지엔 userId가 없어서 팟장 본인 기기에선 mine으로 판단한다)
+  let settlementShared = false;
+  {
+    const names = pod.participants.map(p => p.nickname);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      const fromLeader = m.userId ? m.userId === pod.leaderId : (isLeader && m.mine);
+      if (!fromLeader) continue;
+      const parsed = parseSettlementMessage(m.text, names);
+      if (parsed) {
+        settlementShared = true;
+        if (!isLeader || !(pod.settlement && pod.settlement.length)) pod.settlement = parsed;
+        break;
+      }
+    }
+  }
+  const summaryBtnEl = document.getElementById('btn-ai-summary');
+  if (summaryBtnEl) summaryBtnEl.hidden = !settlementShared;
   const msgWrap = document.getElementById('chat-messages');
   msgWrap.innerHTML = '';
   if (messages.length === 0) {
@@ -4343,18 +4350,19 @@ async function renderPodChat(podId){
     }
   };
 
-  // "팟 정보" — 경로·하차지점을 잠깐 볼 수 있는 창으로 연다. 채팅 흐름에 끼워 넣지 않아서 닫으면 채팅은 그대로다.
+  // "정산 정보" — 계좌 공유 뒤 사람별 실제 금액과 근거를 보는 창으로 연다. 채팅 흐름에 끼워 넣지 않아서 닫으면 채팅은 그대로다.
   const shareBtn = document.getElementById('btn-share-pod');
   if (shareBtn) shareBtn.addEventListener('click', () => sharePod(pod));
   const summaryBtn = document.getElementById('btn-ai-summary');
   summaryBtn.addEventListener('click', () => {
     openModal({
-      title: '팟 정보',
+      title: '정산 정보',
       cardClass: 'modal-card--rich',
       bodyHtml: `<div class="pod-info-modal">${buildBotSummaryHtml(pod, result, '', { modal: true })}</div>`,
       confirmLabel: '닫기',
+      hideCancel: true,
+      quiet: true,
       onConfirm: () => {},
-      single: true,
     });
   });
 
@@ -5109,7 +5117,7 @@ function renderSettlement(podId){
         try {
           const settled = pod.settlement || [];
           const totalActual = settled.reduce((s, x) => s + x.amount, 0);
-          // 채팅엔 입금에 필요한 것만 보낸다. 구간별 근거는 팟 정보 창에서 본다(팟원 기기는 이 메시지를 읽어 금액을 채운다).
+          // 채팅엔 입금에 필요한 것만 보낸다. 구간별 근거는 정산 정보 창에서 본다(팟원 기기는 이 메시지를 읽어 금액을 채운다).
           const lines = [SETTLEMENT_MSG_HEAD, `실제 택시비 합계: ${won(totalActual)}`, `입금 계좌: ${acc}`, ''];
           settled.forEach(s => lines.push(`${s.nickname}: ${won(s.amount)}`));
           const text = lines.join('\n');
