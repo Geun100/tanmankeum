@@ -432,6 +432,7 @@ function openAddToHomeGuide(){
       <div class="a2hs-panel" data-p="android"${first === 'android' ? '' : ' hidden'}>${panels.android}</div>`,
     confirmLabel: '확인',
     onConfirm: () => {},
+    single: true,
   });
   const root = document.getElementById('modal-body-rich');
   root.querySelectorAll('.a2hs-tab').forEach(tab => tab.addEventListener('click', () => {
@@ -1348,8 +1349,10 @@ document.getElementById('home-logo').addEventListener('click', async () => {
 });
 
 let modalConfirmHandler = null;
-function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon = false, onConfirm, danger = false, cardClass = '', icon = '' }){
+function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon = false, onConfirm, danger = false, cardClass = '', icon = '', single = false }){
   document.getElementById('modal-title').textContent = title;
+  // single: 안내만 하는 창(확인·닫기뿐)은 "돌아가기"와 뜻이 같아서 버튼을 하나만 둔다. 고르는 창(참가하기 등)은 둘 다 둔다.
+  document.getElementById('modal-cancel').hidden = single || !onConfirm;
   const iconEl = document.getElementById('modal-icon-badge');
   if (icon) { iconEl.hidden = false; iconEl.innerHTML = icon; } else { iconEl.hidden = true; iconEl.innerHTML = ''; }
   const bodyEl = document.getElementById('modal-body');
@@ -1373,7 +1376,7 @@ function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon
 }
 function closeModal(){ document.getElementById('modal-overlay').hidden = true; modalConfirmHandler = null; }
 // DB 오류(정원 마감, 네트워크 등)를 기존 모달로 그냥 알려준다. 별도 토스트 컴포넌트를 새로 안 만든다.
-function showError(message){ openModal({ title: '문제가 발생했어요', body: message, confirmLabel: '확인', onConfirm: () => {} }); }
+function showError(message){ openModal({ title: '문제가 발생했어요', body: message, confirmLabel: '확인', onConfirm: () => {}, single: true }); }
 function friendlyDbError(e){
   const msg = (e && e.message) || String(e);
   if (msg.includes('정원이 찼습니다')) return '방금 정원이 다 찼어요. 다른 팟을 찾아볼까요?';
@@ -3946,8 +3949,8 @@ async function checkMyReportNotice(){
   const key = 'tanmankeum_report_notice_' + mine.level;
   try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) {}
   openModal(mine.level >= 2
-    ? { title: '이용이 제한됐어요', body: `함께 탄 분들 여러 명이 불편을 알려와서 새 팟을 만들거나 참가할 수 없어요. 운영팀이 내용을 확인하고 있어요. 잘못 알려진 일이라면 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {} }
-    : { title: '함께 탄 분들이 불편을 알려왔어요', body: `약속 시간과 정산을 지켜주세요. 계속되면 이용이 제한될 수 있어요. 궁금한 점은 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {} });
+    ? { title: '이용이 제한됐어요', body: `함께 탄 분들 여러 명이 불편을 알려와서 새 팟을 만들거나 참가할 수 없어요. 운영팀이 내용을 확인하고 있어요. 잘못 알려진 일이라면 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {}, single: true }
+    : { title: '함께 탄 분들이 불편을 알려왔어요', body: `약속 시간과 정산을 지켜주세요. 계속되면 이용이 제한될 수 있어요. 궁금한 점은 ${REPORT_CONTACT} 으로 알려주세요.`, confirmLabel: '확인', onConfirm: () => {}, single: true });
 }
 
 /* ============ 11. 화면 4: 팟 채팅방 ============ */
@@ -4351,6 +4354,7 @@ async function renderPodChat(podId){
       bodyHtml: `<div class="pod-info-modal">${buildBotSummaryHtml(pod, result, '', { modal: true })}</div>`,
       confirmLabel: '닫기',
       onConfirm: () => {},
+      single: true,
     });
   });
 
