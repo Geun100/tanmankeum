@@ -318,6 +318,8 @@
   .status-card p.status-meta{ margin-bottom:20px; }
   .status-card p.status-meta .pod-luggage{ vertical-align:-2px; gap:0; }
   .status-card p.status-meta .pod-luggage svg{ margin-right:2px; }
+  /* 홈 내 팟 카드: 채팅방 보기가 메인, 팟 공유는 그 아래 작은 회색 링크(파랑은 메인 버튼에만) */
+  .status-share-link{ display:flex; align-items:center; gap:5px; margin:12px auto 0; padding:4px 8px; border:none; background:none; color:var(--ink-soft); font:inherit; font-size:13px; font-weight:500; cursor:pointer; }
 
   /* 홈 상단 알림 종 — 눈에 띄지 않게 테두리·배경 없이 아이콘 색만 바꾼다(꺼짐: 연한 회색+사선, 켜짐: 파랑) */
   .bell-btn{ border-color:transparent; background:transparent; color:var(--placeholder); }

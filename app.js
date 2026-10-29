@@ -3400,23 +3400,16 @@ async function renderHome(){
     <span class="status-tag"><span class="status-dot"></span>${statusLabel()}</span>
     <strong>${escapeHtml(myPod.originName)} → ${escapeHtml(myPod.leaderDest)}</strong>
     <p class="status-meta">${myPod.departTime} 출발 · ${myPod.participants.length}/${myPod.desiredSize}명 · ${carrierBadgeHtml(myPod)}</p>
-    <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button class="btn btn--ghost btn--block" id="btn-my-pod-chat" style="color:var(--primary-dark); font-size:14px;">${isLeaderOfOwn ? '내 팟 채팅방 보기' : '참가 중인 팟 채팅방 보기'}</button>
+    ${SUPA_ENABLED ? `<button type="button" class="status-share-link" id="btn-my-pod-share">${iconSvg('share', 14)}팟 링크 공유</button>` : ''}
   `;
   document.getElementById('btn-my-pod-chat').addEventListener('click', () => {
     renderPodChat(myPod.id); // STATE.myPodId를 다시 읽지 않는다 — 바로 위에서 이미 찾아둔 그 팟이다.
     showScreen('screen-pod-chat');
   });
-  // 카톡방 등에 팟 링크를 보내 사람을 모으는 버튼. DB가 없는 로컬 시드 팟은 링크가 의미 없어서 뺀다.
-  if (SUPA_ENABLED) {
-    const shareBtn = document.createElement('button');
-    shareBtn.type = 'button';
-    shareBtn.className = 'btn btn--ghost btn--block';
-    shareBtn.id = 'btn-my-pod-share';
-    shareBtn.style.cssText = 'color:var(--primary-dark); font-size:14px; margin-top:8px;';
-    shareBtn.innerHTML = `${iconSvg('share', 16)}팟 링크 공유하기`;
-    shareBtn.addEventListener('click', () => sharePod(myPod));
-    card.appendChild(shareBtn);
-  }
+  // 카톡방 등에 팟 링크를 보내 사람을 모으는 보조 링크(채팅방 버튼 아래). DB가 없는 로컬 시드 팟은 링크가 의미 없어서 뺀다.
+  const shareBtn = document.getElementById('btn-my-pod-share');
+  if (shareBtn) shareBtn.addEventListener('click', () => sharePod(myPod));
   renderPodList();
 }
 
