@@ -4920,7 +4920,7 @@ function renderSettlement(podId){
     </div>
     <div class="info-box share-box" id="share-box" hidden>
       <div class="fare-head">
-        <h3><label for="account-number">입금 안내 공유</label></h3>
+        <h3>입금 안내 공유</h3>
         <label class="photo-read-btn" for="receipt-photo" id="receipt-picker">${iconSvg('camera', 15)}영수증 사진</label>
       </div>
       <div class="field" id="account-field">
