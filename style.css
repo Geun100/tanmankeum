@@ -589,7 +589,10 @@
   .cta-row .cta-hint{ flex:1 1 auto; text-align:left; }
   .btn--sm{ height:36px; font-size:13px; padding:0 12px; }
   .cta-row .btn--text-danger.btn--sm{ flex:0 0 auto; padding:0 10px; }
-  .cta-row #btn-confirm-pod{ height:44px; font-size:15px; } /* 팟장의 메인 행동이라 옆 취소 링크보다 확실히 크게 */
+  /* 팟 확정하기(꽉 찬 메인) 아래에 팟 취소하기(작은 빨간 링크) — 같은 줄에 두면 두 선택지가 같은 무게로 보인다 */
+  .cta-stack{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .cta-stack #btn-confirm-pod{ width:100%; height:44px; font-size:15px; }
+  .cta-stack .btn--text-danger{ height:30px; padding:0 10px; font-size:13px; }
   .paid-banner{ display:flex; flex-direction:column; gap:4px; align-items:center; text-align:center; background:var(--green-soft); color:var(--green); border-radius:14px; padding:16px 14px; margin:0 0 12px; }
   .paid-banner strong{ font-size:18px; font-weight:800; }
   .paid-banner span{ font-size:14px; font-weight:600; }

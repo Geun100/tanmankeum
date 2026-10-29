@@ -4400,7 +4400,7 @@ async function renderPodChat(podId){
       ? `${seatsLeft}자리 남았어요 · 덜 차도 확정할 수 있어요`
       : '정원이 다 찼어요 · 지금 확정할 수 있어요';
     ctaHtml += `<p class="cta-hint">${hint}</p>`;
-    ctaHtml += `<div class="cta-row"><button class="btn btn--primary btn--sm" id="btn-confirm-pod">팟 확정하기</button><button class="btn btn--text-danger btn--sm" id="btn-cancel-pod">팟 취소하기</button></div>`;
+    ctaHtml += `<div class="cta-stack"><button class="btn btn--primary btn--sm" id="btn-confirm-pod">팟 확정하기</button><button class="btn btn--text-danger btn--sm" id="btn-cancel-pod">팟 취소하기</button></div>`;
   } else if (!isLeader && pod.status === 'recruiting') {
     ctaHtml += `<div class="cta-row"><p class="cta-hint">팟장이 확정하면 요금을 알려줘요. 그때까지 탑승 장소를 맞춰보세요.</p><button class="btn btn--text-danger btn--sm" id="btn-leave-pod">참가 취소하기</button></div>`;
   } else if (isLeader && pod.status === 'in_progress') {
