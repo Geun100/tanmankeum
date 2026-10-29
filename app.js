@@ -2499,7 +2499,7 @@ function currentPickedRoute(){
 }
 function renderRoutePick(){
   const picked = currentPickedRoute();
-  const labels = buildRouteRows(document.getElementById('route-pick-list'), false, picked, idx => {
+  buildRouteRows(document.getElementById('route-pick-list'), false, picked, idx => {
     const [from, to] = ROUTE_FILL[FREQUENT_ROUTES[idx].label];
     const o = document.getElementById('ob-origin'), d = document.getElementById('ob-dest');
     o.value = from; d.value = to;
@@ -2509,7 +2509,7 @@ function renderRoutePick(){
     document.getElementById('route-pick').open = false;
     renderRoutePick();
   });
-  document.getElementById('route-pick-current').textContent = picked >= 0 ? labels[picked] : '고르기';
+  // 고른 경로는 바로 아래 출발지·목적지 칸에 채워지니 요약 줄 오른쪽엔 아무것도 적지 않는다(목록 안에서는 체크로 표시된다).
 }
 function renderBrowseList(){
   const ul = document.getElementById('pod-list');
