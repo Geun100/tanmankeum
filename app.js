@@ -3004,6 +3004,8 @@ function openSettings(){
   const u = STATE.user;
   if (!u) return;
   const myPod = findPod(STATE.myPodId);
+  // 팟이 없으면(끝난 뒤 새 팟을 아직 안 만든 상태) 잠긴 화면을 그릴 팟이 없다 — 새 팟 만들기로 보낸다.
+  if (!myPod) { openNewPodInput({ backTo: 'screen-home', keepPlaces: false }); return; }
   const lock = settingsLockReason(myPod, u.id);
   if (lock) { renderMyInfoLocked(myPod, lock); showScreen('screen-my-info'); return; }
   settingsPodId = STATE.myPodId;
