@@ -426,6 +426,7 @@
   /* 팟 상세는 경로를 눈으로 따라가는 화면이라 지도를 크게 잡는다. */
   .kakao-map-box--lg{ height:380px; }
   .map-legend{ display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--muted); margin-top:10px; }
+  .map-kakao-links{ flex-wrap:wrap; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
   .map-legend span{ display:inline-flex; align-items:center; gap:4px; }
   .legend-dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
 
@@ -463,7 +464,9 @@
   .a2hs-card svg{ color:var(--primary); flex-shrink:0; }
   .a2hs-card span{ line-height:1.4; word-break:keep-all; }
   .a2hs-link{ margin-left:auto; border:0; background:none; color:var(--primary); font:inherit; font-size:12px; font-weight:600; padding:8px 0 8px 10px; cursor:pointer; white-space:nowrap; }
-  .pod-info-modal{ max-height:62vh; overflow-y:auto; text-align:left; }
+  .pod-info-modal{ max-height:62vh; overflow-y:auto; text-align:left; margin-top:16px; }
+  /* 구간별 근거와 맨 아래 안내는 보조 정보라 작게(모달 안 p 기본 14px을 덮는다) */
+  .pod-info-modal .fine-note{ font-size:12px; }
   .legal-links--tight{ margin-top:12px; padding-bottom:8px; }
   #screen-home.is-guest #btn-logout{ display:none; }
 
@@ -548,7 +551,8 @@
   .bot-person-name{ font-size:14px; font-weight:700; }
   .bot-person-name .badge{ font-size:11px; padding:1px 6px; margin-left:2px; }
   .bot-person-fare{ font-size:14px; font-weight:700; color:var(--primary-dark); flex-shrink:0; }
-  .bot-person-route{ margin:2px 0 0; font-size:13px; color:var(--ink-soft); }
+  .bot-person-route{ margin:6px 0 0; font-size:13px; color:var(--ink-soft); }
+  .pod-info-modal .bot-person details{ margin-top:6px !important; } /* 이름과 "왜 이 금액이에요?" 사이 (인라인 margin을 덮는다) */
   .bot-person-links{ display:flex; gap:12px; margin-top:4px; }
   .bot-person-links a{ display:inline-flex; align-items:center; gap:3px; font-size:12px; font-weight:600; color:var(--primary); }
   .bot-person-links svg{ flex-shrink:0; }
