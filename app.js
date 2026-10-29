@@ -403,20 +403,86 @@ function snoozePushHint(){ try { localStorage.setItem(PUSH_HINT_KEY, String(Date
 function openInExternalBrowser(){
   location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(SHARE_URL_AT_BOOT);
 }
+// 홈 화면에 추가하는 방법은 아이폰과 안드로이드가 다르다 — 기기별 탭으로 나누고, 지금 쓰는 기기 쪽을 먼저 연다.
+// 아이콘은 단계마다 오른쪽 칸에 둔다(아이폰 사파리의 공유 버튼은 위로 화살표가 나오는 열린 네모, 아이폰 파랑).
+const A2HS_SVG = (inner, fill) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="${fill ? 'currentColor' : 'none'}" stroke="${fill ? 'none' : 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const A2HS_ICON_SHARE = `<span style="color:#007aff;display:flex">${A2HS_SVG('<path d="M12 14.5V3"/><path d="M8 6.8L12 3l4 3.8"/><path d="M8.5 10H7a3 3 0 0 0-3 3v5a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-5a3 3 0 0 0-3-3h-1.5"/>')}</span>`;
+const A2HS_ICON_DOTS = A2HS_SVG('<circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/>', true);
+const A2HS_ICON_PLUS = A2HS_SVG('<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 9v6M9 12h6"/>');
+const A2HS_ICON_CHECK = A2HS_SVG('<path d="M5 12.5l4.5 4.5L19 7.5"/>');
+function a2hsSteps(rows){
+  return rows.map(([text, icon], i) => `<div class="a2hs-step"><span class="a2hs-num">${i + 1}</span><span class="a2hs-text">${text}</span><span class="a2hs-tile">${icon}</span></div>`).join('');
+}
 function openAddToHomeGuide(){
+  const panels = {
+    ios: a2hsSteps([['아래의 공유 버튼을 눌러요', A2HS_ICON_SHARE], ['메뉴를 올려 <b>홈 화면에 추가</b>를 눌러요', A2HS_ICON_PLUS], ['오른쪽 위 <b>추가</b>를 눌러요', A2HS_ICON_CHECK]]),
+    // 크롬 안드로이드는 버전마다 이름이 다르다("홈 화면에 추가 > 앱 설치/바로가기 만들기", 최신은 "설치 및 바로가기 만들기") — 둘 다 말해 둔다.
+    android: a2hsSteps([['주소창 옆 점 세 개를 눌러요', A2HS_ICON_DOTS], ['<b>홈 화면에 추가</b> 또는 <b>설치</b>를 눌러요', A2HS_ICON_PLUS], ['<b>추가</b>나 <b>설치</b>를 눌러요', A2HS_ICON_CHECK]]),
+  };
+  const first = /Android/i.test(navigator.userAgent) ? 'android' : 'ios';
   openModal({
-    title: '홈 화면에 추가하면 알림을 받아요',
+    title: '홈 화면에 추가하는 방법',
     cardClass: 'modal-card--rich',
     bodyHtml: `
-      <ol class="a2hs-steps">
-        <li>화면 아래의 <b>공유 버튼</b>(네모에서 화살표가 나오는 아이콘)을 눌러요.</li>
-        <li>메뉴를 위로 올려 <b>홈 화면에 추가</b>를 눌러요.</li>
-        <li>홈 화면에 생긴 <b>탄만큼 아이콘</b>으로 열고, 오른쪽 위 종 모양을 눌러 알림을 켜요.</li>
-      </ol>
-      <p class="modal-note">설치한 앱은 로그인이 따로라 학교 메일 인증을 한 번 더 해야 할 수 있어요.</p>`,
+      <div class="a2hs-tabs" role="tablist">
+        <button type="button" class="a2hs-tab${first === 'ios' ? ' on' : ''}" role="tab" data-p="ios">아이폰</button>
+        <button type="button" class="a2hs-tab${first === 'android' ? ' on' : ''}" role="tab" data-p="android">안드로이드</button>
+      </div>
+      <div class="a2hs-panel" data-p="ios"${first === 'ios' ? '' : ' hidden'}>${panels.ios}</div>
+      <div class="a2hs-panel" data-p="android"${first === 'android' ? '' : ' hidden'}>${panels.android}</div>`,
     confirmLabel: '확인',
     onConfirm: () => {},
   });
+  const root = document.getElementById('modal-body-rich');
+  root.querySelectorAll('.a2hs-tab').forEach(tab => tab.addEventListener('click', () => {
+    root.querySelectorAll('.a2hs-tab').forEach(t => t.classList.toggle('on', t === tab));
+    root.querySelectorAll('.a2hs-panel').forEach(p => { p.hidden = p.dataset.p !== tab.dataset.p; });
+  }));
+}
+// 안드로이드 크롬은 사이트가 설치 창을 직접 띄울 수 있다(beforeinstallprompt). 신호를 받아 두었다가 버튼을 누를 때 바로 띄우고,
+// 신호가 없으면(이미 설치했거나 다른 브라우저) 방법 안내로 넘어간다. 아이폰은 이런 방법이 없어 항상 안내를 보여준다.
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstall = e;
+  if (document.getElementById('screen-ob-email').classList.contains('active')) renderA2hsCard();
+});
+window.addEventListener('appinstalled', () => { deferredInstall = null; track('a2hs_installed'); });
+async function installOrGuide(){
+  if (!deferredInstall) { openAddToHomeGuide(); return; }
+  const ev = deferredInstall;
+  deferredInstall = null; // 한 번 쓰면 다시 쓸 수 없다
+  try {
+    ev.prompt();
+    const choice = await ev.userChoice;
+    track('a2hs_prompt', { outcome: choice && choice.outcome });
+  } catch (_) { openAddToHomeGuide(); }
+}
+// 로그인(학교 메일 인증) 화면 맨 위 카드. 홈 화면에 추가한 앱은 저장 공간이 따로라서, 추가를 먼저 하고 거기서 로그인하면 한 번이면 된다.
+// 카톡 안에서는 홈 화면에 추가할 수 없어서 외부 브라우저로 여는 게 먼저다. 이미 홈 화면 앱이거나 컴퓨터면 숨긴다.
+function renderA2hsCard(){
+  const card = document.getElementById('a2hs-card');
+  if (!card) return;
+  const env = pushEnv();
+  const android = /Android/i.test(navigator.userAgent);
+  // 한 줄 안내: 글자 하나와 "방법 ›"만 둔다. 눈에 띄는 박스와 큰 버튼은 쓰지 않는다.
+  let title = '', label = '', act = null;
+  if (env === 'kakao') {
+    title = '카톡 안에서는 사파리·크롬으로 먼저 열어주세요';
+    label = '열기 ›'; act = () => { track('a2hs_card_click', { env }); openInExternalBrowser(); };
+  } else if (env === 'ios-browser') {
+    title = '홈 화면에 추가하면 로그인은 한 번, 나에게 맞는 팟 알림도 받아요';
+    label = '방법 ›'; act = () => { track('a2hs_card_click', { env }); openAddToHomeGuide(); };
+  } else if (env === 'other' && android) {
+    title = '홈 화면에 추가하면 앱처럼 열려요';
+    label = deferredInstall ? '추가 ›' : '방법 ›'; act = () => { track('a2hs_card_click', { env: 'android', oneTap: !!deferredInstall }); installOrGuide(); };
+  }
+  card.hidden = !act;
+  if (!act) return;
+  document.getElementById('a2hs-title').textContent = title;
+  const btn = document.getElementById('a2hs-btn');
+  btn.textContent = label;
+  btn.onclick = act;
 }
 // 환경에 맞는 안내를 실행한다. 알림이 되는 환경이면 false.
 function explainNoPush(){
@@ -1251,6 +1317,7 @@ function showScreen(id){
   // 홈 카드 실시간 구독은 홈에서만 유지한다.
   if (id !== 'screen-home') unsubscribeHome();
   // 경로 화면에 들어올 때마다(온보딩·내 정보 수정) 경로 선택 줄을 지금 입력값에 맞춰 다시 그린다.
+  if (id === 'screen-ob-email') renderA2hsCard();
   if (id === 'screen-ob-route') {
     renderRoutePick();
     // 새 팟 만들기(팟이 끝난 뒤·시간이 지난 뒤)는 돌아갈 팟도 화면도 없다 — 뒤로가기를 없앤다.
@@ -2134,6 +2201,13 @@ let splashDone = false;
 function leaveSplash(){
   if (splashDone) return;
   splashDone = true;
+  // 카톡 링크로 처음 온 사람(아직 인증 전)은 로그인하기 전에 사파리·크롬으로 보낸다. 카톡 안에서 로그인하면 저장 공간이 따로라
+  // 나중에 브라우저로 옮길 때 또 로그인해야 한다. 링크의 ?pod= 도 같이 넘어간다. 안 열리면 아래 로그인 화면의 "열기 ›"가 남는다.
+  if (pushEnv() === 'kakao' && !isVerifiedLocal()) {
+    let tried = false;
+    try { tried = sessionStorage.getItem('tanmankeum_kakao_out') === '1'; sessionStorage.setItem('tanmankeum_kakao_out', '1'); } catch (_) {}
+    if (!tried) { track('kakao_auto_external'); openInExternalBrowser(); }
+  }
   requireVerification(() => showScreen('screen-ob-profile'), false);
 }
 const cachedOnboarding = loadOnboardingCache();

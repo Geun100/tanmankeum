@@ -413,6 +413,22 @@
   .push-hint-x{ background:none; border:0; padding:2px 6px; color:var(--primary-dark); font-size:18px; line-height:1; cursor:pointer; }
   .a2hs-steps{ margin:0 0 10px; padding-left:20px; font-size:14px; line-height:1.7; color:var(--ink); text-align:left; }
   .a2hs-steps li + li{ margin-top:6px; }
+  /* 홈 화면에 추가하는 방법 안내 창: 기기별 탭 + 단계마다 번호·한 줄 설명·그림 칸 */
+  .a2hs-tabs{ display:flex; background:var(--fill); border-radius:10px; padding:3px; margin:2px 0 6px; }
+  .a2hs-tab{ flex:1; border:1px solid transparent; background:none; border-radius:8px; padding:8px 0; font:inherit; font-size:13px; color:var(--ink-soft); cursor:pointer; }
+  .a2hs-tab.on{ background:var(--surface); border-color:var(--line); color:var(--ink); font-weight:600; }
+  .a2hs-step{ display:flex; align-items:center; gap:12px; padding:10px 0; text-align:left; }
+  .a2hs-step + .a2hs-step{ border-top:1px solid var(--line); }
+  .a2hs-num{ width:22px; height:22px; border-radius:50%; background:var(--ink); color:var(--surface); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .a2hs-text{ flex:1; font-size:14px; line-height:1.4; color:var(--ink); }
+  .a2hs-tile{ width:36px; height:36px; border-radius:10px; background:#e3efff; color:var(--primary-dark); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .a2hs-panel[hidden]{ display:none; }
+  /* 로그인 화면 맨 위 안내 카드: 홈 화면에 추가하고 시작하게 한다 */
+  .a2hs-card{ display:flex; align-items:center; gap:8px; padding:2px; margin:0 0 14px; font-size:12px; color:var(--ink); }
+  .a2hs-card[hidden]{ display:none; }
+  .a2hs-card svg{ color:var(--primary); flex-shrink:0; }
+  .a2hs-card span{ line-height:1.4; word-break:keep-all; }
+  .a2hs-link{ margin-left:auto; border:0; background:none; color:var(--primary); font:inherit; font-size:12px; font-weight:600; padding:8px 0 8px 10px; cursor:pointer; white-space:nowrap; }
   .pod-info-modal{ max-height:62vh; overflow-y:auto; text-align:left; }
   .legal-links--tight{ margin-top:12px; padding-bottom:8px; }
   #screen-home.is-guest #btn-logout{ display:none; }
