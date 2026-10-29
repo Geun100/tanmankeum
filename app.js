@@ -301,7 +301,7 @@ async function loadMessages(podId){
   const { data, error } = await supa.from('pod_messages')
     .select('*, profiles(nickname)').eq('pod_id', podId).order('created_at', { ascending: true });
   if (error) throw error;
-  return data.map(m => ({ who: (m.profiles && m.profiles.nickname) || '?', mine: m.user_id === STATE.user.id, text: m.text, imageUrl: m.image_url || null }));
+  return data.map(m => ({ who: (m.profiles && m.profiles.nickname) || '?', mine: m.user_id === STATE.user.id, userId: m.user_id, text: m.text, imageUrl: m.image_url || null }));
 }
 
 // 팟 상세/채팅 화면에서만 구독한다(목록 화면은 진입 시 재조회로 충분 — 설계 결정).
@@ -743,43 +743,41 @@ function iconSvg(name, size = 16){
 // 그대로 보여주면 위에 표시된 실제 정산액과 합계가 안 맞는다. 실제 정산액(actualAmount)에 맞춰
 // 구간별 금액을 같은 비율로 환산해서 보여주고, 마지막 구간에서 반올림 나머지를 맞춘다.
 // <details>/<summary>라 JS 없이 클릭으로 펼쳐진다.
-function fareBreakdownHtml(p, actualAmount){
+// scale(settlementScale)을 넘기면 모든 사람이 같은 비율을 쓴다 — 사람마다 비율을 따로 잡으면 같은 구간
+// 택시비가 사람마다 1~2원씩 다르게 보인다.
+function fareBreakdownHtml(p, actualAmount, scale, { hideNote = false } = {}){
   if (!p.breakdown || !p.breakdown.length) return '';
   const isActual = typeof actualAmount === 'number' && actualAmount > 0;
   const expected = p.breakdown.reduce((a, b) => a + b.share, 0);
-  const k = isActual && expected > 0 ? actualAmount / expected : 1;
+  const k = !isActual ? 1 : (scale > 0 ? scale : (expected > 0 ? actualAmount / expected : 1));
   let rows = p.breakdown.map((b, i) => {
     let share = Math.round(b.share * k);
     if (isActual && i === p.breakdown.length - 1) {
       share = actualAmount - p.breakdown.slice(0, -1).reduce((a, x) => a + Math.round(x.share * k), 0);
     }
-    return `<p class="fine-note" style="margin:2px 0;">${escapeHtml(b.from)} → ${escapeHtml(b.to)} 구간: ${won(b.segmentFare * k)} ÷ ${b.riders}명 = <strong>${won(share)}</strong></p>`;
+    return `<p class="fine-note" style="margin:2px 0;">${escapeHtml(b.from)} → ${escapeHtml(b.to)} 구간: ${won(Math.round(b.segmentFare * k))} ÷ ${b.riders}명 = <strong>${won(share)}</strong></p>`;
   }).join('');
-  if (isActual) rows += `<p class="fine-note" style="margin:4px 0 0; color:var(--muted);">※ 예상 요금(${won(expected)})과 실제 택시비가 달라서, 실제 택시비에 맞춰 구간별 금액을 같은 비율로 조정했어요.</p>`;
+  if (isActual && !hideNote) rows += `<p class="fine-note" style="margin:4px 0 0; color:var(--muted);">※ 예상 요금(${won(expected)})과 실제 택시비가 달라서, 실제 택시비에 맞춰 구간별 금액을 같은 비율로 조정했어요.</p>`;
   return `<details style="margin:2px 0 6px;"><summary style="cursor:pointer; color:var(--primary-dark); font-size:13px;">왜 이 금액이에요?</summary>${rows}</details>`;
 }
-// fareBreakdownHtml의 글자 버전 — 계좌 공유 메시지에 "왜 이 금액인지"를 채팅으로 남길 때 쓴다.
-// 구간별 택시비를 그 구간을 같이 탄 인원수로 나눈 값이고, 실제 택시비에 맞춰 비율로 다시 맞춘다.
-function fareBreakdownLines(p, actualAmount){
-  if (!p || !p.breakdown || !p.breakdown.length || !(actualAmount > 0)) return [];
-  const expected = p.breakdown.reduce((a, b) => a + b.share, 0);
-  const k = expected > 0 ? actualAmount / expected : 1;
-  return p.breakdown.map((b, i) => {
-    let share = Math.round(b.share * k);
-    if (i === p.breakdown.length - 1) share = actualAmount - p.breakdown.slice(0, -1).reduce((a, x) => a + Math.round(x.share * k), 0);
-    return `${b.from} → ${b.to}: ${won(b.segmentFare * k)} ÷ ${b.riders}명 = ${won(share)}`;
-  });
+// 실제 택시비 ÷ 예상 요금 합계. fareBreakdownHtml에 넘겨 모든 사람의 구간 요금을 같은 비율로 환산한다.
+function settlementScale(settlement, perPerson){
+  const expected = (perPerson || []).reduce((a, p) => a + (p.fare || 0), 0);
+  const actual = (settlement || []).reduce((a, x) => a + x.amount, 0);
+  return expected > 0 && actual > 0 ? actual / expected : 0;
 }
-// 채팅 메시지는 500자까지라(pod_messages.text 제약) 길면 여러 개로 나눈다. 한 사람 몫(block)은 쪼개지 않는다.
-function chunkChatBlocks(header, blocks, footer, max = 460){
+// 팟원 기기엔 팟장이 계산한 정산 금액이 없다(DB에 안 남는 값). 팟장이 채팅에 보낸 "정산 내역이에요." 메시지를
+// 읽어서 [{ nickname, amount }]로 되살린다 — 팟 정보 창에 실제 금액을 보여주는 데만 쓴다.
+// 메시지 형식은 계좌 공유(btn-share-account)에서 만드는 것과 같아야 한다.
+const SETTLEMENT_MSG_HEAD = '정산 내역이에요.';
+function parseSettlementMessage(text, nicknames){
+  if (!text || !text.startsWith(SETTLEMENT_MSG_HEAD)) return null;
   const out = [];
-  let cur = header;
-  blocks.forEach(b => {
-    if (cur.length + 1 + b.length > max && cur !== header) { out.push(cur); cur = header; }
-    cur += '\n' + b;
+  text.split('\n').forEach(line => {
+    const m = /^(.+): ([\d,]+)원$/.exec(line.trim());
+    if (m && nicknames.includes(m[1])) out.push({ nickname: m[1], amount: Number(m[2].replace(/,/g, '')) });
   });
-  out.push(footer ? `${cur}\n${footer}` : cur);
-  return out;
+  return out.length ? out : null;
 }
 // 닉네임·계좌번호처럼 사용자가 직접 입력한 문자열을 템플릿 리터럴로 innerHTML에 꽂을 때 반드시
 // 거친다. 온보딩 입력창의 maxlength는 클라이언트 표시일 뿐이라, Supabase REST API를 직접 호출하면
@@ -3079,7 +3077,7 @@ function loadHistory(){
   } catch { return []; }
 }
 // 팟이 지워지거나 내가 나가기 전에 호출해 그 시점의 정보를 기록 한 건으로 만든다.
-// amount: 팟장은 정산 화면에서 계산해 둔 실제 금액, 참가자는 최종 요금 계산값(예상)이다.
+// amount: 팟장은 정산 화면에서 계산해 둔 실제 금액, 참가자는 채팅의 정산 내역 메시지에서 읽은 금액(없으면 예상)이다.
 function buildRideRecord(pod){
   const u = STATE.user;
   const isLeader = pod.leaderId === u.id;
@@ -3963,10 +3961,13 @@ const settlementPhoto = {};
 // 예상 요금은 확정된 뒤에도 보여준다 — 팟원은 최종 요금 화면을 못 보니 여기서 대략을 가늠한다. 실제 정산은 택시비 기준이라
 // 아래에 "달라질 수 있어요"를 붙인다. 정산이 끝나면 정산 금액(settled)이 사람 줄에 같이 보인다.
 function buildBotSummaryHtml(pod, result, intro, opts = {}){
-  const showEstimate = true;
   const leaderId = pod.leaderId;
   const settlementMap = {};
   (pod.settlement || []).forEach(s => { settlementMap[s.nickname] = s.amount; });
+  // 정산 금액이 나왔으면(팟장이 계산했거나 팟원이 정산 메시지에서 읽었으면) 예상 대신 실제 금액을 보여준다.
+  const isSettled = !!(pod.settlement && pod.settlement.length);
+  const settledTotal = isSettled ? pod.settlement.reduce((a, x) => a + x.amount, 0) : 0;
+  const scale = isSettled ? settlementScale(pod.settlement, result.perPerson) : 0;
   const arrival = minToTime(timeToMin(pod.departTime) + result.totalMins);
   // 팟장은 출발지+모든 경유지(하차지점)+최종 목적지가 순서대로 찍힌 전체 경로 하나,
   // 나머지 참가자는 "나만의" 두 구간(택시로 내가 내리는 곳까지, 거기서 내 목적지까지 도보)만
@@ -3999,15 +4000,17 @@ function buildBotSummaryHtml(pod, result, intro, opts = {}){
           <div class="bot-person">
             <div class="bot-person-top">
               <span class="bot-person-name">${escapeHtml(p.nickname)}${isLeader ? ' <span class="badge badge--leader">팟장</span>' : ''}</span>
-              ${showEstimate ? `<span class="bot-person-fare">${won(p.fare)}</span>` : ''}
+              <span class="bot-person-fare">${won(isSettled && settled != null ? settled : p.fare)}</span>
             </div>
             <p class="bot-person-route">${routeText}</p>
-            ${settled != null ? `<p class="bot-person-route">정산금 ${won(settled)}</p>` : ''}
+            ${isSettled && settled != null ? fareBreakdownHtml(p, settled, scale, { hideNote: true }) : ''}
             ${linksHtml ? `<div class="bot-person-links">${linksHtml}</div>` : ''}
           </div>`;
       }).join('')}
     </div>
-    ${showEstimate ? `<div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div><p class="fine-note" style="margin-top:6px;">예상 요금이에요. 실제 택시비에 따라 달라질 수 있어요.</p>` : ''}
+    ${isSettled
+      ? `<div class="bot-total-row"><span>총 요금</span><strong>${won(settledTotal)}</strong></div><p class="fine-note" style="margin-top:6px;">팟장이 입력한 실제 택시비 기준이에요. 구간별 금액은 예상 요금을 실제 택시비에 맞춰 같은 비율로 조정했어요.</p>`
+      : `<div class="bot-total-row"><span>총 예상 요금${result.isRealFare ? '' : '(추정)'}</span><strong>${won(result.totalFare)}</strong></div><p class="fine-note" style="margin-top:6px;">예상 요금이에요. 실제 택시비에 따라 달라질 수 있어요.</p>`}
   `;
 }
 
@@ -4186,7 +4189,7 @@ async function renderPodChat(podId){
   const reportBtn = document.getElementById('btn-chat-report');
   reportBtn.hidden = !((pod.status === 'confirmed' || pod.status === 'in_progress') && pod.participants.length > 1);
   reportBtn.onclick = () => openReportModal(pod);
-  pWrap.appendChild(helpLinkEl()); // 비용·정산·인원 문제 등을 운영자에게 바로 문의할 수 있게
+  pWrap.after(helpLinkEl()); // 비용·정산·인원 문제 등을 운영자에게 바로 문의할 수 있게 (참여자 박스 밖, 바깥 박스 안)
   if (pod.leaderId === u.id) decorateWarnBadges(pod, pWrap); // 팟장만 "주의" 배지를 본다
 
   // 지도는 접어둔 기본 상태에선 안 그린다 — 카카오 길찾기 API를 매번 부르는 건 비용이고,
@@ -4215,6 +4218,15 @@ async function renderPodChat(podId){
   let messages;
   if (SUPA_ENABLED) {
     messages = await loadMessages(podId);
+    // 팟원 기기엔 정산 금액이 없다 — 팟장이 마지막으로 보낸 정산 내역 메시지에서 읽어 팟 정보 창에 쓴다.
+    if (pod.leaderId !== u.id) {
+      const names = pod.participants.map(p => p.nickname);
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].userId !== pod.leaderId) continue;
+        const parsed = parseSettlementMessage(messages[i].text, names);
+        if (parsed) { pod.settlement = parsed; break; }
+      }
+    }
   } else {
     if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
     messages = STATE.chatMessages[podId];
@@ -4666,7 +4678,7 @@ function renderDoneSummary(pod){
       <p class="done-summary-meta">${pod.departTime} 출발 · ${pod.settlement.length}명 정산</p>
       ${pod.settlement.map(s => {
         const p = pod.finalResult && pod.finalResult.perPerson.find(x => x.nickname === s.nickname);
-        return `<div class="done-summary-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></div>${p ? fareBreakdownHtml(p, s.amount) : ''}`;
+        return `<div class="done-summary-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></div>${p ? fareBreakdownHtml(p, s.amount, settlementScale(pod.settlement, pod.finalResult.perPerson)) : ''}`;
       }).join('')}
       <div class="done-summary-total"><span>실제 택시비 합계</span><strong>${won(total)}</strong></div>
     </div>
@@ -4801,7 +4813,7 @@ function renderSettlement(podId){
     listEl.innerHTML = `<p class="callout">총 ${won(total)}</p>` +
       pod.settlement.map(s => {
         const p = result.perPerson.find(x => x.nickname === s.nickname);
-        return `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${p ? fareBreakdownHtml(p, s.amount) : ''}`;
+        return `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${p ? fareBreakdownHtml(p, s.amount, settlementScale(pod.settlement, result.perPerson)) : ''}`;
       }).join('');
     document.getElementById('settlement-result').hidden = false;
     collapseEstimate(); // 실제 금액이 나오면 예상 요약은 한 줄로 접는다(사람별 금액이 두 번 보이지 않게)
@@ -4894,7 +4906,7 @@ function renderSettlement(podId){
     const listEl = document.getElementById('settlement-list');
     listEl.innerHTML = `<p class="callout">총 ${won(actual)}</p>`;
     pod.settlement.forEach((s, i) => {
-      listEl.innerHTML += `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${fareBreakdownHtml(result.perPerson[i], s.amount)}`;
+      listEl.innerHTML += `<p class="info-row"><span>${escapeHtml(s.nickname)}</span><strong>${won(s.amount)}</strong></p>${fareBreakdownHtml(result.perPerson[i], s.amount, settlementScale(pod.settlement, result.perPerson))}`;
     });
     document.getElementById('settlement-result').hidden = false;
     collapseEstimate(); // 실제 금액이 나오면 예상 요약은 한 줄로 접는다(사람별 금액이 두 번 보이지 않게)
@@ -4944,18 +4956,10 @@ function renderSettlement(podId){
         try {
           const settled = pod.settlement || [];
           const totalActual = settled.reduce((s, x) => s + x.amount, 0);
-          const lines = [`정산 내역이에요.`, `실제 택시비 합계: ${won(totalActual)}`, `입금 계좌: ${acc}`];
+          // 채팅엔 입금에 필요한 것만 보낸다. 구간별 근거는 팟 정보 창에서 본다(팟원 기기는 이 메시지를 읽어 금액을 채운다).
+          const lines = [SETTLEMENT_MSG_HEAD, `실제 택시비 합계: ${won(totalActual)}`, `입금 계좌: ${acc}`, ''];
           settled.forEach(s => lines.push(`${s.nickname}: ${won(s.amount)}`));
           const text = lines.join('\n');
-          // "왜 이 금액이에요?"를 채팅으로도 남긴다 — 입금액 메시지와 따로 보내서 계좌·영수증이 묻히지 않게 한다.
-          const whyBlocks = settled.map(s => {
-            const per = result.perPerson.find(x => x.nickname === s.nickname);
-            const rows = fareBreakdownLines(per, s.amount);
-            return rows.length ? `${s.nickname}\n${rows.map(r => '  ' + r).join('\n')}` : null;
-          }).filter(Boolean);
-          const whyTexts = whyBlocks.length
-            ? chunkChatBlocks('금액은 이렇게 나왔어요.', whyBlocks, '※ 구간별 택시비를 그 구간을 같이 탄 사람 수로 나눠요.')
-            : [];
           let imageUrl = null;
           if (file && SUPA_ENABLED) {
             // Supabase Storage 키는 비-ASCII 문자(한글 등)를 거부한다("InvalidKey") — 원본 파일명을
@@ -4974,14 +4978,9 @@ function renderSettlement(podId){
             if (error) throw error;
             messageSaved = true;
             notifyPodOfChat(podId, saved && saved.id); // 팟원들에게 "정산 내역" 알림
-            // 금액 근거는 있으면 좋은 설명이라 실패해도 계좌 공유 자체는 성공으로 둔다.
-            for (const t of whyTexts) {
-              try { await supa.from('pod_messages').insert({ pod_id: podId, user_id: pod.leaderId, text: t }); } catch (_) { break; }
-            }
           } else {
             if (!STATE.chatMessages[podId]) STATE.chatMessages[podId] = [];
             STATE.chatMessages[podId].push({ who: '나', mine: true, text, imageUrl });
-            whyTexts.forEach(t => STATE.chatMessages[podId].push({ who: '나', mine: true, text: t }));
           }
           document.getElementById('share-confirm-note').textContent = `채팅방에 계좌(${acc})와 정산 내역이 공유됐어요. 각자 계좌이체로 정산해주세요.`;
           document.getElementById('btn-finish-pod').disabled = false;
