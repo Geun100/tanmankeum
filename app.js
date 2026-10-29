@@ -1348,7 +1348,9 @@ document.getElementById('home-logo').addEventListener('click', async () => {
 });
 
 let modalConfirmHandler = null;
-function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon = false, onConfirm, danger = false, cardClass = '', icon = '' }){
+// hideCancel: 확인 버튼 하나만 둔다(닫기만 있으면 되는 안내 창에서 '돌아가기'와 '닫기'가 같은 일을 하지 않게).
+// quiet: 확인 버튼을 흰 버튼으로 — 보고 닫기만 하는 창이라 파란 강조가 필요 없을 때.
+function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon = false, onConfirm, danger = false, cardClass = '', icon = '', hideCancel = false, quiet = false }){
   document.getElementById('modal-title').textContent = title;
   const iconEl = document.getElementById('modal-icon-badge');
   if (icon) { iconEl.hidden = false; iconEl.innerHTML = icon; } else { iconEl.hidden = true; iconEl.innerHTML = ''; }
@@ -1367,7 +1369,8 @@ function openModal({ title, body, bodyHtml, confirmLabel = '확인', confirmIcon
   document.getElementById('modal-card').className = 'modal-card' + (cardClass ? ' ' + cardClass : '');
   const confirmBtn = document.getElementById('modal-confirm');
   confirmBtn.innerHTML = confirmIcon ? `${confirmLabel}${ICON_CHEVRON_R}` : confirmLabel;
-  confirmBtn.className = 'btn ' + (danger ? 'btn--danger' : 'btn--primary');
+  confirmBtn.className = 'btn ' + (danger ? 'btn--danger' : quiet ? 'btn--ghost' : 'btn--primary');
+  document.getElementById('modal-cancel').hidden = hideCancel;
   modalConfirmHandler = onConfirm || null;
   document.getElementById('modal-overlay').hidden = false;
 }
@@ -4343,6 +4346,8 @@ async function renderPodChat(podId){
       cardClass: 'modal-card--rich',
       bodyHtml: `<div class="pod-info-modal">${buildBotSummaryHtml(pod, result, '', { modal: true })}</div>`,
       confirmLabel: '닫기',
+      hideCancel: true,
+      quiet: true,
       onConfirm: () => {},
     });
   });
