@@ -158,6 +158,7 @@ function loadOnboardingCache(){
 // replaceOwn: 경로를 새로 입력해 등록할 때만 true. 재접속(앱을 열 때)에는 내 팟을 그대로 둬야 한다 —
 // 열 때마다 해체하고 새로 만들면 팟 id가 바뀌어서 이미 공유한 링크가 "팟장이 취소했어요"로 죽는다.
 async function enterHome({ replaceOwn = false } = {}){
+  // 팟이 끝난 뒤에는 그때 입력했던 경로가 더는 쓸모없다(이미 탔다). 새 경로를 등록하기 전까지는 옛 경로로 팟을 자동으로 만들지 않는다.
   await prefetchBaseRoutes(STATE.user.origin, STATE.user.dest);
   if (SUPA_ENABLED) {
     await upsertProfile(STATE.user.id, STATE.user.nickname, STATE.user.gender);
@@ -174,6 +175,8 @@ async function enterHome({ replaceOwn = false } = {}){
       STATE.podEndedWhileAway = true;
     }
     if (!mine) forgetMemberPod();
+    if (STATE.podEndedWhileAway) setNeedNewPod(true);
+    if (mine) setNeedNewPod(false); // 다른 기기 등에서 이미 새 팟에 들어가 있으면 표시는 필요 없다
     STATE.committed = !!(mine && mine.leaderId !== STATE.user.id);
     STATE.userState = STATE.committed ? '채팅방' : '대기';
 
@@ -196,7 +199,7 @@ async function enterHome({ replaceOwn = false } = {}){
     STATE.pods = seedPods();
     STATE.userState = '대기';
   }
-  if (!STATE.myPodId) await createOwnPod();
+  if (!STATE.myPodId && (replaceOwn || !needNewPod())) await createOwnPod();
   // 팟 경로는 여기서 미리 안 받는다 — 팟이 100개 넘어가면 길찾기 호출이 그만큼 한꺼번에 나가고,
   // 그걸 전부 기다리느라 온보딩이 몇십 초씩 멈췄다. 목록은 renderPodList가 화면에 필요한 만큼만
   // 나눠서 받아오고 받는 대로 다시 그린다.
@@ -1248,7 +1251,12 @@ function showScreen(id){
   // 홈 카드 실시간 구독은 홈에서만 유지한다.
   if (id !== 'screen-home') unsubscribeHome();
   // 경로 화면에 들어올 때마다(온보딩·내 정보 수정) 경로 선택 줄을 지금 입력값에 맞춰 다시 그린다.
-  if (id === 'screen-ob-route') renderRoutePick();
+  if (id === 'screen-ob-route') {
+    renderRoutePick();
+    // 새 팟 만들기(팟이 끝난 뒤·시간이 지난 뒤)는 돌아갈 팟도 화면도 없다 — 뒤로가기를 없앤다.
+    const routeTitle = document.getElementById('ob-route-title').textContent;
+    document.getElementById('ob-route-back-btn').style.display = (routeTitle === '새 팟 만들기' || routeTitle.startsWith('출발 시간이 지났어요')) ? 'none' : '';
+  }
 }
 // 뒤로가기로 홈에 돌아갈 땐 항상 renderHome()을 다시 돌린다 — 안 그러면 그새 팟에 참가/탈퇴해도
 // 홈 카드가 마지막으로 renderHome()이 실제로 실행됐던 시점 그대로 멈춰있는다(예: 다른 팟 참가하고
@@ -1750,6 +1758,10 @@ const MEMBER_POD_KEY = 'tanmankeum_member_pod';
 function rememberMemberPod(pod, userId){
   try { if (pod.leaderId !== userId && pod.status !== 'recruiting') localStorage.setItem(MEMBER_POD_KEY, JSON.stringify({ podId: pod.id, userId })); } catch (_) {}
 }
+// 팟이 끝난 사람은 새 경로를 등록하기 전까지 "새 팟 만들기 대기" 상태다. 앱을 닫았다 열어도 이 표시로 새 팟 만들기 화면에 돌아온다.
+const NEED_NEW_POD_KEY = 'tanmankeum_need_new_pod';
+function setNeedNewPod(on){ try { on ? localStorage.setItem(NEED_NEW_POD_KEY, '1') : localStorage.removeItem(NEED_NEW_POD_KEY); } catch (_) {} }
+function needNewPod(){ try { return localStorage.getItem(NEED_NEW_POD_KEY) === '1'; } catch (_) { return false; } }
 function memberPodMarker(){ try { return JSON.parse(localStorage.getItem(MEMBER_POD_KEY) || 'null'); } catch (_) { return null; } }
 function forgetMemberPod(){ try { localStorage.removeItem(MEMBER_POD_KEY); } catch (_) {} }
 
@@ -1775,6 +1787,7 @@ let doneTimer = null;
 // holdUntil: 서버 정리(사진 삭제·알림·팟 삭제)가 아직 끝나지 않았을 때 그 약속을 넘긴다. 완료 화면을 먼저 보여 주고,
 // 최소 노출 시간과 정리 완료가 둘 다 지나면 넘어간다 — 정리를 기다린 다음에야 완료 화면을 띄우면 그동안 아무 반응이 없다.
 function showDoneThenNewPod(pod, holdUntil){
+  setNeedNewPod(true);
   renderDoneSummary(pod);
   showScreen('screen-done');
   if (doneTimer) clearTimeout(doneTimer);
@@ -1808,6 +1821,13 @@ async function finishMemberRide(pod){
   } finally {
     finishingRidePodId = null;
   }
+}
+// 팟장이 내 입금을 확인한 순간 한 번만 토스트로 알린다(채팅방·홈이 다시 그려질 때마다 반복하지 않는다).
+let paidAnnouncedPodId = null;
+function announcePaidOnce(pod){
+  if (!isPaidMember(pod) || paidAnnouncedPodId === pod.id) return;
+  paidAnnouncedPodId = pod.id;
+  showToast('팟장이 입금을 확인했어요. 팟을 나갈 수 있어요');
 }
 function isPaidMember(pod){
   if (!pod || pod.leaderId === STATE.user.id || pod.status === 'recruiting') return false;
@@ -2143,10 +2163,9 @@ if (cachedOnboarding) {
         promptRescheduleAfterExpiry();
         return;
       }
-      if (STATE.podEndedWhileAway) {
+      if (!mine && needNewPod()) {
+        if (STATE.podEndedWhileAway) showToast('함께 타던 팟이 종료됐어요');
         STATE.podEndedWhileAway = false;
-        showToast('함께 타던 팟이 종료됐어요');
-        renderHome();
         openNewPodInput({ backTo: 'screen-home', keepPlaces: false });
         return;
       }
@@ -2896,7 +2915,7 @@ async function logout(){
         try { await unsubscribeFromPush(); } catch (_) {}
         unsubscribePod(); unsubscribeHome();
         track('logout');
-        ['tanmankeum_uid', MEMBER_POD_KEY, VERIFIED_KEY, SECRET_KEY, ONBOARDING_CACHE_KEY, CONSENT_KEY, PUSH_OFF_KEY, PUSH_EP_KEY, PUSH_HINT_KEY]
+        ['tanmankeum_uid', MEMBER_POD_KEY, NEED_NEW_POD_KEY, VERIFIED_KEY, SECRET_KEY, ONBOARDING_CACHE_KEY, CONSENT_KEY, PUSH_OFF_KEY, PUSH_EP_KEY, PUSH_HINT_KEY]
           .forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
         try { if (window.posthog) posthog.reset(); } catch (_) {}
         location.replace('/');
@@ -3250,6 +3269,7 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   track('onboarding_completed', { party_size: partySize, via_train: !!selectedTrain });
   try {
     await enterHome({ replaceOwn: true });
+    setNeedNewPod(false); // 새 경로로 팟을 만들었으니 대기 상태는 끝
   } catch (e) {
     showError(friendlyDbError(e));
     return;
@@ -3284,7 +3304,7 @@ async function renderHome(){
     }
   }
   const u = STATE.user, myPod = findPod(STATE.myPodId);
-  if (isPaidMember(myPod)) { await finishMemberRide(myPod); return; }
+  announcePaidOnce(myPod); // 홈에서도 바로 끝내지 않는다 — 채팅방의 "팟 나가기"로 직접 나간다
   const isLeaderOfOwn = myPod && myPod.leaderId === u.id;
   // 홈에 머무는 동안 내 팟에 누가 들어오면 아래 인원수 표시가 실시간으로 갱신되도록 구독한다.
   subscribeHome(myPod && myPod.id);
@@ -3294,6 +3314,12 @@ async function renderHome(){
   // 홈에 있는 동안 새로 들어온 사람이 있으면 토스트로 알린다(처음 렌더는 기준값만 저장).
   if (myPod) announceJoiners(myPod, u.id);
   const card = document.getElementById('my-status-card');
+  if (!myPod) {
+    // 팟이 없는 채로 홈에 올 일은 없다(끝난 사람은 새 팟 만들기로 가고 거기엔 뒤로가기가 없다). 혹시 오더라도
+    // 아래에서 myPod를 읽다 오류가 나지 않게 새 팟 만들기로 보낸다.
+    openNewPodInput({ backTo: 'screen-home', keepPlaces: false });
+    return;
+  }
   // 남의 팟에 참가 중일 땐 내가 입력했던 값(STATE.user)이 아니라 실제 참가 중인 팟(myPod)의
   // 경로/시간을 보여준다 — 둘이 다를 수 있다(재등록 시도 등으로 STATE.user만 바뀐 경우).
   card.innerHTML = `
@@ -3960,7 +3986,7 @@ async function renderPodChat(podId){
   announceJoiners(pod, u.id);
   const isLeader = pod.leaderId === u.id;
   rememberMemberPod(pod, u.id);
-  if (isPaidMember(pod)) { await finishMemberRide(pod); return; }
+  announcePaidOnce(pod); // 입금이 확인되면 바로 끝내지 않고 알려 주기만 한다 — "팟 나가기"는 아래 CTA에서 직접 누른다
   const seatsLeft = pod.desiredSize - pod.participants.length;
   document.getElementById('chat-route-label').textContent = `${pod.originName} → ${pod.leaderDest}`;
   document.getElementById('chat-meta-label').textContent = `${pod.departTime} 출발 · ${pod.participants.length}/${pod.desiredSize}명`;
@@ -4270,33 +4296,45 @@ async function renderPodChat(podId){
   const ctaEl = document.getElementById('chat-cta');
   let ctaHtml = '';
   if (isLeader && pod.status === 'recruiting') {
+    // 채팅 화면 아래를 덜 차지하도록 안내는 한 줄, 버튼은 작게 한 줄에 나란히 둔다.
     const hint = seatsLeft > 0
-      ? `아직 ${seatsLeft}자리 남았어요. 인원이 덜 차도 지금 확정할 수 있어요.`
-      : '정원이 다 찼어요! 지금 확정해서 최종 요금을 확인해보세요.';
+      ? `${seatsLeft}자리 남았어요 · 덜 차도 확정할 수 있어요`
+      : '정원이 다 찼어요 · 지금 확정할 수 있어요';
     ctaHtml += `<p class="cta-hint">${hint}</p>`;
-    ctaHtml += `<button class="btn btn--primary btn--block" id="btn-confirm-pod">팟 확정하기</button>`;
-    ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-cancel-pod">팟 취소하기</button>`;
+    ctaHtml += `<div class="cta-row"><button class="btn btn--primary btn--sm" id="btn-confirm-pod">팟 확정하기</button><button class="btn btn--text-danger btn--sm" id="btn-cancel-pod">팟 취소하기</button></div>`;
   } else if (!isLeader && pod.status === 'recruiting') {
-    ctaHtml += `<p class="cta-hint">팟장이 확정하면 최종 경로와 요금을 볼 수 있어요. 그때까지 채팅으로 탑승 장소를 맞춰보세요.</p>`;
-    ctaHtml += `<button class="btn btn--text-danger btn--block" id="btn-leave-pod">참가 취소하기</button>`;
+    ctaHtml += `<div class="cta-row"><p class="cta-hint">팟장이 확정하면 요금을 알려줘요. 그때까지 탑승 장소를 맞춰보세요.</p><button class="btn btn--text-danger btn--sm" id="btn-leave-pod">참가 취소하기</button></div>`;
   } else if (isLeader && pod.status === 'in_progress') {
     // 계좌 공유 후 채팅방으로 돌아온 팟장이 정산 화면으로 되돌아가 팟을 종료할 수 있어야 한다.
     // 정산금액을 이미 계산해뒀으면 여기서 바로 종료할 수 있게 하고, 입금 확인은 별도 버튼으로 남긴다.
     if (pod.settlement && pod.settlement.length) {
-      ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-go-settlement">입금 확인 · 정산 화면</button>`;
-      ctaHtml += `<button class="btn btn--primary btn--block" id="btn-finish-from-chat">정산 완료하고 팟 종료</button>`;
+      ctaHtml += `<div class="cta-row"><button class="btn btn--ghost btn--sm" id="btn-go-settlement">입금 확인</button><button class="btn btn--primary btn--sm" id="btn-finish-from-chat">정산 완료 · 팟 종료</button></div>`;
     } else {
-      ctaHtml += `<button class="btn btn--primary btn--block" id="btn-go-settlement">정산하러 가기</button>`;
+      ctaHtml += `<button class="btn btn--primary btn--sm btn--block" id="btn-go-settlement">정산하러 가기</button>`;
     }
   } else if (!isLeader && pod.status !== 'recruiting') {
-    // 확정된 뒤에는 참가자가 팟에서 나갈 길이 없다(수락·거절 단계도 없다) — 참가는 확정 전에 신중하게 정한다.
-    // 팟이 끝나는 길은 팟장이 입금을 확인하거나(finishMemberRide) 팟장이 팟을 종료하는 것(showPodEndedForMember)뿐이다.
-    // 요금은 예상일 뿐이라 팟원에게는 따로 보여주지 않는다 — 최종 요금은 팟장이 정산 때 채팅방에 공유한다.
-    ctaHtml += `<p class="cta-hint">팟이 확정됐어요. 팟장이 채팅방에 정산 안내를 보내면 입금해주세요. 입금이 확인되면 새 팟을 만들 수 있어요.</p>`;
+    // 확정된 뒤에는 참가자가 마음대로 나갈 수 없다 — 참가는 확정 전에 신중하게 정한다.
+    // 팟장이 입금을 확인하면 "팟 나가기"가 생긴다(눌러야 나간다 — 체크를 잘못 눌러도 바로 끝나지 않게). 팟장이 팟을 종료하면
+    // showPodEndedForMember로 끝난다. 요금은 예상일 뿐이라 팟원에게는 따로 보여주지 않는다 — 최종 요금은 팟장이 정산 때 채팅방에 공유한다.
+    if (isPaidMember(pod)) {
+      ctaHtml += `<div class="cta-row"><p class="cta-hint">팟장이 입금을 확인했어요. 이제 팟을 나갈 수 있어요.</p><button class="btn btn--primary btn--sm" id="btn-leave-done">팟 나가기</button></div>`;
+    } else {
+      ctaHtml += `<p class="cta-hint">팟이 확정됐어요. 팟장의 정산 안내가 오면 입금해주세요. 입금이 확인되면 '팟 나가기'가 떠요.</p>`;
+    }
   } else if (isLeader && pod.status !== 'recruiting') {
-    ctaHtml += `<button class="btn btn--ghost btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
+    ctaHtml += `<button class="btn btn--ghost btn--sm btn--block" id="btn-view-final">최종 경로 · 요금 보기</button>`;
   }
+  ctaEl.classList.add('cta-dock--chat');
   ctaEl.innerHTML = ctaHtml;
+  const leaveDoneBtn = document.getElementById('btn-leave-done');
+  if (leaveDoneBtn) leaveDoneBtn.addEventListener('click', () => {
+    openModal({
+      title: '팟에서 나갈까요?',
+      body: '나가면 이 채팅방에는 다시 들어올 수 없어요. 이용 기록은 기록 탭에 남아요.',
+      confirmLabel: '팟 나가기',
+      onConfirm: () => finishMemberRide(pod),
+    });
+  });
 
   const confirmBtn = document.getElementById('btn-confirm-pod');
   if (confirmBtn) confirmBtn.addEventListener('click', () => {

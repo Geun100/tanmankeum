@@ -527,6 +527,14 @@
   /* 팟 취소는 파괴적 동작이라 확정하기보다 눈에 덜 띄게 텍스트 링크로 둔다 */
   .btn--text-danger{ background:none; color:var(--danger); height:auto; padding:10px; font-size:13px; font-weight:600; text-decoration:underline; text-underline-offset:3px; }
   .cta-hint{ text-align:center; font-size:13px; color:var(--ink-soft); margin:0 0 10px; }
+  /* 채팅방 아래 버튼 영역: 채팅을 가리지 않게 얇게 — 안내는 작게, 버튼은 낮게 한 줄에 둔다 */
+  .cta-dock--chat{ padding:8px 14px calc(10px + env(safe-area-inset-bottom)); gap:6px; }
+  .cta-dock--chat .cta-hint{ font-size:12px; line-height:1.4; margin:0; text-align:center; }
+  .cta-row{ display:flex; align-items:center; gap:8px; }
+  .cta-row .btn{ flex:1 1 0; min-width:0; }
+  .cta-row .cta-hint{ flex:1 1 auto; text-align:left; }
+  .btn--sm{ height:36px; font-size:13px; padding:0 12px; }
+  .cta-row .btn--text-danger.btn--sm{ flex:0 0 auto; padding:0 10px; }
   .paid-banner{ display:flex; flex-direction:column; gap:4px; align-items:center; text-align:center; background:var(--green-soft); color:var(--green); border-radius:14px; padding:16px 14px; margin:0 0 12px; }
   .paid-banner strong{ font-size:18px; font-weight:800; }
   .paid-banner span{ font-size:14px; font-weight:600; }
