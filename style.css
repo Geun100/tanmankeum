@@ -417,6 +417,7 @@
   .a2hs-steps li + li{ margin-top:6px; }
   .pod-info-modal{ max-height:62vh; overflow-y:auto; text-align:left; }
   .legal-links--tight{ margin-top:12px; padding-bottom:8px; }
+  #screen-home.is-guest #btn-logout{ display:none; }
 
   /* 개인정보처리방침·서비스약관 페이지(privacy.html, terms.html) */
   .legal-page{ background:var(--fill); min-height:100dvh; }

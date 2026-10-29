@@ -155,7 +155,9 @@ function loadOnboardingCache(){
 }
 
 // 온보딩 최초 완료와 재접속 스킵 둘 다 이 함수를 거친다 — STATE.user가 이미 채워져 있다고 가정한다.
-async function enterHome(){
+// replaceOwn: 경로를 새로 입력해 등록할 때만 true. 재접속(앱을 열 때)에는 내 팟을 그대로 둬야 한다 —
+// 열 때마다 해체하고 새로 만들면 팟 id가 바뀌어서 이미 공유한 링크가 "팟장이 취소했어요"로 죽는다.
+async function enterHome({ replaceOwn = false } = {}){
   await prefetchBaseRoutes(STATE.user.origin, STATE.user.dest);
   if (SUPA_ENABLED) {
     await upsertProfile(STATE.user.id, STATE.user.nickname, STATE.user.gender);
@@ -169,7 +171,9 @@ async function enterHome(){
     STATE.committed = !!(mine && mine.leaderId !== STATE.user.id);
     STATE.userState = STATE.committed ? '채팅방' : '대기';
 
-    if (mine && mine.leaderId === STATE.user.id && mine.participants.length === 1) {
+    if (!replaceOwn) {
+      // 재접속: 아무것도 바꾸지 않는다.
+    } else if (mine && mine.leaderId === STATE.user.id && mine.participants.length === 1) {
       // 예전엔 이 팟 행을 그대로 두고 경로만 업데이트했다 — 근데 이 팟이 한때 다른 사람도
       // 있다가 다 나가서 혼자 남은 경우라면, 그때 나눴던 채팅(인사말·정산내역 등)이 pod_messages에
       // 그대로 남아있어서 "새로 등록한 팟"인데 남의 흔적이 보이는 버그가 났다. 팟은 가벼운 값이니
@@ -2833,6 +2837,50 @@ function renderMyInfoLocked(pod, reason){
     showScreen('screen-pod-chat');
   });
 }
+
+// 로그아웃: 이 기기의 신원(uuid·인증 표시·비밀값)을 지운다. 같은 학교 메일로 다시 인증하면 서버가 같은 계정을
+// 이어받게 한다(api/auth-link의 recovered). 아직 아무도 안 들어온 내 팟(혼자인 팟장)은 해체하고 나가고,
+// 그 밖의 팟이 있으면(참가 중·확정·정산 중·사람이 모인 팟장) 마무리하기 전에는 나갈 수 없다.
+async function logout(){
+  const u = STATE.user;
+  if (!u) return;
+  const pod = findPod(STATE.myPodId);
+  const solo = !!pod && pod.leaderId === u.id && pod.status === 'recruiting' && pod.participants.length === 1;
+  if (pod && !solo) {
+    openModal({
+      title: '아직 로그아웃할 수 없어요',
+      body: '진행 중인 팟이 있어요. 이동과 정산을 마치거나, 채팅방에서 팟을 취소(참가 취소)한 뒤에 로그아웃할 수 있어요.',
+      confirmLabel: '채팅방 가기',
+      onConfirm: () => { renderPodChat(pod.id); showScreen('screen-pod-chat'); },
+    });
+    return;
+  }
+  openModal({
+    title: '로그아웃할까요?',
+    body: solo ? '만들어 둔 팟은 해체돼요. 다시 들어오려면 학교 메일 인증이 필요해요.' : '다시 들어오려면 학교 메일 인증이 필요해요.',
+    confirmLabel: '로그아웃',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        if (SUPA_ENABLED && solo) {
+          const { error } = await supa.from('pods').update({ status: 'dissolved' }).eq('id', pod.id);
+          if (error) throw error; // 해체가 안 됐으면 로그아웃도 하지 않는다 — 주인 없는 팟이 남는다
+        }
+        // 이 기기 푸시 구독은 서버가 이 사용자 번호로 갖고 있다 — 번호를 지우기 전에 끊는다. 실패해도 로그아웃은 막지 않는다.
+        try { await unsubscribeFromPush(); } catch (_) {}
+        unsubscribePod(); unsubscribeHome();
+        track('logout');
+        ['tanmankeum_uid', VERIFIED_KEY, SECRET_KEY, ONBOARDING_CACHE_KEY, CONSENT_KEY, PUSH_OFF_KEY, PUSH_EP_KEY, PUSH_HINT_KEY]
+          .forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+        try { if (window.posthog) posthog.reset(); } catch (_) {}
+        location.replace('/');
+      } catch (e) {
+        showError(friendlyDbError(e));
+      }
+    },
+  });
+}
+document.getElementById('btn-logout').addEventListener('click', logout);
 function openSettings(){
   const u = STATE.user;
   if (!u) return;
@@ -3175,7 +3223,7 @@ document.getElementById('btn-find-pod').addEventListener('click', async () => {
   identifyUser(STATE.user.id);
   track('onboarding_completed', { party_size: partySize, via_train: !!selectedTrain });
   try {
-    await enterHome();
+    await enterHome({ replaceOwn: true });
   } catch (e) {
     showError(friendlyDbError(e));
     return;
