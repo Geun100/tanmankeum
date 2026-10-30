@@ -236,7 +236,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         <span class="field-label">경로</span>
         <!-- 자주 가는 경로를 고르면 아래 출발지·목적지가 한 번에 채워진다. -->
         <details class="route-filter route-pick" id="route-pick">
-          <summary><span>자주 가는 경로</span><strong id="route-pick-current">고르기</strong></summary>
+          <summary><span>자주 가는 경로</span><strong aria-hidden="true"></strong></summary>
           <ul class="route-list" id="route-pick-list"></ul>
         </details>
         <div class="route-row">

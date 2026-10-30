@@ -2573,7 +2573,7 @@ function currentPickedRoute(){
 }
 function renderRoutePick(){
   const picked = currentPickedRoute();
-  const labels = buildRouteRows(document.getElementById('route-pick-list'), false, picked, idx => {
+  buildRouteRows(document.getElementById('route-pick-list'), false, picked, idx => {
     const [from, to] = ROUTE_FILL[FREQUENT_ROUTES[idx].label];
     const o = document.getElementById('ob-origin'), d = document.getElementById('ob-dest');
     o.value = from; d.value = to;
@@ -2583,7 +2583,7 @@ function renderRoutePick(){
     document.getElementById('route-pick').open = false;
     renderRoutePick();
   });
-  document.getElementById('route-pick-current').textContent = picked >= 0 ? labels[picked] : '고르기';
+  // 고른 경로는 바로 아래 출발지·목적지 칸에 채워지니 요약 줄 오른쪽엔 아무것도 적지 않는다(목록 안에서는 체크로 표시된다).
 }
 function renderBrowseList(){
   const ul = document.getElementById('pod-list');
@@ -4492,7 +4492,7 @@ async function renderPodChat(podId){
       ? `${seatsLeft}자리 남았어요 · 덜 차도 확정할 수 있어요`
       : '정원이 다 찼어요 · 지금 확정할 수 있어요';
     ctaHtml += `<p class="cta-hint">${hint}</p>`;
-    ctaHtml += `<div class="cta-row"><button class="btn btn--primary btn--sm" id="btn-confirm-pod">팟 확정하기</button><button class="btn btn--text-danger btn--sm" id="btn-cancel-pod">팟 취소하기</button></div>`;
+    ctaHtml += `<div class="cta-stack"><button class="btn btn--primary btn--sm" id="btn-confirm-pod">팟 확정하기</button><button class="btn btn--text-danger btn--sm" id="btn-cancel-pod">팟 취소하기</button></div>`;
   } else if (!isLeader && pod.status === 'recruiting') {
     ctaHtml += `<div class="cta-row"><p class="cta-hint">팟장이 확정하면 요금을 알려줘요. 그때까지 탑승 장소를 맞춰보세요.</p><button class="btn btn--text-danger btn--sm" id="btn-leave-pod">참가 취소하기</button></div>`;
   } else if (isLeader && pod.status === 'in_progress') {
