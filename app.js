@@ -1,5 +1,17 @@
 'use strict';
 
+// 데이터 초기화: 출시 전에 서버의 이용자 데이터를 전부 비웠다. 이 표시(tanmankeum_epoch)가 아직 없는 기기는
+// 예전 계정 정보(사용자 번호·비밀값·인증 표시·프로필 캐시·참가 팟 기록 등)를 지우고 처음부터 학교 메일 인증을 한다.
+// 기기마다 딱 한 번 실행되고 표시가 남는다. 서버 데이터를 다시 전부 비울 때만 DATA_EPOCH 값을 바꾼다.
+(() => {
+  const DATA_EPOCH = '2026-10-30';
+  try {
+    if (localStorage.getItem('tanmankeum_epoch') === DATA_EPOCH) return;
+    Object.keys(localStorage).filter(k => k.startsWith('tanmankeum_') && k !== 'tanmankeum_dev').forEach(k => localStorage.removeItem(k));
+    localStorage.setItem('tanmankeum_epoch', DATA_EPOCH);
+  } catch (_) { /* 저장소를 못 쓰는 환경이면 어차피 저장된 계정이 없다 */ }
+})();
+
 /* ============ 1. 데이터 모델 ============ */
 
 // 포항 실제 장소 좌표. 전부 카카오 로컬 키워드검색 결과를 그대로 옮긴 값이다(가상 지명 없음).
