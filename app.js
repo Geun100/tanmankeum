@@ -2430,15 +2430,20 @@ function showAccessBox(on){
 (() => {
   const logo = document.querySelector('#screen-ob-email .brand-mark');
   if (!logo) return;
-  let timer = null;
+  let timer = null, x0 = 0, y0 = 0;
   const stop = () => { clearTimeout(timer); timer = null; };
-  logo.addEventListener('pointerdown', () => {
+  logo.addEventListener('pointerdown', (e) => {
     stop();
     if (emailInput.value.trim() || !codeBox.hidden) return; // 메일을 쓰는 중이면 반응하지 않는다
+    x0 = e.clientX; y0 = e.clientY;
     timer = setTimeout(() => { timer = null; showAccessBox(true); }, ACCESS_HOLD_MS);
   });
-  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => logo.addEventListener(t, stop));
-  logo.addEventListener('contextmenu', (e) => e.preventDefault()); // 길게 누를 때 폰이 띄우는 메뉴를 막는다
+  // 손가락이 조금 흔들리는 건 괜찮고(24px), 손을 떼거나 크게 움직이면 취소한다.
+  // pointercancel·pointerleave로는 취소하지 않는다 — 폰은 길게 누르는 동안 브라우저가 제스처를 가져가며 pointercancel을 보내서, 5초를 못 채운다.
+  logo.addEventListener('pointermove', (e) => { if (timer && Math.hypot(e.clientX - x0, e.clientY - y0) > 24) stop(); });
+  logo.addEventListener('pointerup', stop);
+  ['contextmenu', 'selectstart', 'dragstart'].forEach(t => logo.addEventListener(t, (e) => e.preventDefault())); // 길게 누를 때 폰이 띄우는 메뉴·글자 선택을 막는다
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
 })();
 async function enterWithAccessCode(){
   const code = accessCodeInput.value.trim();
