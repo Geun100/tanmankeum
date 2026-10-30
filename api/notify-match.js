@@ -101,6 +101,6 @@ module.exports = async (req, res) => {
 
     res.status(200).json({ notified });
   } catch (e) {
-    res.status(500).json({ error: String((e && e.message) || e) });
+    res.status(500).json({ error: '알림을 보내지 못했어요' }); // DB 오류 원문은 밖으로 내보내지 않는다
   }
 };

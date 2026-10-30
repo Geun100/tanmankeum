@@ -4,7 +4,7 @@
 // 예전 계정 정보(사용자 번호·비밀값·인증 표시·프로필 캐시·참가 팟 기록 등)를 지우고 처음부터 학교 메일 인증을 한다.
 // 기기마다 딱 한 번 실행되고 표시가 남는다. 서버 데이터를 다시 전부 비울 때만 DATA_EPOCH 값을 바꾼다.
 (() => {
-  const DATA_EPOCH = '2026-10-30';
+  const DATA_EPOCH = '2026-10-30-2';
   try {
     if (localStorage.getItem('tanmankeum_epoch') === DATA_EPOCH) return;
     Object.keys(localStorage).filter(k => k.startsWith('tanmankeum_') && k !== 'tanmankeum_dev').forEach(k => localStorage.removeItem(k));
@@ -288,14 +288,32 @@ async function loadSeedProfileIds(){
 const POD_SELECT ='*, pod_participants(*, profiles(nickname, gender))';
 
 
+// 목록용으로 서버에서 미리 좁힌다: 끝난 팟(done·해체)과 이틀 넘게 지난 팟은 가져오지 않고, 가까운 출발부터 최대 POD_LIST_LIMIT개.
+// 팟이 쌓일수록 전체 읽기가 커지고 한 번에 가져올 수 있는 행 수를 넘으면 조용히 잘리기 때문이다.
+// 내가 참가 중인 팟은 날짜와 상관없이 따로 확인해서 합친다 — 목록에서 빠지면 DB의 "한 사람은 한 팟" 규칙만 남아 새 팟에 못 들어간다.
+const POD_LIST_LIMIT = 300;
 async function loadOpenPods(){
+  const uid = STATE.user && STATE.user.id;
+  const since = localDateStr(new Date(Date.now() - 2 * 86400000));
   // 더미 팟을 처음부터 거를 수 있게 시드 계정 목록을 같이 받아 둔다(병렬이라 시작이 느려지지 않는다).
-  const [{ data, error }] = await Promise.all([
-    supa.from('pods').select(POD_SELECT).neq('status', 'dissolved'),
+  const [{ data, error }, , mineRes] = await Promise.all([
+    supa.from('pods').select(POD_SELECT).in('status', ['open', 'confirmed', 'in_progress']).gte('depart_date', since)
+      .order('depart_date').order('depart_time').limit(POD_LIST_LIMIT),
     loadSeedProfileIds(),
+    uid ? supa.from('pod_participants').select('pod_id').eq('user_id', uid) : Promise.resolve({ data: [] }),
   ]);
   if (error) throw error;
-  return data.map(podFromRow);
+  if (mineRes.error) throw mineRes.error;
+  const rows = data.slice();
+  const have = new Set(rows.map(r => r.id));
+  const missing = (mineRes.data || []).map(r => r.pod_id).filter(id => !have.has(id));
+  if (missing.length) {
+    // 내 팟이 목록 조건 밖(완료·오래됨)인 경우에만 한 번 더 읽는다. 해체된 팟은 예전처럼 뺀다.
+    const { data: extra, error: extraErr } = await supa.from('pods').select(POD_SELECT).in('id', missing).neq('status', 'dissolved');
+    if (extraErr) throw extraErr;
+    rows.push(...extra);
+  }
+  return rows.map(podFromRow);
 }
 
 // 팟이 해체되면 여기서 명시적으로 숨긴다(RLS에는 더 이상 안 맡긴다 — pods_select가
@@ -340,13 +358,19 @@ function unsubscribePod(){
 // ("목록 화면은 재조회로 충분"이라는 기존 설계 결정의 예외 — 내 팟 카드만은 실시간이 필요하다.)
 let homeChannel = null;
 let homeSubPodId = null;
+let homeRefreshTimer = null;
 function subscribeHome(podId){
   if (podId === homeSubPodId && homeChannel) return; // 같은 팟이면 재구독 안 함(불필요한 채널 교체 방지)
   if (homeChannel) { supa.removeChannel(homeChannel); homeChannel = null; }
   homeSubPodId = podId;
   if (!SUPA_ENABLED || !podId) return;
+  // 팟 하나가 끝나면 참가자 삭제 알림이 여러 개 연달아 오고, DELETE는 다른 팟 것까지 전부 온다.
+  // 알림마다 홈 전체를 다시 읽지 않고, 잠깐 모아서 한 번만 읽는다.
   const refreshIfHome = () => {
-    if (document.getElementById('screen-home').classList.contains('active')) renderHome();
+    clearTimeout(homeRefreshTimer);
+    homeRefreshTimer = setTimeout(() => {
+      if (document.getElementById('screen-home').classList.contains('active')) renderHome();
+    }, 1200);
   };
   homeChannel = supa.channel('home:' + podId)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'pod_participants', filter: 'pod_id=eq.' + podId }, refreshIfHome)
@@ -355,6 +379,7 @@ function subscribeHome(podId){
     .subscribe();
 }
 function unsubscribeHome(){
+  clearTimeout(homeRefreshTimer);
   if (homeChannel) { supa.removeChannel(homeChannel); homeChannel = null; }
   homeSubPodId = null;
 }
@@ -4427,7 +4452,9 @@ async function renderPodChat(podId){
         textEl.textContent = m.text;
         div.appendChild(textEl);
       }
-      if (m.imageUrl) {
+      // 사진 주소는 DB에 아무나 쓸 수 있어서, 우리 저장소(또는 방금 올린 임시 주소)가 아니면 그리지 않는다
+      // (남의 서버 주소를 넣어 채팅을 연 사람들의 접속 정보를 모으는 걸 막는다).
+      if (m.imageUrl && (m.imageUrl.startsWith('blob:') || (window.SUPABASE_KEYS && m.imageUrl.startsWith(window.SUPABASE_KEYS.url + '/storage/')))) {
         const img = document.createElement('img');
         img.src = m.imageUrl;
         img.alt = '첨부 사진';
