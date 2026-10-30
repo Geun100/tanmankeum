@@ -2240,6 +2240,13 @@ const SECRET_KEY = 'tanmankeum_secret';
 function getSecret(){ try { return localStorage.getItem(SECRET_KEY) || ''; } catch { return ''; } }
 function setSecret(s){ try { localStorage.setItem(SECRET_KEY, s); } catch {} }
 let emailDoneCb = null;
+function claimRestoreTry(){
+  try {
+    if (sessionStorage.getItem('tanmankeum_restore_tried')) return false;
+    sessionStorage.setItem('tanmankeum_restore_tried', '1');
+    return true;
+  } catch (_) { return false; }
+}
 // 인증됐으면 onDone, 아니면 메일 인증 화면을 띄운다. 이미 쓰던 사용자는 인증 서버가 안 돼도
 // 들여보낸다 — 인증 서버 장애가 기존 사용자를 막으면 안 된다. 새 사용자는 서버 확인이 안 되면 못 들어온다.
 // 스플래시가 도는 동안 인증 상태를 미리 물어둔다(서버 함수 첫 응답이 1초쯤 걸려서, 스플래시가 끝난 뒤 시작하면 그만큼 더 기다린다).
@@ -2255,7 +2262,12 @@ async function requireVerification(onDone, isExistingUser){
     const r = await (pre || fetch(`/api/verify-status?userId=${encodeURIComponent(getOrCreateUserId())}`));
     if (r.ok) {
       const d = await r.json();
-      if (d.verified) { setVerifiedLocal(); onDone(); return; }
+      // 이 브라우저는 저장소를 잃었지만(사파리 자동 정리 등) 서버가 심어 둔 복원 쿠키로 원래 계정을 되찾았다 — 로그인 화면 없이 이어받는다.
+      // 저장소를 못 쓰는 환경(프라이빗 탭 등)에서 계속 새로고침되지 않게 한 접속에 한 번만 시도한다.
+      // 복원 응답의 verified는 "쿠키 주인"이 인증됐다는 뜻이지 지금 이 임시 번호가 아니다 — 복원을 못 쓰면 로그인 화면으로 보낸다.
+      if (d.restore) {
+        if (claimRestoreTry()) { setSecret(d.restore.secret); await adoptAccount(d.restore.userId); return; }
+      } else if (d.verified) { setVerifiedLocal(); onDone(); return; }
       emailDoneCb = onDone;
       showScreen('screen-ob-email');
       return;
@@ -3139,6 +3151,7 @@ async function logout(){
         }
         // 이 기기 푸시 구독은 서버가 이 사용자 번호로 갖고 있다 — 번호를 지우기 전에 끊는다. 실패해도 로그아웃은 막지 않는다.
         try { await unsubscribeFromPush(); } catch (_) {}
+        try { await fetch('/api/verify-status', { method: 'POST' }); } catch (_) {} // 복원 쿠키도 지운다(안 지우면 다음 접속에 로그아웃한 계정이 되살아난다)
         unsubscribePod(); unsubscribeHome();
         track('logout');
         ['tanmankeum_uid', MEMBER_POD_KEY, NEED_NEW_POD_KEY, VERIFIED_KEY, SECRET_KEY, ONBOARDING_CACHE_KEY, CONSENT_KEY, PUSH_OFF_KEY, PUSH_EP_KEY, PUSH_HINT_KEY]

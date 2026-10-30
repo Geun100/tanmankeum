@@ -79,13 +79,13 @@ const verifyStatus = require('../api/verify-status.js');
 const U1 = '11111111-1111-4111-8111-111111111111';
 const U2 = '22222222-2222-4222-8222-222222222222';
 async function call(handler, req) {
-  const res = { statusCode: 200, body: null, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; } };
+  const res = { statusCode: 200, body: null, headers: {}, status(c) { this.statusCode = c; return this; }, json(b) { this.body = b; return this; }, setHeader(k, v) { this.headers[k] = v; } };
   await handler(req, res);
   return res;
 }
 const otp = (userId, email, secret) => call(authOtp, { method: 'POST', body: { userId, email, secret } });
 const link = (userId, accessToken) => call(authLink, { method: 'POST', body: { userId, accessToken } });
-const status = userId => call(verifyStatus, { method: 'GET', query: { userId } });
+const status = (userId, cookie) => call(verifyStatus, { method: 'GET', query: { userId }, headers: cookie ? { cookie } : {} });
 // 브라우저가 verifyOtp를 마쳤을 때 받는 액세스 토큰을 흉내 낸다.
 function issueToken(email, confirmed = true) {
   const token = 'tok-' + auth.tokens.size;
@@ -259,6 +259,34 @@ function issueToken(email, confirmed = true) {
   // 코드를 환경변수에서 지우면 입구가 닫힌다
   delete process.env.DEMO_ACCESS_CODES;
   assert.equal((await enter('55555555-5555-4555-8555-555555555555', CODE)).statusCode, 403);
+
+  // ----- 복원 쿠키: 브라우저 저장소를 잃어도 서버가 심은 쿠키로 계정을 되찾는다 -----
+  const UA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', UB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', UC = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  r = await link(UA, issueToken('cookie@handong.ac.kr'));
+  assert.equal(r.statusCode, 200);
+  const cookieValue = `tm_auth=${UA}.${r.body.secret}`;
+  assert.ok(String(r.headers['Set-Cookie']).startsWith(cookieValue + ';'), '인증을 마치면 복원 쿠키를 심는다');
+  assert.match(String(r.headers['Set-Cookie']), /HttpOnly/); assert.match(String(r.headers['Set-Cookie']), /Secure/); assert.match(String(r.headers['Set-Cookie']), /SameSite=Lax/);
+  // 저장소를 잃어 새 번호(UB)가 됐어도 쿠키가 맞으면 원래 계정(UA)을 돌려준다
+  r = await status(UB, cookieValue);
+  assert.deepEqual(r.body.restore, { userId: UA, secret: String(cookieValue).split('.')[1] }, '쿠키가 맞으면 원래 계정을 복원한다');
+  // 같은 번호면 복원할 게 없다(기존 응답 모양 그대로)
+  assert.ok(!('restore' in (await status(UA, cookieValue)).body));
+  // 틀린 비밀값·형식이 틀린 쿠키·쿠키 없음은 복원되지 않는다. 틀린 값은 쿠키를 치운다
+  r = await status(UB, `tm_auth=${UA}.${'A'.repeat(43)}`);
+  assert.ok(!('restore' in r.body) && r.body.verified === false, '틀린 비밀값은 복원 안 됨');
+  assert.match(String(r.headers['Set-Cookie']), /Max-Age=0/, '틀린 쿠키는 치운다');
+  assert.ok(!('restore' in (await status(UB, `tm_auth=garbage`)).body));
+  assert.ok(!('restore' in (await status(UB)).body));
+  // 다른 기기에서 같은 메일로 복구해 비밀값이 바뀌면 옛 쿠키는 무효가 된다
+  const recovered = await link(UC, issueToken('cookie@handong.ac.kr'));
+  assert.equal(recovered.body.userId, UA); assert.equal(recovered.body.recovered, true);
+  r = await status(UB, cookieValue);
+  assert.ok(!('restore' in r.body), '비밀값이 바뀐 뒤 옛 쿠키는 쓸 수 없다');
+  assert.ok(String(recovered.headers['Set-Cookie']).startsWith(`tm_auth=${UA}.${recovered.body.secret};`), '복구한 기기에는 새 쿠키를 심는다');
+  // 로그아웃(POST)은 쿠키를 지운다
+  r = await call(verifyStatus, { method: 'POST', headers: {} });
+  assert.equal(r.statusCode, 200); assert.match(String(r.headers['Set-Cookie']), /^tm_auth=;.*Max-Age=0/);
 
   console.log('PASS: 학교 메일 인증 API');
 })().catch(e => { console.error(e); process.exit(1); });

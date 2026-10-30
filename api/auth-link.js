@@ -22,6 +22,8 @@ module.exports = async (req, res) => {
   // 한계: 정리 뒤 빈 자리를 사용자 번호만 아는 사람이 다시 먼저 차지할 수 있다(로그인 없는 신원 모델의 한계).
   // 근본 해결은 알림 구독을 서버가 확인할 수 있는 로그인·비밀값에 묶는 것이다.
   const clearPush = async (uid) => { try { await admin.from('push_subscriptions').delete().eq('user_id', uid); } catch (_) {} };
+  // 비밀값을 건넬 때 같은 값을 복원 쿠키로도 심는다 — 브라우저 저장소가 지워져도 verify-status가 이 쿠키로 계정을 되찾아 준다.
+  const setSession = (uid, secret) => { if (secret && res.setHeader) res.setHeader('Set-Cookie', V.sessionCookieHeader(uid, secret)); };
 
   try {
     const { data, error } = await admin.auth.getUser(accessToken);
@@ -50,6 +52,7 @@ module.exports = async (req, res) => {
       if (recovered) await clearPush(owner.user_id);
       // 메일함 주인이라는 증명이니 그 계정의 새 비밀값을 건넨다(다른 기기에서 복구하는 경우도 포함 — 이전 기기의 값은 무효가 된다).
       const secret = await issueSecret(owner.user_id);
+      setSession(owner.user_id, secret);
       res.status(200).json({ ok: true, verified: true, userId: owner.user_id, recovered, secret });
       return;
     }
@@ -64,6 +67,7 @@ module.exports = async (req, res) => {
           const recovered = again.user_id !== userId;
           if (recovered) await clearPush(again.user_id); // 동시 인증이 겹친 경로도 같은 정리를 한다
           const secret = await issueSecret(again.user_id);
+          setSession(again.user_id, secret);
           res.status(200).json({ ok: true, verified: true, userId: again.user_id, recovered, secret });
           return;
         }
@@ -81,6 +85,7 @@ module.exports = async (req, res) => {
             // 동시에 다른 요청이 먼저 채웠을 수 있다 — 지금 줄이 내 메일·내 비밀값일 때만 비밀값을 건넨다.
             const { data: after } = await admin.from('verified_users').select('email_hash, secret_hash').eq('user_id', userId).maybeSingle();
             if (after && after.email_hash === emailHash && V.secretMatches(after.secret_hash, claimSecret)) {
+              setSession(userId, claimSecret);
               res.status(200).json({ ok: true, verified: true, userId, recovered: false, secret: claimSecret });
               return;
             }
@@ -92,6 +97,7 @@ module.exports = async (req, res) => {
       }
       throw insErr;
     }
+    setSession(userId, newSecret);
     res.status(200).json({ ok: true, verified: true, userId, recovered: false, secret: newSecret });
   } catch (e) {
     res.status(500).json({ error: '인증을 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요' });

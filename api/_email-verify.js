@@ -53,4 +53,29 @@ function accessCodeMatches(provided) {
   return ok;
 }
 
-module.exports = { SCHOOL_DOMAIN, UUID_RE, SECRET_RE, normalizeSchoolEmail, hashEmail, newSecret, hashSecret, secretMatches, accessCodeMatches };
+// ----- 로그인 복원 쿠키 -----
+// 브라우저 저장소(localStorage)가 지워져도(아이폰 사파리의 자동 정리 등) 계정을 되찾게, 인증을 마칠 때 서버가 쿠키도 심는다.
+// 서버가 내려주는 HttpOnly 쿠키는 스크립트로 만든 저장소와 달리 일주일 만에 정리되지 않는다. 값은 "사용자번호.비밀값"이고,
+// 복원할 때는 서버가 비밀값 지문과 맞는지 확인한다(verify-status). 다른 기기에서 복구해 비밀값이 바뀌면 옛 쿠키는 저절로 무효가 된다.
+const SESSION_COOKIE = 'tm_auth';
+const SESSION_MAX_AGE = 365 * 24 * 3600;
+function sessionCookieHeader(userId, secret) {
+  return `${SESSION_COOKIE}=${userId}.${secret}; Path=/; Max-Age=${SESSION_MAX_AGE}; HttpOnly; Secure; SameSite=Lax`;
+}
+function clearSessionCookieHeader() {
+  return `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+}
+// 요청의 쿠키에서 { userId, secret }을 꺼낸다. 형식이 틀리면 null(맞는 값인지는 호출하는 쪽이 DB 지문과 비교해 정한다).
+function readSessionCookie(req) {
+  const raw = req && req.headers && req.headers.cookie;
+  if (typeof raw !== 'string') return null;
+  const part = raw.split(';').map(s => s.trim()).find(s => s.startsWith(SESSION_COOKIE + '='));
+  if (!part) return null;
+  const v = part.slice(SESSION_COOKIE.length + 1);
+  const i = v.indexOf('.');
+  if (i <= 0) return null;
+  const userId = v.slice(0, i), secret = v.slice(i + 1);
+  return UUID_RE.test(userId) && SECRET_RE.test(secret) ? { userId, secret } : null;
+}
+
+module.exports = { SCHOOL_DOMAIN, UUID_RE, SECRET_RE, normalizeSchoolEmail, hashEmail, newSecret, hashSecret, secretMatches, accessCodeMatches, sessionCookieHeader, clearSessionCookieHeader, readSessionCookie };
