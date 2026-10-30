@@ -1353,6 +1353,7 @@ function showScreen(id){
   if (id === 'screen-ob-email') renderA2hsCard();
   if (id === 'screen-ob-route') {
     renderRoutePick();
+    if (LINK_POD_ID && obMode === 'onboarding' && !profileEditing && typeof prefillRouteFromLinkPod === 'function') prefillRouteFromLinkPod();
     // 새 팟 만들기(팟이 끝난 뒤·시간이 지난 뒤)는 돌아갈 팟도 화면도 없다 — 뒤로가기를 없앤다.
     const routeTitle = document.getElementById('ob-route-title').textContent;
     document.getElementById('ob-route-back-btn').style.display = (routeTitle === '새 팟 만들기' || routeTitle.startsWith('출발 시간이 지났어요')) ? 'none' : '';
@@ -2214,10 +2215,17 @@ function setSecret(s){ try { localStorage.setItem(SECRET_KEY, s); } catch {} }
 let emailDoneCb = null;
 // 인증됐으면 onDone, 아니면 메일 인증 화면을 띄운다. 이미 쓰던 사용자는 인증 서버가 안 돼도
 // 들여보낸다 — 인증 서버 장애가 기존 사용자를 막으면 안 된다. 새 사용자는 서버 확인이 안 되면 못 들어온다.
+// 스플래시가 도는 동안 인증 상태를 미리 물어둔다(서버 함수 첫 응답이 1초쯤 걸려서, 스플래시가 끝난 뒤 시작하면 그만큼 더 기다린다).
+let verifyPrefetch = null;
+function prefetchVerifyStatus(){
+  if (isVerifiedLocal()) return;
+  try { verifyPrefetch = fetch(`/api/verify-status?userId=${encodeURIComponent(getOrCreateUserId())}`).catch(() => null); } catch (_) {}
+}
 async function requireVerification(onDone, isExistingUser){
   if (isVerifiedLocal()) { onDone(); return; }
   try {
-    const r = await fetch(`/api/verify-status?userId=${encodeURIComponent(getOrCreateUserId())}`);
+    const pre = verifyPrefetch; verifyPrefetch = null; // 한 번만 쓴다(응답 본문은 한 번만 읽을 수 있다)
+    const r = await (pre || fetch(`/api/verify-status?userId=${encodeURIComponent(getOrCreateUserId())}`));
     if (r.ok) {
       const d = await r.json();
       if (d.verified) { setVerifiedLocal(); onDone(); return; }
@@ -2289,6 +2297,7 @@ if (cachedOnboarding) {
   // 채워넣는 경우가 있다 — 새 온보딩인데 출발지/목적지가 미리 채워져 보이는 원인.
   // 스크립트가 명시적으로 비워서 덮어쓴다.
   ['ob-nickname', 'ob-origin', 'ob-dest', 'ob-email'].forEach(id => { document.getElementById(id).value = ''; });
+  prefetchVerifyStatus();
   setTimeout(leaveSplash, SPLASH_MS);
   document.getElementById('screen-splash').addEventListener('click', leaveSplash);
 }
@@ -2703,11 +2712,14 @@ nicknameInput.addEventListener('input', syncNextBtn);
 syncNextBtn();
 // 링크로 처음 온 사람은 기본 경로(한동대 → 영일대)가 팟과 안 맞아서 "목적지가 너무 멀어요"로 참가가 막히기 쉽다.
 // 링크의 팟 경로(출발지·목적지·시각)로 미리 채워 둬서 확인만 누르면 그 팟에 들어갈 수 있게 한다. 바꾸고 싶으면 고치면 된다.
+// 이동 정보 화면이 어떤 길로 열려도(프로필 다음·새 팟 만들기 등) 한 번은 채우게 showScreen에서도 부른다. 채워지면 다시 하지 않는다.
+let linkPrefilled = false;
 async function prefillRouteFromLinkPod(){
-  if (!LINK_POD_ID || !SUPA_ENABLED) return;
+  if (!LINK_POD_ID || !SUPA_ENABLED || linkPrefilled) return;
   try {
     const pod = await loadPod(LINK_POD_ID);
-    if (!pod || pod.status !== 'recruiting') return;
+    if (!pod || pod.status !== 'recruiting') { showToast('공유받은 팟이 마감됐거나 사라졌어요'); return; }
+    linkPrefilled = true;
     const o = document.getElementById('ob-origin'), d = document.getElementById('ob-dest');
     o.value = pod.originName; d.value = pod.leaderDest;
     document.getElementById('ob-origin-list').hidden = true; document.getElementById('ob-dest-list').hidden = true;
@@ -2717,7 +2729,7 @@ async function prefillRouteFromLinkPod(){
     partySize = Math.min(SIZE_MAX, Math.max(SIZE_MIN, pod.desiredSize || SIZE_MIN)); // 인원도 팟장이 정한 값으로 맞춘다
     sizeLocked = true; syncSize();
     showToast('공유받은 팟 경로·인원으로 채워뒀어요');
-  } catch (_) { /* 못 불러오면 기본 경로 그대로 둔다 */ }
+  } catch (_) { showToast('공유받은 팟을 불러오지 못했어요. 경로를 직접 골라 주세요'); } // 기본 경로 그대로 둔다
 }
 nextBtn.addEventListener('click', () => {
   if (nextBtn.disabled) return;
@@ -2728,7 +2740,7 @@ nextBtn.addEventListener('click', () => {
   // 휠은 화면이 보인 뒤에야 scrollTop이 적용된다(숨겨진 요소는 스크롤 높이가 0이다).
   setWheelTime(clockFromNow(30).time);
   setObDate(localDateStr(new Date()));
-  prefillRouteFromLinkPod();
+  // 링크 팟 경로 채우기는 showScreen('screen-ob-route')가 이미 불렀다(위 휠·날짜 기본값을 정한 뒤 비동기로 덮어쓴다).
 });
 
 // --- 2단계: 출발 날짜 ---

@@ -36,7 +36,8 @@
 <script src="supabase-keys.local.js"></script>
 <script src="push-keys.local.js"></script>
 <script src="posthog-keys.local.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
 <script>
 // 키 없으면(POSTHOG_KEYS.apiKey 빈 값) 로드 안 함 — 로컬에서 키 없이도 계속 테스트할 수 있게 하는 폴백.
 if (window.POSTHOG_KEYS && window.POSTHOG_KEYS.apiKey) {
@@ -499,6 +500,6 @@ window.__kakaoReady = new Promise((resolve, reject) => {
   </div>
 </div>
 
-<script src="app.js"></script>
+<script src="app.js" defer></script>
 </body>
 </html>
