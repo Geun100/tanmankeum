@@ -2412,13 +2412,13 @@ btnEmailResend.addEventListener('click', sendEmailCode);
 btnEmailVerify.addEventListener('click', verifyEmailCode);
 syncEmailButtons();
 
-// --- 비밀 입구: 로그인 화면의 로고를 입력이 없는 채로 5초 누르고 있으면 접속 코드 칸이 나온다 ---
+// --- 비밀 입구: 로그인 화면의 로고를 입력이 없는 채로 3초 누르고 있으면 접속 코드 칸이 나온다 ---
 // 코드를 맞히면 메일 인증 없이 이 기기를 "인증됨"으로 등록한다(서버 api/auth-otp의 accessCode 경로). 실수로 열렸으면 "돌아가기".
 const accessBox = document.getElementById('access-box');
 const accessCodeInput = document.getElementById('access-code');
 const btnAccessGo = document.getElementById('btn-access-go');
 const emailNormal = document.getElementById('email-normal');
-const ACCESS_HOLD_MS = 5000;
+const ACCESS_HOLD_MS = 3000;
 function showAccessBox(on){
   accessBox.hidden = !on;
   emailNormal.hidden = on;
@@ -2439,7 +2439,7 @@ function showAccessBox(on){
     timer = setTimeout(() => { timer = null; showAccessBox(true); }, ACCESS_HOLD_MS);
   });
   // 손가락이 조금 흔들리는 건 괜찮고(24px), 손을 떼거나 크게 움직이면 취소한다.
-  // pointercancel·pointerleave로는 취소하지 않는다 — 폰은 길게 누르는 동안 브라우저가 제스처를 가져가며 pointercancel을 보내서, 5초를 못 채운다.
+  // pointercancel·pointerleave로는 취소하지 않는다 — 폰은 길게 누르는 동안 브라우저가 제스처를 가져가며 pointercancel을 보내서, 3초를 못 채운다.
   logo.addEventListener('pointermove', (e) => { if (timer && Math.hypot(e.clientX - x0, e.clientY - y0) > 24) stop(); });
   logo.addEventListener('pointerup', stop);
   ['contextmenu', 'selectstart', 'dragstart'].forEach(t => logo.addEventListener(t, (e) => e.preventDefault())); // 길게 누를 때 폰이 띄우는 메뉴·글자 선택을 막는다
