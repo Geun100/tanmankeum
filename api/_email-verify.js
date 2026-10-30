@@ -41,4 +41,16 @@ function secretMatches(stored, provided) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-module.exports = { SCHOOL_DOMAIN, UUID_RE, SECRET_RE, normalizeSchoolEmail, hashEmail, newSecret, hashSecret, secretMatches };
+// 접속 코드(운영자·시연용 비밀 입구): 환경변수 DEMO_ACCESS_CODES(쉼표로 구분)에 있는 코드와 같은지 본다.
+// 비어 있으면 입구는 닫힌 것이다. 12자 미만 코드는 추측하기 쉬워 아예 쓰지 않는다. 해시끼리 시간이 일정하게 비교한다.
+function accessCodeMatches(provided) {
+  if (typeof provided !== 'string' || !provided || provided.length > 100) return false;
+  const codes = (process.env.DEMO_ACCESS_CODES || '').split(',').map(s => s.trim()).filter(c => c.length >= 12);
+  const digest = s => crypto.createHash('sha256').update(s).digest();
+  const p = digest(provided.trim());
+  let ok = false;
+  for (const c of codes) if (crypto.timingSafeEqual(p, digest(c))) ok = true; // 일부러 중간에 멈추지 않는다
+  return ok;
+}
+
+module.exports = { SCHOOL_DOMAIN, UUID_RE, SECRET_RE, normalizeSchoolEmail, hashEmail, newSecret, hashSecret, secretMatches, accessCodeMatches };

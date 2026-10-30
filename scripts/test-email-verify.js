@@ -223,5 +223,42 @@ function issueToken(email, confirmed = true) {
   assert.ok(!('secret' in r.body), '면제에서 채워진 뒤에도 같은 규칙');
   assert.equal(V.secretMatches(tables.verified_users.find(x => x.user_id === U2).secret_hash, secU2), true, '기존 비밀값은 그대로 유효');
 
+  // ----- 접속 코드(운영자·시연용 비밀 입구): 환경변수에 코드가 없으면 닫혀 있다 -----
+  const U3 = '33333333-3333-4333-8333-333333333333';
+  const U4 = '44444444-4444-4444-8444-444444444444';
+  const enter = (userId, accessCode, secret) => call(authOtp, { method: 'POST', body: { userId, accessCode, secret } });
+  const CODE = 'demo-code-1234567890';
+  const rowsBefore = tables.verified_users.length;
+  const mailsBeforeCode = auth.otpSent.length;
+  assert.equal((await enter(U3, CODE)).statusCode, 403, '환경변수가 없으면 어떤 코드도 거절');
+  process.env.DEMO_ACCESS_CODES = 'short, ' + CODE;
+  assert.equal((await enter(U3, 'short')).statusCode, 403, '12자 미만 코드는 환경변수에 있어도 쓰지 않는다');
+  assert.equal((await enter(U3, 'demo-code-WRONG-000')).statusCode, 403, '틀린 코드 거절');
+  assert.equal((await enter(U3, '')).statusCode, 403, '빈 코드 거절');
+  assert.equal(tables.verified_users.length, rowsBefore, '거절된 시도는 줄을 만들지 않는다');
+  assert.equal(auth.otpSent.length, mailsBeforeCode, '접속 코드 경로는 메일을 보내지 않는다');
+
+  r = await enter(U3, ' ' + CODE + ' ');
+  assert.equal(r.statusCode, 200); assert.equal(r.body.verified, true);
+  assert.match(r.body.secret, /^[A-Za-z0-9_-]{43}$/, '비밀값을 받는다');
+  const demoRow = tables.verified_users.find(x => x.user_id === U3);
+  assert.equal(demoRow.email_hash, 'demo:' + U3, '데모 줄은 표시가 붙는다(진짜 메일 해시와 겹치지 않는다)');
+  assert.equal(V.secretMatches(demoRow.secret_hash, r.body.secret), true);
+  assert.deepEqual((await status(U3)).body, { verified: true, hasSecret: true });
+  // 같은 기기가 다시 입력하면 그대로 통과, 비밀값 없이 같은 번호로 다시 오면 거절(남의 줄을 덮어쓰지 못한다)
+  assert.equal((await enter(U3, CODE, r.body.secret)).body.alreadyVerified, true);
+  assert.equal((await enter(U3, CODE)).statusCode, 409);
+  assert.equal(V.secretMatches(tables.verified_users.find(x => x.user_id === U3).secret_hash, r.body.secret), true, '비밀값은 그대로');
+  // 진짜 메일로 인증된 사용자 번호(공개)를 알아도 코드로 그 줄의 비밀값을 바꿀 수 없다
+  const hashU1b = tables.verified_users.find(x => x.user_id === U1).secret_hash;
+  assert.equal((await enter(U1, CODE)).statusCode, 409);
+  assert.equal(tables.verified_users.find(x => x.user_id === U1).secret_hash, hashU1b, '기존 사용자의 비밀값은 그대로');
+  // 기기마다 새 이용자: 같은 코드로 다른 번호도 따로 등록된다
+  assert.equal((await enter(U4, CODE)).statusCode, 200);
+  assert.equal(tables.verified_users.filter(x => String(x.email_hash).startsWith('demo:')).length, 2);
+  // 코드를 환경변수에서 지우면 입구가 닫힌다
+  delete process.env.DEMO_ACCESS_CODES;
+  assert.equal((await enter('55555555-5555-4555-8555-555555555555', CODE)).statusCode, 403);
+
   console.log('PASS: 학교 메일 인증 API');
 })().catch(e => { console.error(e); process.exit(1); });

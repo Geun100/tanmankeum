@@ -106,6 +106,18 @@ window.__kakaoReady = new Promise((resolve, reject) => {
         </span>
       </header>
       <div class="screen-body">
+        <!-- 비밀 입구: 위의 로고를 5초 누르고 있으면 나온다(app.js). 실수로 열린 사람은 "돌아가기"로 나간다. -->
+        <div class="access-box" id="access-box" hidden>
+          <p class="page-title">접속 코드</p>
+          <p class="page-sub">받은 접속 코드를 입력해 주세요</p>
+          <div class="field">
+            <label for="access-code">접속 코드</label>
+            <input type="password" id="access-code" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="100" aria-label="접속 코드">
+          </div>
+          <button class="btn btn--primary btn--block" id="btn-access-go" disabled style="margin-top:12px;">입장하기</button>
+          <button class="btn btn--ghost btn--block" id="btn-access-back" type="button">돌아가기</button>
+        </div>
+        <div id="email-normal">
         <div class="a2hs-card" id="a2hs-card" hidden>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M12 9v6M9 12h6"/></svg>
           <span id="a2hs-title"></span>
@@ -131,6 +143,7 @@ window.__kakaoReady = new Promise((resolve, reject) => {
           <button class="btn btn--ghost btn--block" id="btn-email-resend" disabled>인증번호 다시 받기</button>
         </div>
         <button class="btn btn--ghost btn--block" id="btn-browse" style="margin-top:16px;">로그인 없이 둘러보기</button>
+        </div>
         <p class="fine-note" id="email-msg" role="alert" style="margin-top:12px;"></p>
         <p class="fine-note" style="margin-top:8px;">입력한 메일은 한동대 학생 인증에만 쓰여요.</p>
 

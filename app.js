@@ -385,6 +385,8 @@ function pushSupported(){
 // 카톡으로 받은 공유 링크로 들어오는 사람이 대부분이라, 앱이 환경을 알아보고 이유와 방법을 한 줄로 알려준다.
 // openPodFromUrl이 ?pod=를 지우기 전의 주소를 기억해 둔다 — 다른 브라우저로 옮겨도 같은 팟으로 오게 한다.
 const SHARE_URL_AT_BOOT = location.href;
+// 공유 링크(?pod=)로 처음 열렸을 때의 팟 번호. 경로 입력 화면에서 그 팟의 경로로 채워 주는 데 쓴다.
+const LINK_POD_ID = (() => { try { const v = new URL(SHARE_URL_AT_BOOT).searchParams.get('pod'); return v && /^[0-9a-f-]{36}$/i.test(v) ? v : null; } catch (_) { return null; } })();
 function isStandalone(){
   try { return window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches; } catch (_) { return false; }
 }
@@ -396,9 +398,10 @@ function pushEnv(ua = navigator.userAgent, standalone = isStandalone(), touchPoi
   return 'other';
 }
 const PUSH_HINT_KEY = 'tanmankeum_pushhint_until';
-const PUSH_HINT_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
-function pushHintSnoozed(){ try { return Number(localStorage.getItem(PUSH_HINT_KEY) || 0) > Date.now(); } catch (_) { return false; } }
-function snoozePushHint(){ try { localStorage.setItem(PUSH_HINT_KEY, String(Date.now() + PUSH_HINT_SNOOZE_MS)); } catch (_) {} }
+// ×를 누르면 이번에 연 화면 동안만 숨긴다(저장하지 않는다) — 앱을 다시 열면 또 보인다.
+let pushHintClosed = false;
+function pushHintSnoozed(){ return pushHintClosed; }
+function snoozePushHint(){ pushHintClosed = true; }
 // 카카오톡 안에서 현재 주소를 기본 브라우저(아이폰은 사파리)로 다시 연다. 카카오톡이 제공하는 주소 형식이다.
 function openInExternalBrowser(){
   location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(SHARE_URL_AT_BOOT);
@@ -638,6 +641,16 @@ function notifyPodOfChat(podId, messageId){
 
 // 푸시 알림(notificationclick)이 /?pod=<id>로 열었을 때, 홈에 도착한 뒤 바로 그 팟으로 들어간다.
 // 내 팟이면 채팅방(알림 대상이 팟장이니까), 남의 팟이면 상세(참가를 검토하러 온 거니까)로 보낸다.
+// 공유 링크로 연 팟에 내 저장 경로가 안 맞으면(출발지 500m 밖, 목적지가 경로에서 멈) 메모리의 내 경로만 팟 경로로 바꾼다.
+// 참가하면 내 팟은 사라지고 이 경로는 더 쓰이지 않는다. 저장된 경로는 건드리지 않는다(다음 등록 때 enterHome이 덮어쓴다).
+function adaptRouteToPod(pod){
+  const u = STATE.user;
+  if (!u || !pod || pod.leaderId === u.id || pod.status !== 'recruiting') return;
+  try {
+    if (previewJoin(pod, u, false, true).eligible) return;
+    u.origin = pod.originName; u.dest = pod.leaderDest;
+  } catch (_) {}
+}
 function openPodFromUrl(){
   const podId = new URLSearchParams(location.search).get('pod');
   if (!podId) return;
@@ -645,8 +658,17 @@ function openPodFromUrl(){
   const pod = findPod(podId);
   // 공유 링크로 들어왔는데 그새 팟이 마감·해체됐으면 조용히 홈에 두지 말고 이유를 알려준다.
   if (!pod) { showToast('이 팟은 마감됐거나 사라졌어요. 다른 팟을 찾아보세요'); return; }
+  adaptRouteToPod(pod); // 링크는 "이 팟에 타겠다"는 뜻이라, 예전에 저장한 내 경로가 안 맞으면 팟 경로로 맞춰서 보여준다
   if (podId === STATE.myPodId) { renderPodChat(podId); showScreen('screen-pod-chat'); }
-  else { renderPodDetail(podId); showScreen('screen-pod-detail'); }
+  else {
+    // 링크는 "이 팟에 타겠다"는 뜻이라, 참가할 수 있는 팟이면 참가 확인창을 바로 띄운다 — "참가하기" 한 번이면 채팅방이다.
+    // 하차 지점과 예상 부담금은 확인창에 그대로 보이고 "돌아가기"로 닫을 수도 있다.
+    renderPodDetail(podId).then(() => {
+      const join = document.getElementById('btn-join-pod');
+      if (join && document.getElementById('screen-pod-detail').classList.contains('active')) join.click();
+    }).catch(() => {});
+    showScreen('screen-pod-detail');
+  }
 }
 
 // 팟 공유 문구. 카톡방에 붙여넣거나 공유 시트로 보내면, 링크로 들어온 사람이 학교 메일 인증을 마친 뒤
@@ -2390,6 +2412,58 @@ btnEmailResend.addEventListener('click', sendEmailCode);
 btnEmailVerify.addEventListener('click', verifyEmailCode);
 syncEmailButtons();
 
+// --- 비밀 입구: 로그인 화면의 로고를 입력이 없는 채로 5초 누르고 있으면 접속 코드 칸이 나온다 ---
+// 코드를 맞히면 메일 인증 없이 이 기기를 "인증됨"으로 등록한다(서버 api/auth-otp의 accessCode 경로). 실수로 열렸으면 "돌아가기".
+const accessBox = document.getElementById('access-box');
+const accessCodeInput = document.getElementById('access-code');
+const btnAccessGo = document.getElementById('btn-access-go');
+const emailNormal = document.getElementById('email-normal');
+const ACCESS_HOLD_MS = 5000;
+function showAccessBox(on){
+  accessBox.hidden = !on;
+  emailNormal.hidden = on;
+  setEmailMsg('');
+  accessCodeInput.value = '';
+  btnAccessGo.disabled = true;
+  if (on) accessCodeInput.focus();
+}
+(() => {
+  const logo = document.querySelector('#screen-ob-email .brand-mark');
+  if (!logo) return;
+  let timer = null;
+  const stop = () => { clearTimeout(timer); timer = null; };
+  logo.addEventListener('pointerdown', () => {
+    stop();
+    if (emailInput.value.trim() || !codeBox.hidden) return; // 메일을 쓰는 중이면 반응하지 않는다
+    timer = setTimeout(() => { timer = null; showAccessBox(true); }, ACCESS_HOLD_MS);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => logo.addEventListener(t, stop));
+  logo.addEventListener('contextmenu', (e) => e.preventDefault()); // 길게 누를 때 폰이 띄우는 메뉴를 막는다
+})();
+async function enterWithAccessCode(){
+  const code = accessCodeInput.value.trim();
+  if (emailBusy || !code) return;
+  emailBusy = true; btnAccessGo.disabled = true; setEmailMsg('');
+  try {
+    const r = await postJson('/api/auth-otp', { userId: getOrCreateUserId(), accessCode: code, secret: getSecret() });
+    if (r.ok && (r.data.verified || r.data.alreadyVerified)) {
+      if (r.data.secret) setSecret(r.data.secret);
+      accessCodeInput.value = '';
+      finishVerification();
+      return;
+    }
+    setEmailMsg(r.data.error || '입장하지 못했어요. 다시 시도해 주세요', true);
+  } catch (_) {
+    setEmailMsg('네트워크 문제로 입장하지 못했어요. 다시 시도해 주세요', true);
+  } finally {
+    emailBusy = false; btnAccessGo.disabled = !accessCodeInput.value.trim();
+  }
+}
+accessCodeInput.addEventListener('input', () => { setEmailMsg(''); btnAccessGo.disabled = emailBusy || !accessCodeInput.value.trim(); });
+accessCodeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') enterWithAccessCode(); });
+btnAccessGo.addEventListener('click', enterWithAccessCode);
+document.getElementById('btn-access-back').addEventListener('click', () => showAccessBox(false));
+
 // --- 로그인 없이 둘러보기: 같은 홈 화면에서 지금 모집 중인 팟을 읽기만 한다 ---
 // 개인 매칭(내 목적지 기준 요금 등)과 내 팟은 로그인한 뒤에만 있어서 숨기고, 팟을 누르면 로그인을 안내한다.
 function browseDayLabel(dateStr){
@@ -2610,6 +2684,22 @@ function syncNextBtn(){ nextBtn.disabled = nicknameInput.value.trim().length ===
 [consentTerms, consentNoPaid].forEach(c => c.addEventListener('change', syncNextBtn));
 nicknameInput.addEventListener('input', syncNextBtn);
 syncNextBtn();
+// 링크로 처음 온 사람은 기본 경로(한동대 → 영일대)가 팟과 안 맞아서 "목적지가 너무 멀어요"로 참가가 막히기 쉽다.
+// 링크의 팟 경로(출발지·목적지·시각)로 미리 채워 둬서 확인만 누르면 그 팟에 들어갈 수 있게 한다. 바꾸고 싶으면 고치면 된다.
+async function prefillRouteFromLinkPod(){
+  if (!LINK_POD_ID || !SUPA_ENABLED) return;
+  try {
+    const pod = await loadPod(LINK_POD_ID);
+    if (!pod || pod.status !== 'recruiting') return;
+    const o = document.getElementById('ob-origin'), d = document.getElementById('ob-dest');
+    o.value = pod.originName; d.value = pod.leaderDest;
+    document.getElementById('ob-origin-list').hidden = true; document.getElementById('ob-dest-list').hidden = true;
+    [o, d].forEach(el => { el.dispatchEvent(new Event('place-set')); el.dispatchEvent(new Event('change')); }); // 칩·등록 버튼·열차 안내를 갱신
+    if (pod.departTime) setWheelTime(pod.departTime);
+    if (pod.departDate) setObDate(pod.departDate);
+    showToast('공유받은 팟 경로로 채워뒀어요');
+  } catch (_) { /* 못 불러오면 기본 경로 그대로 둔다 */ }
+}
 nextBtn.addEventListener('click', () => {
   if (nextBtn.disabled) return;
   if (profileEditing) { endProfileEdit(true); return; }
@@ -2619,6 +2709,7 @@ nextBtn.addEventListener('click', () => {
   // 휠은 화면이 보인 뒤에야 scrollTop이 적용된다(숨겨진 요소는 스크롤 높이가 0이다).
   setWheelTime(clockFromNow(30).time);
   setObDate(localDateStr(new Date()));
+  prefillRouteFromLinkPod();
 });
 
 // --- 2단계: 출발 날짜 ---
