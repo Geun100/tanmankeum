@@ -99,7 +99,7 @@ const sentTo = () => sent.map(s => s.endpoint).sort();
   let r = await call({ podId: POD, joinerNickname: '가나' });
   assert.equal(r.body.notified, true, 'event를 안 보내면 지금처럼 참가 알림이 팟장에게 간다');
   assert.deepEqual(sentTo(), ['ep-' + LEADER]);
-  assert.equal(sent[0].payload.title, '내 팟에 새 팟원이 들어왔어요');
+  assert.equal(sent[0].payload.title, '가나님이 참가했어요');
   reset();
   r = await call({ event: 'join', podId: POD, joinerNickname: '없는사람' });
   assert.equal(r.body.notified, false); assert.equal(sent.length, 0, '참가자 목록에 없는 닉네임은 거절');
@@ -230,8 +230,8 @@ const sentTo = () => sent.map(s => s.endpoint).sort();
   r = await call({ event: 'left', podId: POD, userId: B });
   assert.equal(r.body.notified, true);
   assert.deepEqual(sentTo(), ['ep-' + LEADER], '팟장에게만 간다');
-  assert.equal(sent[0].payload.title, '팟원이 나갔어요');
-  assert.equal(sent[0].payload.body, '다라님이 팟에서 나갔어요 · 한동대학교 → 포항역 (현재 2/4명)');
+  assert.equal(sent[0].payload.title, '다라님이 나갔어요');
+  assert.equal(sent[0].payload.body, '한동대학교 → 포항역 · 현재 2/4명');
   assert.equal(sent[0].payload.url, `/?pod=${POD}`);
 
   reset(); // 아직 참가 중인 사람의 "나감"은 위조다

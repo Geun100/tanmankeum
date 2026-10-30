@@ -95,10 +95,12 @@ module.exports = async (req, res) => {
       const { data: sub } = await supa.from('push_subscriptions').select('*').eq('user_id', pod.leader_id).maybeSingle();
       if (!sub) { res.status(200).json({ notified: false, reason: '팟장이 알림을 안 켜뒀어요' }); return; }
 
+      // 참가·나감은 같은 모양으로 쓴다: 제목에 누가 어떻게 됐는지, 본문에 경로와 현재 인원. 같은 팟의 인원 알림은 서로 덮어쓴다.
       const ok = await send(sub, {
-        title: '내 팟에 새 팟원이 들어왔어요',
-        body: `${joinerNickname}님이 참가했어요 · ${pod.origin_name} → ${pod.leader_dest}`,
+        title: `${joinerNickname}님이 참가했어요`,
+        body: `${pod.origin_name} → ${pod.leader_dest} · 현재 ${(participants || []).length}/${pod.desired_size}명`,
         url: `/?pod=${podId}`,
+        tag: `members-${podId}`,
       });
       res.status(200).json({ notified: ok });
       return;
@@ -248,9 +250,10 @@ module.exports = async (req, res) => {
     if (!sub) { res.status(200).json({ notified: false, reason: '팟장이 알림을 안 켜뒀어요' }); return; }
 
     const ok = await send(sub, {
-      title: '팟원이 나갔어요',
-      body: `${String(profile.nickname).slice(0, 40)}님이 팟에서 나갔어요 · ${pod.origin_name} → ${pod.leader_dest} (현재 ${nowCount || 0}/${pod.desired_size}명)`,
+      title: `${String(profile.nickname).slice(0, 40)}님이 나갔어요`,
+      body: `${pod.origin_name} → ${pod.leader_dest} · 현재 ${nowCount || 0}/${pod.desired_size}명`,
       url: `/?pod=${podId}`,
+      tag: `members-${podId}`,
     });
     res.status(200).json({ notified: ok });
   } catch (e) {

@@ -1260,7 +1260,7 @@ function calcFinalRouteAndFare(pod){
   const perPerson = participants.map((p, pi) => ({
     id: p.id, nickname: p.nickname, dest: p.dest,
     dropPoint: p.dropOff.point, dropCoord: p.dropOff.coord, walkDist: p.dropOff.walkDist, walkTime: p.dropOff.walkTime,
-    fare: fares[pi], breakdown: breakdowns[pi],
+    fare: fares[pi], rawFare: rawShare[pi], breakdown: breakdowns[pi],
   }));
   return { stops, segments, totalFare, totalMins, perPerson, isRealFare };
 }
@@ -2270,10 +2270,10 @@ if (cachedOnboarding) {
       const mine = findPod(STATE.myPodId);
       if (mine && isMyPodStale(mine)) {
         if (mine.leaderId === STATE.user.id) await dissolvePod(mine); else await leavePod(mine);
-        promptRescheduleAfterExpiry();
-        return;
+        // 공유 링크로 열었으면 "이 팟에 타겠다"는 뜻이라, 경로를 새로 입력받지 않고 아래에서 그 팟으로 보낸다.
+        if (!LINK_POD_ID) { promptRescheduleAfterExpiry(); return; }
       }
-      if (!mine && needNewPod()) {
+      if (!mine && needNewPod() && !LINK_POD_ID) {
         if (STATE.podEndedWhileAway) showToast('함께 타던 팟이 종료됐어요');
         STATE.podEndedWhileAway = false;
         openNewPodInput({ backTo: 'screen-home', keepPlaces: false });
@@ -2714,7 +2714,9 @@ async function prefillRouteFromLinkPod(){
     [o, d].forEach(el => { el.dispatchEvent(new Event('place-set')); el.dispatchEvent(new Event('change')); }); // 칩·등록 버튼·열차 안내를 갱신
     if (pod.departTime) setWheelTime(pod.departTime);
     if (pod.departDate) setObDate(pod.departDate);
-    showToast('공유받은 팟 경로로 채워뒀어요');
+    partySize = Math.min(SIZE_MAX, Math.max(SIZE_MIN, pod.desiredSize || SIZE_MIN)); // 인원도 팟장이 정한 값으로 맞춘다
+    sizeLocked = true; syncSize();
+    showToast('공유받은 팟 경로·인원으로 채워뒀어요');
   } catch (_) { /* 못 불러오면 기본 경로 그대로 둔다 */ }
 }
 nextBtn.addEventListener('click', () => {
@@ -2800,10 +2802,11 @@ let partySize = 2;
 const sizeValueEl = document.getElementById('size-value');
 const minusBtn = document.getElementById('btn-size-minus');
 const plusBtn = document.getElementById('btn-size-plus');
+let sizeLocked = false; // 공유 링크로 온 사람은 팟장이 정한 인원에 맞춰 고정한다
 function syncSize(){
   sizeValueEl.textContent = String(partySize);
-  minusBtn.disabled = partySize <= SIZE_MIN;
-  plusBtn.disabled = partySize >= SIZE_MAX;
+  minusBtn.disabled = sizeLocked || partySize <= SIZE_MIN;
+  plusBtn.disabled = sizeLocked || partySize >= SIZE_MAX;
 }
 minusBtn.addEventListener('click', () => { if (partySize > SIZE_MIN) { partySize--; syncSize(); } });
 plusBtn.addEventListener('click', () => { if (partySize < SIZE_MAX) { partySize++; syncSize(); } });
@@ -3129,7 +3132,7 @@ function openSettings(){
   document.getElementById('ob-dest').value = u.dest;
   setWheelTime(u.time);
   setObDate(u.date && u.date >= localDateStr(new Date()) ? u.date : localDateStr(new Date()));
-  partySize = u.partySize;
+  partySize = u.partySize; sizeLocked = false;
   syncSize();
   luggageType = u.luggageType || 'none';
   syncLuggageChips();
@@ -3286,7 +3289,7 @@ function promptRescheduleAfterExpiry(){
   document.getElementById('ob-dest').value = u.dest;
   setWheelTime(clockFromNow(30).time);
   setObDate(localDateStr(new Date()));
-  partySize = u.partySize;
+  partySize = u.partySize; sizeLocked = false;
   syncSize();
   luggageType = u.luggageType || 'none';
   syncLuggageChips();
@@ -3856,11 +3859,26 @@ async function renderPodDetail(podId){
   } else {
     cta.innerHTML = `<button class="btn btn--primary btn--block" id="btn-join-pod">참가하기</button>`;
     document.getElementById('btn-join-pod').addEventListener('click', () => {
+      // 링크로 곧장 온 사람은 온보딩의 짐 칩을 그냥 지나쳤을 수 있어서, 참가 확인창에서도 짐을 고르게 한다.
+      // 이미 캐리어가 가득 찬 팟에는 캐리어(기내용·대형)를 고를 수 없다.
+      const carrierFull = carrierCount(pod) >= CARRIER_CAPACITY;
+      let pickedLuggage = STATE.user.luggageType || 'none';
+      if (carrierFull && (pickedLuggage === 'carryon' || pickedLuggage === 'large')) pickedLuggage = 'none';
+      // 한 줄에 네 칸: 아이콘 위, 이름 아래. 전체 이름은 aria-label로 읽힌다.
+      const luggageChoices = [['none', '', '없음', '짐 없음'], ['small', 'backpack', '백팩', '백팩·소형'], ['carryon', 'carryon', '기내용', '기내용 캐리어'], ['large', 'suitcase', '대형', '대형 캐리어']]
+        .map(([key, icon, label, full]) => {
+          const off = carrierFull && (key === 'carryon' || key === 'large');
+          return `<button type="button" class="chip" data-luggage="${key}" aria-label="${full}" aria-pressed="${key === pickedLuggage}"${off ? ' disabled' : ''}>${icon ? iconSvg(icon, 20) : '<span class="chip-none" aria-hidden="true">—</span>'}<span>${label}</span></button>`;
+        }).join('');
       openModal({
         title: '이 팟에 참가할까요?',
         icon: ICON_GROUP,
         body: `${pod.originName} → ${prev.dropOff.point} 하차 후 도보 ${prev.dropOff.walkTime}분, 예상 부담금 ${won(prev.mine.fare)}. 참가하면 바로 채팅방으로 이동해요.`,
         bodyHtml: `
+          <div class="modal-luggage">
+            <span class="modal-luggage-label">짐 ${carrierBadgeHtml(pod)}</span>
+            <div class="chip-row" id="join-luggage-chips">${luggageChoices}</div>
+          </div>
           <p class="modal-note">참가하면 바로 채팅방으로 이동해요.</p>
           <p class="modal-note">택시비는 팟장이 먼저 내요. 도착한 뒤 내 몫을 팟장 계좌로 보내면 돼요.</p>
           <div class="modal-route-card">
@@ -3883,6 +3901,10 @@ async function renderPodDetail(podId){
         confirmIcon: false,
         onConfirm: async () => {
           try {
+            if (pickedLuggage !== (STATE.user.luggageType || 'none')) {
+              STATE.user = { ...STATE.user, luggageType: pickedLuggage };
+              saveOnboardingCache(STATE.user);
+            }
             await joinPod(pod);
             renderPodChat(pod.id);
             showScreen('screen-pod-chat');
@@ -3891,6 +3913,13 @@ async function renderPodDetail(podId){
             renderPodDetail(pod.id); // 정원 마감 등으로 실패하면 최신 상태로 다시 그린다
           }
         },
+      });
+      const chipsEl = document.getElementById('join-luggage-chips');
+      chipsEl.addEventListener('click', (e) => {
+        const chip = e.target.closest('.chip');
+        if (!chip || chip.disabled) return;
+        pickedLuggage = chip.dataset.luggage;
+        chipsEl.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', String(c === chip)));
       });
     });
   }
@@ -5160,7 +5189,9 @@ function renderSettlement(podId){
   });
 
   function applySettlement(actual){
-    const weights = result.perPerson.map(p => p.fare);
+    // 예상 금액은 1원 단위로 반올림돼 있어서(같은 구간을 탄 사람끼리도 4,001/4,000/3,999처럼 갈린다) 그걸 가중치로 쓰면
+    // 실제 요금을 나눌 때 그 1원 차이가 그대로 남는다. 반올림 전 값(rawFare)으로 나눠야 같은 구간이면 같은 금액이 나온다.
+    const weights = result.perPerson.map(p => p.rawFare ?? p.fare);
     const shares = splitProportional(actual, weights);
     pod.settlement = result.perPerson.map((p, i) => ({ nickname: p.nickname, amount: shares[i] }));
 
@@ -5296,7 +5327,7 @@ function openNewPodInput({ backTo, keepPlaces }){
   setGenderSelection(u.gender);
   document.getElementById('ob-origin').value = keepPlaces ? u.origin : '';
   document.getElementById('ob-dest').value = keepPlaces ? u.dest : '';
-  partySize = u.partySize;
+  partySize = u.partySize; sizeLocked = false;
   syncSize();
   luggageType = 'none';
   syncLuggageChips();
