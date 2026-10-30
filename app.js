@@ -1108,7 +1108,9 @@ function calcMatchScore(user, pod, allowConditional = false, ignoreTime = false)
 
   // 내가 고른 시간보다 1시간 넘게 일찍 출발한 팟은 이미 놓친 팟이라 안 보여준다.
   // 내 시간보다 늦게 출발하는 팟은 얼마나 늦든 상관없다 — 기다렸다 타면 되니까.
-  const timeOk = ignoreTime || seedIgnoresDate(pod) || timeToMin(pod.departTime) >= timeToMin(user.time) - 60;
+  // 시각만 비교하면 다른 날 팟(내가 고른 날이 아닌)도 시각이 맞으면 목록에 나온다 — 날짜가 있으면 같은 날만 본다.
+  const sameDay = !user.date || !pod.departDate || user.date === pod.departDate;
+  const timeOk = ignoreTime || seedIgnoresDate(pod) || (sameDay && timeToMin(pod.departTime) >= timeToMin(user.time) - 60);
 
   const walkable = allWalkable(hypoPod);
   // 캐리어(기내용·대형)를 든 사람은 트렁크가 이미 가득 찬 팟에 들어갈 수 없다. 이미 이 팟에 있는 사람은 따지지 않는다.
@@ -3647,7 +3649,7 @@ function renderPodList(){
       const fa = a.prev.eligible ? a.prev.mine.fare : Infinity, fb = b.prev.eligible ? b.prev.mine.fare : Infinity;
       return fa - fb;
     }
-    if (sortMode === 'time') return timeToMin(a.pod.departTime) - timeToMin(b.pod.departTime);
+    if (sortMode === 'time') return String(a.pod.departDate || '').localeCompare(String(b.pod.departDate || '')) || timeToMin(a.pod.departTime) - timeToMin(b.pod.departTime); // 날짜 먼저, 같은 날이면 시각 순
     if (sortMode === 'origin') return dist(placeCoord(u.origin), placeCoord(a.pod.originName)) - dist(placeCoord(u.origin), placeCoord(b.pod.originName));
     return b.prev.matchScore.total - a.prev.matchScore.total; // match(기본)
   });
