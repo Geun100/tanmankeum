@@ -1106,11 +1106,12 @@ function calcMatchScore(user, pod, allowConditional = false, ignoreTime = false)
   // 베타 기간에는 성별 제한을 푼다(BETA_ANY_GENDER). 정식 출시 때 false로 되돌리면 동성 매칭이 복구된다.
   const sameGender = BETA_ANY_GENDER || pod.participants.every(p => p.gender === user.gender);
 
-  // 내가 고른 시간보다 1시간 넘게 일찍 출발한 팟은 이미 놓친 팟이라 안 보여준다.
-  // 내 시간보다 늦게 출발하는 팟은 얼마나 늦든 상관없다 — 기다렸다 타면 되니까.
+  // 내가 고른 시각에서 30분 일찍 ~ 60분 늦게까지 출발하는 팟만 보여준다. 일찍 출발하는 팟은 내가 서둘러야 해서 좁게(30분),
+  // 늦게 출발하는 팟은 조금 기다리면 되니 넓게(60분). 이 범위 밖 팟을 목록에 올리면 몇 시간 뒤 팟까지 섞여 잡음이 된다.
   // 시각만 비교하면 다른 날 팟(내가 고른 날이 아닌)도 시각이 맞으면 목록에 나온다 — 날짜가 있으면 같은 날만 본다.
   const sameDay = !user.date || !pod.departDate || user.date === pod.departDate;
-  const timeOk = ignoreTime || seedIgnoresDate(pod) || (sameDay && timeToMin(pod.departTime) >= timeToMin(user.time) - 60);
+  const gapMin = timeToMin(pod.departTime) - timeToMin(user.time); // 양수: 팟이 나보다 늦게 출발
+  const timeOk = ignoreTime || seedIgnoresDate(pod) || (sameDay && gapMin >= -30 && gapMin <= 60);
 
   const walkable = allWalkable(hypoPod);
   // 캐리어(기내용·대형)를 든 사람은 트렁크가 이미 가득 찬 팟에 들어갈 수 없다. 이미 이 팟에 있는 사람은 따지지 않는다.
@@ -3145,13 +3146,16 @@ async function logout(){
     danger: true,
     onConfirm: async () => {
       try {
+        // 복원 쿠키부터 지운다. 못 지우면 로그아웃을 멈춘다 — 쿠키가 남은 채로 로그아웃하면 다음 접속에 이 계정이 되살아난다.
+        // 맨 앞에서 하는 이유: 실패해도 팟 해체·알림 해제는 아직 일어나지 않아서 사용자가 그대로 다시 시도하면 된다.
+        const cleared = await fetch('/api/verify-status', { method: 'POST' });
+        if (!cleared.ok) throw new Error('logout cookie not cleared');
         if (SUPA_ENABLED && solo) {
           const { error } = await supa.from('pods').update({ status: 'dissolved' }).eq('id', pod.id);
           if (error) throw error; // 해체가 안 됐으면 로그아웃도 하지 않는다 — 주인 없는 팟이 남는다
         }
         // 이 기기 푸시 구독은 서버가 이 사용자 번호로 갖고 있다 — 번호를 지우기 전에 끊는다. 실패해도 로그아웃은 막지 않는다.
         try { await unsubscribeFromPush(); } catch (_) {}
-        try { await fetch('/api/verify-status', { method: 'POST' }); } catch (_) {} // 복원 쿠키도 지운다(안 지우면 다음 접속에 로그아웃한 계정이 되살아난다)
         unsubscribePod(); unsubscribeHome();
         track('logout');
         ['tanmankeum_uid', MEMBER_POD_KEY, NEED_NEW_POD_KEY, VERIFIED_KEY, SECRET_KEY, ONBOARDING_CACHE_KEY, CONSENT_KEY, PUSH_OFF_KEY, PUSH_EP_KEY, PUSH_HINT_KEY]
